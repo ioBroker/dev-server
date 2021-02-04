@@ -34,8 +34,6 @@
     "chalk": "^4.1.0",
     "express": "^4.17.1",
     "http-proxy-middleware": "^1.0.6",
-    "iobroker.admin": "^4.2.1",
-    "iobroker.js-controller": "^3.2.13",
     "yargs": "^16.2.0"
   }
 }

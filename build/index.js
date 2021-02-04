@@ -218,7 +218,7 @@ class DevServer {
             'iobroker.admin': 'latest',
             'iobroker.info': 'latest',
         };
-        //dependencies[myPkg.name] = myPkg.version;
+        dependencies[myPkg.name] = 'UncleSamSwiss/iobroker-dev-server'; //myPkg.version;
         const pkg = {
             name: 'unused__launcher',
             version: '1.0.0',
