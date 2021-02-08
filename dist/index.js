@@ -26,19 +26,24 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const yargs = require("yargs/yargs");
 const child_process_1 = require("child_process");
 const express_1 = __importDefault(require("express"));
+const fast_glob_1 = __importDefault(require("fast-glob"));
 const fs = __importStar(require("fs"));
 const http_proxy_middleware_1 = require("http-proxy-middleware");
 const os_1 = require("os");
 const path = __importStar(require("path"));
+const source_map_1 = require("source-map");
 const util_1 = require("util");
 const chalk = require("chalk");
 const rimraf = require("rimraf");
 const boxen = require("boxen");
+const acorn = require("acorn");
 const mkdirAsync = util_1.promisify(fs.mkdir);
 const writeFileAsync = util_1.promisify(fs.writeFile);
+const readFileAsync = util_1.promisify(fs.readFile);
 const DEFAULT_TEMP_DIR_NAME = '.devserver';
 const CORE_MODULE = 'iobroker.js-controller';
-const IOBROKER_COMMAND = 'node node_modules/iobroker.js-controller/iobroker.js';
+const IOBROKER_CLI = 'node_modules/iobroker.js-controller/iobroker.js';
+const IOBROKER_COMMAND = `node ${IOBROKER_CLI}`;
 const DEFAULT_ADMIN_PORT = 8081;
 const HIDDEN_ADMIN_PORT = 18881;
 const HIDDEN_BROWSER_SYNC_PORT = 18882;
@@ -50,8 +55,11 @@ class DevServer {
             .command(['install', 'i'], 'Install devserver in the current directory. This should always be called in the directory where the package.json file of your adapter is located.')
             .command(['update', 'ud'], 'Update devserver and its dependencies to the latest versions')
             .command(['run', 'r', '*'], 'Run ioBroker devserver, the adapter will not run, but you may test the Admin UI with hot-reload')
-            .command('watch', 'Run ioBroker devserver and start the adapter in "watch" mode. The adapter will automatically restart when its source code changes. You may attach a debugger to the running adapter.')
-            .command('debug', 'Run ioBroker devserver and start the adapter from ioBroker in "debug" mode. You may attach a debugger to the running adapter.')
+            /*.command(
+              ['watch', 'w'],
+              'Run ioBroker devserver and start the adapter in "watch" mode. The adapter will automatically restart when its source code changes. You may attach a debugger to the running adapter.',
+            )*/
+            .command(['debug', 'd'], 'Run ioBroker devserver and start the adapter from ioBroker in "debug" mode. You may attach a debugger to the running adapter.')
             .command(['upload', 'ul'], 'Upload the current version of your adapter to the devserver. This is only required if you changed something relevant in your io-package.json')
             .options({
             adapter: {
@@ -76,6 +84,11 @@ class DevServer {
                 alias: 'j',
                 default: 'latest',
                 description: 'Define which version of js-controller to be used.\n(Only relavant for "install".)',
+            },
+            wait: {
+                type: 'boolean',
+                alias: 'w',
+                description: 'Used with "debug" to start the adapter only once the debugger is attached.',
             },
             forceInstall: { type: 'boolean', hidden: true },
             root: { type: 'string', alias: 'r', hidden: true, default: '.' },
@@ -110,6 +123,7 @@ class DevServer {
         this.tempDir = path.resolve(this.rootDir, argv.temp);
     }
     async run() {
+        const runCommand = this.runCommands.find((c) => this.argv._.includes(c));
         if (this.argv.forceInstall) {
             console.log(chalk.blue(`Deleting ${this.tempDir}`));
             await this.rimraf(this.tempDir);
@@ -122,14 +136,16 @@ class DevServer {
             console.log(chalk.red(`Devserver is already installed in "${this.tempDir}".`));
             console.log(`Use --force-install to reinstall from scratch.`);
         }
-        if (this.argv._.includes('update')) {
+        if (this.argv._.includes('update') || this.argv._.includes('ud')) {
             await this.update();
         }
-        if (this.argv._.includes('upload')) {
+        const shouldUpload = this.argv._.includes('upload') || this.argv._.includes('ul');
+        if (shouldUpload || runCommand === 'debug') {
             await this.installLocalAdapter();
+        }
+        if (shouldUpload) {
             this.uploadAdapter(this.adapterName);
         }
-        const runCommand = this.runCommands.find((c) => this.argv._.includes(c));
         if (runCommand) {
             await this.runServer(runCommand);
         }
@@ -145,22 +161,25 @@ class DevServer {
         console.log(chalk.gray(`Found adapter name: "${adapterName}"`));
         return adapterName;
     }
-    readPackageJson() {
-        const json = fs.readFileSync(path.join(this.rootDir, 'package.json'), 'utf-8');
+    readJson(filename) {
+        const json = fs.readFileSync(filename, 'utf-8');
         return JSON.parse(json);
+    }
+    readPackageJson() {
+        return this.readJson(path.join(this.rootDir, 'package.json'));
     }
     async runServer(runCommand) {
         console.log(chalk.gray(`Running ${runCommand} inside ${this.tempDir}`));
-        const proc = child_process_1.spawn('node', ['node_modules/iobroker.js-controller/controller.js'], {
-            stdio: ['ignore', 'inherit', 'inherit'],
-            cwd: this.tempDir,
-        });
-        process.on('beforeExit', () => proc.kill());
+        if (runCommand === 'debug') {
+            await this.copySourcemaps();
+        }
+        const proc = this.spawn('node', ['node_modules/iobroker.js-controller/controller.js'], this.tempDir);
         proc.on('exit', (code) => {
             console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
             process.exit(-1);
         });
         process.on('SIGINT', () => {
+            console.log(chalk.green('devserver is exiting...'));
             server.close();
             // do not kill this process when receiving SIGINT, but let all child processes exit first
         });
@@ -189,13 +208,103 @@ class DevServer {
             target: `http://localhost:${HIDDEN_ADMIN_PORT}`,
             ws: true,
         }));
+        // start express
         const server = app.listen(this.argv.adminPort);
-        server.on('listening', () => {
-            console.log(boxen(chalk.green(`Admin is now reachable under http://localhost:${this.argv.adminPort}/`), {
-                padding: 1,
-                borderStyle: 'round',
-            }));
+        await new Promise((resolve, reject) => {
+            server.on('listening', resolve);
+            server.on('error', reject);
+            server.on('close', reject);
         });
+        console.log(boxen(chalk.green(`Admin is now reachable under http://localhost:${this.argv.adminPort}/`), {
+            padding: 1,
+            borderStyle: 'round',
+        }));
+        if (runCommand === 'debug') {
+            this.startAdapterDebug();
+        }
+    }
+    async copySourcemaps() {
+        const sourcemaps = await fast_glob_1.default(['./**/*.map', '!./.*/**', '!./node_modules/**'], { cwd: this.rootDir });
+        const outDir = path.join(this.tempDir, 'node_modules', `iobroker.${this.adapterName}`);
+        if (sourcemaps.length === 0) {
+            console.log(chalk.gray(`Couldn't find any sourcemaps in ${this.rootDir},\nwill try to reverse map .js files`));
+            // search all .js files that exist in the node module in the temp directory as well as in the root directory and
+            // create sourcemap files for each of them
+            const jsFiles = await fast_glob_1.default(['./**/*.js', '!./.*/**', '!./node_modules/**'], { cwd: this.rootDir });
+            await Promise.all(jsFiles.map(async (js) => {
+                try {
+                    const src = path.join(this.rootDir, js);
+                    const dest = path.join(outDir, js);
+                    if (!fs.existsSync(dest)) {
+                        return;
+                    }
+                    const mapFile = `${dest}.map`;
+                    const data = await this.createIdentitySourcemap(src.replace(/\\/g, '/'));
+                    await writeFileAsync(mapFile, JSON.stringify(data));
+                    // append the sourcemap reference comment to the bottom of the file
+                    const fileContent = await readFileAsync(dest, { encoding: 'utf-8' });
+                    const filename = path.basename(mapFile);
+                    let updatedContent = fileContent.replace(/(\/\/\# sourceMappingURL=).+/, `$1${filename}`);
+                    if (updatedContent === fileContent) {
+                        // no existing source mapping URL was found in the file
+                        if (!fileContent.endsWith('\n')) {
+                            if (fileContent.match(/\r\n/)) {
+                                // windows eol
+                                updatedContent += '\r';
+                            }
+                            updatedContent += '\n';
+                        }
+                        updatedContent += `//# sourceMappingURL=${filename}`;
+                    }
+                    await writeFileAsync(dest, updatedContent);
+                    console.log(chalk.gray(`Created ${mapFile} from ${src}`));
+                }
+                catch (error) {
+                    console.log(chalk.yellow(`Couldn't reverse map for ${js}: ${error}`));
+                }
+            }));
+            return;
+        }
+        // copy all *.map files to the node module in the temp directory and
+        // change their sourceRoot so they can be found in the development directory
+        await Promise.all(sourcemaps.map(async (sourcemap) => {
+            try {
+                const src = path.join(this.rootDir, sourcemap);
+                const data = this.readJson(src);
+                if (data.version !== 3) {
+                    throw new Error(`Unsupported sourcemap version: ${data.version}`);
+                }
+                data.sourceRoot = path.dirname(src).replace(/\\/g, '/');
+                const dest = path.join(outDir, sourcemap);
+                await writeFileAsync(dest, JSON.stringify(data));
+            }
+            catch (error) {
+                console.log(chalk.yellow(`Couldn't rewrite ${sourcemap}: ${error}`));
+            }
+        }));
+    }
+    async createIdentitySourcemap(filename) {
+        // thanks to https://github.com/gulp-sourcemaps/identity-map/blob/251b51598d02e5aedaea8f1a475dfc42103a2727/lib/generate.js [MIT]
+        const generator = new source_map_1.SourceMapGenerator({ file: filename });
+        const fileContent = await readFileAsync(filename, { encoding: 'utf-8' });
+        var tokenizer = acorn.tokenizer(fileContent, {
+            ecmaVersion: 'latest',
+            allowHashBang: true,
+            locations: true,
+        });
+        while (true) {
+            const token = tokenizer.getToken();
+            if (token.type.label === 'eof' || !token.loc) {
+                break;
+            }
+            const mapping = {
+                original: token.loc.start,
+                generated: token.loc.start,
+                source: filename,
+            };
+            generator.addMapping(mapping);
+        }
+        return generator.toJSON();
     }
     startParcel() {
         return new Promise((resolve, reject) => {
@@ -235,6 +344,17 @@ class DevServer {
         };
         // console.log(config);
         bs.init(config);
+    }
+    startAdapterDebug() {
+        const args = [IOBROKER_CLI, 'debug', `${this.adapterName}.0`];
+        if (this.argv.wait) {
+            args.push('--wait');
+        }
+        const proc = this.spawn('node', args, this.tempDir);
+        proc.on('exit', (code) => {
+            console.error(chalk.yellow(`Adapter debugger exited with code ${code}`));
+            process.exit(-1);
+        });
     }
     async install() {
         console.log(chalk.blue(`Installing to ${this.tempDir}`));
@@ -372,6 +492,15 @@ class DevServer {
         options = { cwd: cwd, stdio: 'inherit', ...options };
         console.log(chalk.gray(`${cwd}> ${command}`));
         return child_process_1.execSync(command, options);
+    }
+    spawn(command, args, cwd) {
+        console.log(chalk.gray(`${cwd}> ${command} ${args.join(' ')}`));
+        const proc = child_process_1.spawn(command, args, {
+            stdio: ['ignore', 'inherit', 'inherit'],
+            cwd: cwd,
+        });
+        process.on('beforeExit', () => proc.kill());
+        return proc;
     }
     rimraf(name) {
         return new Promise((resolve, reject) => rimraf(name, (err) => (err ? reject(err) : resolve())));

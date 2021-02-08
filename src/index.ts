@@ -3,21 +3,26 @@
 import yargs = require('yargs/yargs');
 import { exec, execSync, ExecSyncOptionsWithBufferEncoding, spawn } from 'child_process';
 import express from 'express';
+import fg from 'fast-glob';
 import * as fs from 'fs';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { hostname } from 'os';
 import * as path from 'path';
+import { Mapping, RawSourceMap, SourceMapGenerator } from 'source-map';
 import { promisify } from 'util';
 import chalk = require('chalk');
 import rimraf = require('rimraf');
 import boxen = require('boxen');
+import acorn = require('acorn');
 
 const mkdirAsync = promisify(fs.mkdir);
 const writeFileAsync = promisify(fs.writeFile);
+const readFileAsync = promisify(fs.readFile);
 
 const DEFAULT_TEMP_DIR_NAME = '.devserver';
 const CORE_MODULE = 'iobroker.js-controller';
-const IOBROKER_COMMAND = 'node node_modules/iobroker.js-controller/iobroker.js';
+const IOBROKER_CLI = 'node_modules/iobroker.js-controller/iobroker.js';
+const IOBROKER_COMMAND = `node ${IOBROKER_CLI}`;
 const DEFAULT_ADMIN_PORT = 8081;
 const HIDDEN_ADMIN_PORT = 18881;
 const HIDDEN_BROWSER_SYNC_PORT = 18882;
@@ -26,6 +31,7 @@ interface ArgV {
   adminPort: number;
   forceInstall: boolean | undefined;
   jsController: string;
+  wait?: boolean;
   _: (string | number)[];
 }
 
@@ -50,12 +56,12 @@ class DevServer {
         ['run', 'r', '*'],
         'Run ioBroker devserver, the adapter will not run, but you may test the Admin UI with hot-reload',
       )
-      .command(
-        'watch',
+      /*.command(
+        ['watch', 'w'],
         'Run ioBroker devserver and start the adapter in "watch" mode. The adapter will automatically restart when its source code changes. You may attach a debugger to the running adapter.',
-      )
+      )*/
       .command(
-        'debug',
+        ['debug', 'd'],
         'Run ioBroker devserver and start the adapter from ioBroker in "debug" mode. You may attach a debugger to the running adapter.',
       )
       .command(
@@ -85,6 +91,11 @@ class DevServer {
           alias: 'j',
           default: 'latest',
           description: 'Define which version of js-controller to be used.\n(Only relavant for "install".)',
+        },
+        wait: {
+          type: 'boolean',
+          alias: 'w',
+          description: 'Used with "debug" to start the adapter only once the debugger is attached.',
         },
         forceInstall: { type: 'boolean', hidden: true },
         root: { type: 'string', alias: 'r', hidden: true, default: '.' },
@@ -124,6 +135,8 @@ class DevServer {
   }
 
   async run(): Promise<void> {
+    const runCommand = this.runCommands.find((c) => this.argv._.includes(c));
+
     if (this.argv.forceInstall) {
       console.log(chalk.blue(`Deleting ${this.tempDir}`));
       await this.rimraf(this.tempDir);
@@ -138,16 +151,18 @@ class DevServer {
       console.log(`Use --force-install to reinstall from scratch.`);
     }
 
-    if (this.argv._.includes('update')) {
+    if (this.argv._.includes('update') || this.argv._.includes('ud')) {
       await this.update();
     }
 
-    if (this.argv._.includes('upload')) {
+    const shouldUpload = this.argv._.includes('upload') || this.argv._.includes('ul');
+    if (shouldUpload || runCommand === 'debug') {
       await this.installLocalAdapter();
+    }
+    if (shouldUpload) {
       this.uploadAdapter(this.adapterName);
     }
 
-    const runCommand = this.runCommands.find((c) => this.argv._.includes(c));
     if (runCommand) {
       await this.runServer(runCommand);
     }
@@ -165,26 +180,30 @@ class DevServer {
     return adapterName;
   }
 
-  private readPackageJson(): any {
-    const json = fs.readFileSync(path.join(this.rootDir, 'package.json'), 'utf-8');
+  private readJson(filename: string): any {
+    const json = fs.readFileSync(filename, 'utf-8');
     return JSON.parse(json);
+  }
+
+  private readPackageJson(): any {
+    return this.readJson(path.join(this.rootDir, 'package.json'));
   }
 
   async runServer(runCommand: RunCommand): Promise<void> {
     console.log(chalk.gray(`Running ${runCommand} inside ${this.tempDir}`));
 
-    const proc = spawn('node', ['node_modules/iobroker.js-controller/controller.js'], {
-      stdio: ['ignore', 'inherit', 'inherit'],
-      cwd: this.tempDir,
-    });
-    process.on('beforeExit', () => proc.kill());
+    if (runCommand === 'debug') {
+      await this.copySourcemaps();
+    }
 
+    const proc = this.spawn('node', ['node_modules/iobroker.js-controller/controller.js'], this.tempDir);
     proc.on('exit', (code) => {
       console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
       process.exit(-1);
     });
 
     process.on('SIGINT', () => {
+      console.log(chalk.green('devserver is exiting...'));
       server.close();
       // do not kill this process when receiving SIGINT, but let all child processes exit first
     });
@@ -221,15 +240,119 @@ class DevServer {
         ws: true,
       }),
     );
+
+    // start express
     const server = app.listen(this.argv.adminPort);
-    server.on('listening', () => {
-      console.log(
-        boxen(chalk.green(`Admin is now reachable under http://localhost:${this.argv.adminPort}/`), {
-          padding: 1,
-          borderStyle: 'round',
+    await new Promise<void>((resolve, reject) => {
+      server.on('listening', resolve);
+      server.on('error', reject);
+      server.on('close', reject);
+    });
+
+    console.log(
+      boxen(chalk.green(`Admin is now reachable under http://localhost:${this.argv.adminPort}/`), {
+        padding: 1,
+        borderStyle: 'round',
+      }),
+    );
+
+    if (runCommand === 'debug') {
+      this.startAdapterDebug();
+    }
+  }
+
+  private async copySourcemaps(): Promise<void> {
+    const sourcemaps = await fg(['./**/*.map', '!./.*/**', '!./node_modules/**'], { cwd: this.rootDir });
+    const outDir = path.join(this.tempDir, 'node_modules', `iobroker.${this.adapterName}`);
+    if (sourcemaps.length === 0) {
+      console.log(chalk.gray(`Couldn't find any sourcemaps in ${this.rootDir},\nwill try to reverse map .js files`));
+
+      // search all .js files that exist in the node module in the temp directory as well as in the root directory and
+      // create sourcemap files for each of them
+      const jsFiles = await fg(['./**/*.js', '!./.*/**', '!./node_modules/**'], { cwd: this.rootDir });
+      await Promise.all(
+        jsFiles.map(async (js) => {
+          try {
+            const src = path.join(this.rootDir, js);
+            const dest = path.join(outDir, js);
+            if (!fs.existsSync(dest)) {
+              return;
+            }
+            const mapFile = `${dest}.map`;
+            const data = await this.createIdentitySourcemap(src.replace(/\\/g, '/'));
+            await writeFileAsync(mapFile, JSON.stringify(data));
+
+            // append the sourcemap reference comment to the bottom of the file
+            const fileContent = await readFileAsync(dest, { encoding: 'utf-8' });
+            const filename = path.basename(mapFile);
+            let updatedContent = fileContent.replace(/(\/\/\# sourceMappingURL=).+/, `$1${filename}`);
+            if (updatedContent === fileContent) {
+              // no existing source mapping URL was found in the file
+              if (!fileContent.endsWith('\n')) {
+                if (fileContent.match(/\r\n/)) {
+                  // windows eol
+                  updatedContent += '\r';
+                }
+                updatedContent += '\n';
+              }
+              updatedContent += `//# sourceMappingURL=${filename}`;
+            }
+
+            await writeFileAsync(dest, updatedContent);
+            console.log(chalk.gray(`Created ${mapFile} from ${src}`));
+          } catch (error) {
+            console.log(chalk.yellow(`Couldn't reverse map for ${js}: ${error}`));
+          }
         }),
       );
+      return;
+    }
+
+    // copy all *.map files to the node module in the temp directory and
+    // change their sourceRoot so they can be found in the development directory
+    await Promise.all(
+      sourcemaps.map(async (sourcemap) => {
+        try {
+          const src = path.join(this.rootDir, sourcemap);
+          const data = this.readJson(src);
+          if (data.version !== 3) {
+            throw new Error(`Unsupported sourcemap version: ${data.version}`);
+          }
+          data.sourceRoot = path.dirname(src).replace(/\\/g, '/');
+          const dest = path.join(outDir, sourcemap);
+          await writeFileAsync(dest, JSON.stringify(data));
+        } catch (error) {
+          console.log(chalk.yellow(`Couldn't rewrite ${sourcemap}: ${error}`));
+        }
+      }),
+    );
+  }
+
+  private async createIdentitySourcemap(filename: string): Promise<RawSourceMap> {
+    // thanks to https://github.com/gulp-sourcemaps/identity-map/blob/251b51598d02e5aedaea8f1a475dfc42103a2727/lib/generate.js [MIT]
+    const generator = new SourceMapGenerator({ file: filename });
+    const fileContent = await readFileAsync(filename, { encoding: 'utf-8' });
+    var tokenizer = acorn.tokenizer(fileContent, {
+      ecmaVersion: 'latest',
+      allowHashBang: true,
+      locations: true,
     });
+
+    while (true) {
+      const token = tokenizer.getToken();
+
+      if (token.type.label === 'eof' || !token.loc) {
+        break;
+      }
+      const mapping: Mapping = {
+        original: token.loc.start,
+        generated: token.loc.start,
+        source: filename,
+      };
+      generator.addMapping(mapping);
+    }
+
+    return generator.toJSON();
   }
 
   private startParcel(): Promise<void> {
@@ -272,6 +395,18 @@ class DevServer {
     };
     // console.log(config);
     bs.init(config);
+  }
+
+  private startAdapterDebug() {
+    const args = [IOBROKER_CLI, 'debug', `${this.adapterName}.0`];
+    if (this.argv.wait) {
+      args.push('--wait');
+    }
+    const proc = this.spawn('node', args, this.tempDir);
+    proc.on('exit', (code) => {
+      console.error(chalk.yellow(`Adapter debugger exited with code ${code}`));
+      process.exit(-1);
+    });
   }
 
   async install(): Promise<void> {
@@ -427,6 +562,16 @@ class DevServer {
     options = { cwd: cwd, stdio: 'inherit', ...options };
     console.log(chalk.gray(`${cwd}> ${command}`));
     return execSync(command, options);
+  }
+
+  private spawn(command: string, args: ReadonlyArray<string>, cwd: string) {
+    console.log(chalk.gray(`${cwd}> ${command} ${args.join(' ')}`));
+    const proc = spawn(command, args, {
+      stdio: ['ignore', 'inherit', 'inherit'],
+      cwd: cwd,
+    });
+    process.on('beforeExit', () => proc.kill());
+    return proc;
   }
 
   private rimraf(name: string): Promise<void> {
