@@ -12,7 +12,7 @@
 
     "skipLibCheck": true, // Don't report errors in 3rd party definitions
     "noEmitOnError": true,
-    "outDir": "./build/",
+    "outDir": "./dist/",
     "removeComments": false,
     "module": "commonjs",
     "moduleResolution": "node",
@@ -38,5 +38,5 @@
     "watch": false
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["build/**", "node_modules/**"]
+  "exclude": ["dist/**", "node_modules/**"]
 }
