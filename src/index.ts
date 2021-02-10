@@ -2,6 +2,7 @@
 
 import yargs = require('yargs/yargs');
 import { exec, execSync, ExecSyncOptionsWithBufferEncoding, spawn } from 'child_process';
+import chokidar from 'chokidar';
 import express from 'express';
 import fg from 'fast-glob';
 import * as fs from 'fs';
@@ -19,6 +20,7 @@ import acorn = require('acorn');
 const mkdirAsync = promisify(fs.mkdir);
 const writeFileAsync = promisify(fs.writeFile);
 const readFileAsync = promisify(fs.readFile);
+const copyFileAsync = promisify(fs.copyFile);
 
 const DEFAULT_TEMP_DIR_NAME = '.devserver';
 const CORE_MODULE = 'iobroker.js-controller';
@@ -158,7 +160,7 @@ class DevServer {
     }
 
     const shouldUpload = this.argv._.includes('upload') || this.argv._.includes('ul');
-    if (shouldUpload || runCommand === 'debug') {
+    if (shouldUpload || runCommand === 'debug' || runCommand === 'watch') {
       await this.installLocalAdapter();
     }
     if (shouldUpload) {
@@ -215,7 +217,6 @@ class DevServer {
     const scripts = pkg.scripts;
     if (scripts && scripts['watch:parcel']) {
       // use parcel
-      this.log.notice('Starting parcel');
       await this.startParcel();
     }
 
@@ -260,6 +261,8 @@ class DevServer {
 
     if (runCommand === 'debug') {
       this.startAdapterDebug();
+    } else if (runCommand === 'watch') {
+      await this.startAdapterWatch();
     }
   }
 
@@ -275,37 +278,9 @@ class DevServer {
       const jsFiles = await this.findFiles('js', true);
       await Promise.all(
         jsFiles.map(async (js) => {
-          try {
-            const src = path.join(this.rootDir, js);
-            const dest = path.join(outDir, js);
-            if (!fs.existsSync(dest)) {
-              return;
-            }
-            const mapFile = `${dest}.map`;
-            const data = await this.createIdentitySourcemap(src.replace(/\\/g, '/'));
-            await writeFileAsync(mapFile, JSON.stringify(data));
-
-            // append the sourcemap reference comment to the bottom of the file
-            const fileContent = await readFileAsync(dest, { encoding: 'utf-8' });
-            const filename = path.basename(mapFile);
-            let updatedContent = fileContent.replace(/(\/\/\# sourceMappingURL=).+/, `$1${filename}`);
-            if (updatedContent === fileContent) {
-              // no existing source mapping URL was found in the file
-              if (!fileContent.endsWith('\n')) {
-                if (fileContent.match(/\r\n/)) {
-                  // windows eol
-                  updatedContent += '\r';
-                }
-                updatedContent += '\n';
-              }
-              updatedContent += `//# sourceMappingURL=${filename}`;
-            }
-
-            await writeFileAsync(dest, updatedContent);
-            this.log.debug(`Created ${mapFile} from ${src}`);
-          } catch (error) {
-            this.log.warn(`Couldn't reverse map for ${js}: ${error}`);
-          }
+          const src = path.join(this.rootDir, js);
+          const dest = path.join(outDir, js);
+          await this.addSourcemap(src, dest, false);
         }),
       );
       return;
@@ -315,29 +290,81 @@ class DevServer {
     // change their sourceRoot so they can be found in the development directory
     await Promise.all(
       sourcemaps.map(async (sourcemap) => {
-        try {
-          const src = path.join(this.rootDir, sourcemap);
-          const data = this.readJson(src);
-          if (data.version !== 3) {
-            throw new Error(`Unsupported sourcemap version: ${data.version}`);
-          }
-          data.sourceRoot = path.dirname(src).replace(/\\/g, '/');
-          const dest = path.join(outDir, sourcemap);
-          await writeFileAsync(dest, JSON.stringify(data));
-          this.log.debug(`Created ${dest} from ${src}`);
-        } catch (error) {
-          this.log.warn(`Couldn't rewrite ${sourcemap}: ${error}`);
-        }
+        const src = path.join(this.rootDir, sourcemap);
+        const dest = path.join(outDir, sourcemap);
+        this.patchSourcemap(src, dest);
       }),
     );
   }
 
-  private async findFiles(extension: string, excludeAdmin: boolean) {
-    const patterns = [`./**/*.${extension}`, '!./.*/**', '!./node_modules/**'];
+  /**
+   * Create an identity sourcemap to point to a different source file.
+   * @param src The path to the original JavaScript file.
+   * @param dest The path to the JavaScript file which will get a sourcemap attached.
+   * @param copyFromSrc Set to true to copy the JavaScript file from src to dest (not just modify dest).
+   */
+  private async addSourcemap(src: string, dest: string, copyFromSrc: boolean) {
+    try {
+      const mapFile = `${dest}.map`;
+      const data = await this.createIdentitySourcemap(src.replace(/\\/g, '/'));
+      await writeFileAsync(mapFile, JSON.stringify(data));
+
+      // append the sourcemap reference comment to the bottom of the file
+      const fileContent = await readFileAsync(copyFromSrc ? src : dest, { encoding: 'utf-8' });
+      const filename = path.basename(mapFile);
+      let updatedContent = fileContent.replace(/(\/\/\# sourceMappingURL=).+/, `$1${filename}`);
+      if (updatedContent === fileContent) {
+        // no existing source mapping URL was found in the file
+        if (!fileContent.endsWith('\n')) {
+          if (fileContent.match(/\r\n/)) {
+            // windows eol
+            updatedContent += '\r';
+          }
+          updatedContent += '\n';
+        }
+        updatedContent += `//# sourceMappingURL=${filename}`;
+      }
+
+      await writeFileAsync(dest, updatedContent);
+      this.log.debug(`Created ${mapFile} from ${src}`);
+    } catch (error) {
+      this.log.warn(`Couldn't reverse map for ${src}: ${error}`);
+    }
+  }
+
+  /**
+   * Patch an existing sourcemap file.
+   * @param src The path to the original sourcemap file to patch and copy.
+   * @param dest The path to the sourcemap file that is created.
+   */
+  private async patchSourcemap(src: string, dest: string) {
+    try {
+      const data = this.readJson(src);
+      if (data.version !== 3) {
+        throw new Error(`Unsupported sourcemap version: ${data.version}`);
+      }
+      data.sourceRoot = path.dirname(src).replace(/\\/g, '/');
+      await writeFileAsync(dest, JSON.stringify(data));
+      this.log.debug(`Patched ${dest} from ${src}`);
+    } catch (error) {
+      this.log.warn(`Couldn't patch ${dest}: ${error}`);
+    }
+  }
+
+  private getFilePatterns(extensions: string | string[], excludeAdmin: boolean) {
+    const exts = typeof extensions === 'string' ? [extensions] : extensions;
+    const patterns = exts.map((e) => `./**/*.${e}`);
+    patterns.push('!./.*/**');
+    patterns.push('!./node_modules/**');
+    patterns.push('!./test/**');
     if (excludeAdmin) {
       patterns.push('!./admin/**');
     }
-    return await fg(patterns, { cwd: this.rootDir });
+    return patterns;
+  }
+
+  private async findFiles(extension: string, excludeAdmin: boolean): Promise<string[]> {
+    return await fg(this.getFilePatterns(extension, excludeAdmin), { cwd: this.rootDir });
   }
 
   private async createIdentitySourcemap(filename: string): Promise<RawSourceMap> {
@@ -368,17 +395,18 @@ class DevServer {
   }
 
   private startParcel(): Promise<void> {
+    this.log.notice('Starting parcel');
     return new Promise<void>((resolve, reject) => {
       const proc = exec('npm run watch:parcel');
       this.log.debug('Waiting for first successful parcel build...');
       proc.stdout?.on('data', (data: string) => {
-        console.log(data);
+        console.log(data.trimEnd());
         if (data.includes(`Built in`)) {
           resolve();
         }
       });
-      proc.stderr?.on('data', (data) => {
-        console.error(data);
+      proc.stderr?.on('data', (data: string) => {
+        console.error(data.trimEnd());
         reject();
       });
 
@@ -422,6 +450,151 @@ class DevServer {
       console.error(chalk.yellow(`Adapter debugger exited with code ${code}`));
       process.exit(-1);
     });
+  }
+
+  private async startAdapterWatch(): Promise<void> {
+    // figure out if we need to watch for TypeScript changes
+    const pkg = this.readPackageJson();
+    const scripts = pkg.scripts;
+    if (scripts && scripts['watch:ts']) {
+      // use TSC
+      await this.startTscWatch();
+    }
+
+    // start sync
+    const adapterRunDir = path.join(this.tempDir, 'node_modules', `iobroker.${this.adapterName}`);
+    await this.startFileSync(adapterRunDir);
+
+    this.startNodemon(adapterRunDir, pkg.main);
+  }
+
+  private startTscWatch(): Promise<void> {
+    this.log.notice('Starting tsc --watch');
+    return new Promise<void>((resolve) => {
+      const proc = exec('npm run watch:ts -- --preserveWatchOutput');
+      this.log.debug('Waiting for first successful tsc build...');
+      proc.stdout?.on('data', (data: string) => {
+        console.log(data.trimEnd());
+        if (data.includes(`Watching for`)) {
+          resolve();
+        }
+      });
+      proc.stderr?.on('data', (data: string) => {
+        console.error(data.trimEnd());
+      });
+
+      process.on('beforeExit', () => proc.kill());
+    });
+  }
+
+  private startFileSync(destinationDir: string) {
+    const inSrc = (filename: string) => path.join(this.rootDir, filename);
+    const inDest = (filename: string) => path.join(destinationDir, filename);
+    return new Promise<void>((resolve, reject) => {
+      const patterns = this.getFilePatterns(['js', 'map'], true);
+      const ignoreFiles = [] as string[];
+      const watcher = chokidar.watch(patterns, { cwd: this.rootDir });
+      let ready = false;
+      watcher.on('error', reject);
+      watcher.on('ready', () => {
+        ready = true;
+        resolve();
+      });
+      /*watcher.on('all', (event, path) => {
+        console.log(event, path);
+      });*/
+      const syncFile = async (filename: string) => {
+        try {
+          this.log.debug(`Synchronizing ${filename}`);
+          const src = inSrc(filename);
+          const dest = inDest(filename);
+          if (filename.endsWith('.map')) {
+            await this.patchSourcemap(src, dest);
+          } else if (!fs.existsSync(inSrc(`${filename}.map`))) {
+            // copy file and add sourcemap
+            await this.addSourcemap(src, dest, true);
+          } else {
+            await copyFileAsync(src, dest);
+          }
+        } catch (error) {
+          this.log.warn(`Couldn't sync ${filename}`);
+        }
+      };
+      watcher.on('add', (filename: string) => {
+        if (ready) {
+          syncFile(filename);
+        } else if (!filename.endsWith('map') && !fs.existsSync(inDest(filename))) {
+          // ignore files during initial sync if they don't exist in the target directory
+          ignoreFiles.push(filename);
+        } else {
+          this.log.debug(`Watching ${filename}`);
+        }
+      });
+      watcher.on('change', (filename: string) => {
+        if (!ignoreFiles.includes(filename)) {
+          syncFile(filename);
+        }
+      });
+      watcher.on('unlink', (filename: string) => {
+        fs.unlinkSync(inDest(filename));
+        const map = inDest(filename + '.map');
+        if (fs.existsSync(map)) {
+          fs.unlinkSync(map);
+        }
+      });
+    });
+  }
+
+  private startNodemon(baseDir: string, scriptName: string) {
+    const script = path.resolve(baseDir, scriptName);
+    this.log.notice(`Starting nodemon for ${script}`);
+    var nodemon = require('nodemon');
+    nodemon({
+      script: script,
+      stdin: false,
+      verbose: true,
+      // dump: true, // this will output the entire config and not do anything
+      colours: false,
+      watch: [baseDir],
+      ignore: [path.join(baseDir, 'admin')],
+      ignoreRoot: [],
+      delay: 2000,
+      execMap: { js: 'node --inspect' },
+      args: ['--debug', '0'],
+    });
+    nodemon
+      .on('start', () => {
+        console.log(
+          boxen(chalk.green(`Your adapter ioBroker.${this.adapterName} is starting.\nYou may now attach a debugger.`), {
+            padding: 1,
+            borderStyle: 'round',
+          }),
+        );
+      })
+      .on('log', (msg: { type: 'log' | 'info' | 'status' | 'detail' | 'fail' | 'error'; message: string }) => {
+        const message = `[nodemon] ${msg.message}`;
+        switch (msg.type) {
+          case 'info':
+            this.log.info(message);
+            break;
+          case 'status':
+            this.log.notice(message);
+            break;
+          case 'fail':
+            this.log.error(message);
+            break;
+          case 'error':
+            this.log.warn(message);
+            break;
+          default:
+            this.log.debug(message);
+            break;
+        }
+      })
+      .on('quit', () => {
+        this.log.error('nodemon has exited');
+        process.exit(-2);
+      });
   }
 
   async install(): Promise<void> {
