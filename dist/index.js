@@ -33,6 +33,7 @@ const os_1 = require("os");
 const path = __importStar(require("path"));
 const source_map_1 = require("source-map");
 const util_1 = require("util");
+const logger_1 = require("./logger");
 const chalk = require("chalk");
 const rimraf = require("rimraf");
 const boxen = require("boxen");
@@ -49,6 +50,7 @@ const HIDDEN_ADMIN_PORT = 18881;
 const HIDDEN_BROWSER_SYNC_PORT = 18882;
 class DevServer {
     constructor() {
+        this.log = new logger_1.Logger();
         this.runCommands = ['run', 'watch', 'debug'];
         const argv = yargs(process.argv.slice(2))
             .usage('Usage: $0 <command> [options]')
@@ -125,7 +127,7 @@ class DevServer {
     async run() {
         const runCommand = this.runCommands.find((c) => this.argv._.includes(c));
         if (this.argv.forceInstall) {
-            console.log(chalk.blue(`Deleting ${this.tempDir}`));
+            this.log.notice(`Deleting ${this.tempDir}`);
             await this.rimraf(this.tempDir);
         }
         const jsControllerDir = path.join(this.tempDir, 'node_modules', CORE_MODULE);
@@ -133,8 +135,8 @@ class DevServer {
             await this.install();
         }
         else if (this.argv._.includes('install')) {
-            console.log(chalk.red(`Devserver is already installed in "${this.tempDir}".`));
-            console.log(`Use --force-install to reinstall from scratch.`);
+            this.log.error(`Devserver is already installed in "${this.tempDir}".`);
+            this.log.debug(`Use --force-install to reinstall from scratch.`);
         }
         if (this.argv._.includes('update') || this.argv._.includes('ud')) {
             await this.update();
@@ -158,7 +160,7 @@ class DevServer {
             throw new Error(`Invalid package name in package.json: "${pkgName}"`);
         }
         const adapterName = match[1];
-        console.log(chalk.gray(`Found adapter name: "${adapterName}"`));
+        this.log.debug(`Found adapter name: "${adapterName}"`);
         return adapterName;
     }
     readJson(filename) {
@@ -169,7 +171,7 @@ class DevServer {
         return this.readJson(path.join(this.rootDir, 'package.json'));
     }
     async runServer(runCommand) {
-        console.log(chalk.gray(`Running ${runCommand} inside ${this.tempDir}`));
+        this.log.debug(`Running ${runCommand} inside ${this.tempDir}`);
         if (runCommand === 'debug') {
             await this.copySourcemaps();
         }
@@ -179,7 +181,7 @@ class DevServer {
             process.exit(-1);
         });
         process.on('SIGINT', () => {
-            console.log(chalk.green('devserver is exiting...'));
+            this.log.notice('devserver is exiting...');
             server.close();
             // do not kill this process when receiving SIGINT, but let all child processes exit first
         });
@@ -188,10 +190,10 @@ class DevServer {
         const scripts = pkg.scripts;
         if (scripts && scripts['watch:parcel']) {
             // use parcel
-            console.log(chalk.gray('Starting parcel'));
+            this.log.debug('Starting parcel');
             await this.startParcel();
         }
-        console.log(chalk.gray('Starting browser-sync'));
+        this.log.debug('Starting browser-sync');
         this.startBrowserSync();
         // browser-sync proxy
         const app = express_1.default();
@@ -227,7 +229,7 @@ class DevServer {
         const sourcemaps = await fast_glob_1.default(['./**/*.map', '!./.*/**', '!./node_modules/**'], { cwd: this.rootDir });
         const outDir = path.join(this.tempDir, 'node_modules', `iobroker.${this.adapterName}`);
         if (sourcemaps.length === 0) {
-            console.log(chalk.gray(`Couldn't find any sourcemaps in ${this.rootDir},\nwill try to reverse map .js files`));
+            this.log.debug(`Couldn't find any sourcemaps in ${this.rootDir},\nwill try to reverse map .js files`);
             // search all .js files that exist in the node module in the temp directory as well as in the root directory and
             // create sourcemap files for each of them
             const jsFiles = await fast_glob_1.default(['./**/*.js', '!./.*/**', '!./node_modules/**'], { cwd: this.rootDir });
@@ -257,10 +259,10 @@ class DevServer {
                         updatedContent += `//# sourceMappingURL=${filename}`;
                     }
                     await writeFileAsync(dest, updatedContent);
-                    console.log(chalk.gray(`Created ${mapFile} from ${src}`));
+                    this.log.debug(`Created ${mapFile} from ${src}`);
                 }
                 catch (error) {
-                    console.log(chalk.yellow(`Couldn't reverse map for ${js}: ${error}`));
+                    this.log.warn(`Couldn't reverse map for ${js}: ${error}`);
                 }
             }));
             return;
@@ -279,7 +281,7 @@ class DevServer {
                 await writeFileAsync(dest, JSON.stringify(data));
             }
             catch (error) {
-                console.log(chalk.yellow(`Couldn't rewrite ${sourcemap}: ${error}`));
+                this.log.warn(`Couldn't rewrite ${sourcemap}: ${error}`);
             }
         }));
     }
@@ -310,6 +312,7 @@ class DevServer {
         return new Promise((resolve, reject) => {
             var _a, _b;
             const proc = child_process_1.exec('npm run watch:parcel');
+            this.log.debug('Waiting for first successful parcel build...');
             (_a = proc.stdout) === null || _a === void 0 ? void 0 : _a.on('data', (data) => {
                 console.log(data);
                 if (data.includes(`Built in`)) {
@@ -357,7 +360,7 @@ class DevServer {
         });
     }
     async install() {
-        console.log(chalk.blue(`Installing to ${this.tempDir}`));
+        this.log.notice(`Installing to ${this.tempDir}`);
         if (!fs.existsSync(this.tempDir)) {
             await mkdirAsync(this.tempDir);
         }
@@ -449,52 +452,52 @@ class DevServer {
             },
         };
         await writeFileAsync(path.join(this.tempDir, 'package.json'), JSON.stringify(pkg, null, 2));
-        console.log(chalk.blue('Installing everything...'));
+        this.log.notice('Installing everything...');
         this.execSync('npm install --loglevel error --production', this.tempDir);
         this.uploadAndAddAdapter('admin');
         this.uploadAndAddAdapter('info');
         // reconfigure admin instance (only listen to local IP address)
-        console.log(chalk.blue('Configure admin.0'));
+        this.log.notice('Configure admin.0');
         this.execSync(`${IOBROKER_COMMAND} set admin.0 --port ${HIDDEN_ADMIN_PORT} --bind 127.0.0.1`, this.tempDir);
         // install local adapter
         await this.installLocalAdapter();
         this.uploadAndAddAdapter(this.adapterName);
-        console.log(chalk.blue(`Stop ${this.adapterName}.0`));
+        this.log.notice(`Stop ${this.adapterName}.0`);
         this.execSync(`${IOBROKER_COMMAND} stop ${this.adapterName} 0`, this.tempDir);
     }
     uploadAndAddAdapter(name) {
         // upload the already installed adapter
         this.uploadAdapter(name);
         // create an instance
-        console.log(chalk.blue(`Add ${name}.0`));
+        this.log.notice(`Add ${name}.0`);
         this.execSync(`${IOBROKER_COMMAND} add ${name} 0`, this.tempDir);
     }
     uploadAdapter(name) {
-        console.log(chalk.blue(`Upload iobroker.${name}`));
+        this.log.notice(`Upload iobroker.${name}`);
         this.execSync(`${IOBROKER_COMMAND} upload ${name}`, this.tempDir);
     }
     async installLocalAdapter() {
-        console.log(chalk.blue(`Install local iobroker.${this.adapterName}`));
+        this.log.notice(`Install local iobroker.${this.adapterName}`);
         const command = 'npm pack';
-        console.log(chalk.gray(`${this.rootDir}> ${command}`));
+        this.log.debug(`${this.rootDir}> ${command}`);
         const filename = child_process_1.execSync(command, { cwd: this.rootDir, encoding: 'ascii' }).trim();
-        console.log(`Packed to ${filename}`);
+        this.log.info(`Packed to ${filename}`);
         const fullPath = path.join(this.rootDir, filename);
         this.execSync(`npm install --no-save "${fullPath}"`, this.tempDir);
         await this.rimraf(fullPath);
     }
     async update() {
-        console.log(chalk.blue('Updating everything...'));
+        this.log.notice('Updating everything...');
         this.execSync('npm update --loglevel error', this.tempDir);
         await this.installLocalAdapter();
     }
     execSync(command, cwd, options) {
         options = { cwd: cwd, stdio: 'inherit', ...options };
-        console.log(chalk.gray(`${cwd}> ${command}`));
+        this.log.debug(`${cwd}> ${command}`);
         return child_process_1.execSync(command, options);
     }
     spawn(command, args, cwd) {
-        console.log(chalk.gray(`${cwd}> ${command} ${args.join(' ')}`));
+        this.log.debug(`${cwd}> ${command} ${args.join(' ')}`);
         const proc = child_process_1.spawn(command, args, {
             stdio: ['ignore', 'inherit', 'inherit'],
             cwd: cwd,
