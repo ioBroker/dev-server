@@ -192,7 +192,7 @@ class DevServer {
   }
 
   async runServer(runCommand: RunCommand): Promise<void> {
-    this.log.debug(`Running ${runCommand} inside ${this.tempDir}`);
+    this.log.notice(`Running ${runCommand} inside ${this.tempDir}`);
 
     if (runCommand === 'debug') {
       await this.copySourcemaps();
@@ -215,11 +215,10 @@ class DevServer {
     const scripts = pkg.scripts;
     if (scripts && scripts['watch:parcel']) {
       // use parcel
-      this.log.debug('Starting parcel');
+      this.log.notice('Starting parcel');
       await this.startParcel();
     }
 
-    this.log.debug('Starting browser-sync');
     this.startBrowserSync();
 
     // browser-sync proxy
@@ -244,6 +243,7 @@ class DevServer {
     );
 
     // start express
+    this.log.notice(`Starting web server on port ${this.argv.adminPort}`);
     const server = app.listen(this.argv.adminPort);
     await new Promise<void>((resolve, reject) => {
       server.on('listening', resolve);
@@ -264,14 +264,15 @@ class DevServer {
   }
 
   private async copySourcemaps(): Promise<void> {
-    const sourcemaps = await fg(['./**/*.map', '!./.*/**', '!./node_modules/**'], { cwd: this.rootDir });
     const outDir = path.join(this.tempDir, 'node_modules', `iobroker.${this.adapterName}`);
+    this.log.notice(`Creating or patching sourcemaps in ${outDir}`);
+    const sourcemaps = await this.findFiles('map', true);
     if (sourcemaps.length === 0) {
       this.log.debug(`Couldn't find any sourcemaps in ${this.rootDir},\nwill try to reverse map .js files`);
 
       // search all .js files that exist in the node module in the temp directory as well as in the root directory and
       // create sourcemap files for each of them
-      const jsFiles = await fg(['./**/*.js', '!./.*/**', '!./node_modules/**'], { cwd: this.rootDir });
+      const jsFiles = await this.findFiles('js', true);
       await Promise.all(
         jsFiles.map(async (js) => {
           try {
@@ -323,11 +324,20 @@ class DevServer {
           data.sourceRoot = path.dirname(src).replace(/\\/g, '/');
           const dest = path.join(outDir, sourcemap);
           await writeFileAsync(dest, JSON.stringify(data));
+          this.log.debug(`Created ${dest} from ${src}`);
         } catch (error) {
           this.log.warn(`Couldn't rewrite ${sourcemap}: ${error}`);
         }
       }),
     );
+  }
+
+  private async findFiles(extension: string, excludeAdmin: boolean) {
+    const patterns = [`./**/*.${extension}`, '!./.*/**', '!./node_modules/**'];
+    if (excludeAdmin) {
+      patterns.push('!./admin/**');
+    }
+    return await fg(patterns, { cwd: this.rootDir });
   }
 
   private async createIdentitySourcemap(filename: string): Promise<RawSourceMap> {
@@ -377,6 +387,7 @@ class DevServer {
   }
 
   private startBrowserSync(): void {
+    this.log.notice('Starting browser-sync');
     var bs = require('browser-sync').create();
 
     const adminPath = path.resolve(this.rootDir, 'admin/');
@@ -401,6 +412,7 @@ class DevServer {
   }
 
   private startAdapterDebug() {
+    this.log.notice(`Starting ioBroker adapter debugger for ${this.adapterName}.0`);
     const args = [IOBROKER_CLI, 'debug', `${this.adapterName}.0`];
     if (this.argv.wait) {
       args.push('--wait');
