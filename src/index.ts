@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import yargs = require('yargs/yargs');
-import { exec, execSync, ExecSyncOptionsWithBufferEncoding, spawn } from 'child_process';
+import * as cp from 'child_process';
 import chokidar from 'chokidar';
 import express from 'express';
 import fg from 'fast-glob';
@@ -394,24 +394,10 @@ class DevServer {
     return generator.toJSON();
   }
 
-  private startParcel(): Promise<void> {
+  private async startParcel(): Promise<void> {
     this.log.notice('Starting parcel');
-    return new Promise<void>((resolve, reject) => {
-      const proc = exec('npm run watch:parcel');
-      this.log.debug('Waiting for first successful parcel build...');
-      proc.stdout?.on('data', (data: string) => {
-        console.log(data.trimEnd());
-        if (data.includes(`Built in`)) {
-          resolve();
-        }
-      });
-      proc.stderr?.on('data', (data: string) => {
-        console.error(data.trimEnd());
-        reject();
-      });
-
-      process.on('beforeExit', () => proc.kill());
-    });
+    this.log.debug('Waiting for first successful parcel build...');
+    await this.spawnAndAwaitOutput('npm', ['run', 'watch:parcel'], this.rootDir, 'Built in', { shell: true });
   }
 
   private startBrowserSync(): void {
@@ -468,26 +454,20 @@ class DevServer {
     this.startNodemon(adapterRunDir, pkg.main);
   }
 
-  private startTscWatch(): Promise<void> {
+  private async startTscWatch(): Promise<void> {
     this.log.notice('Starting tsc --watch');
-    return new Promise<void>((resolve) => {
-      const proc = exec('npm run watch:ts -- --preserveWatchOutput');
-      this.log.debug('Waiting for first successful tsc build...');
-      proc.stdout?.on('data', (data: string) => {
-        console.log(data.trimEnd());
-        if (data.includes(`Watching for`)) {
-          resolve();
-        }
-      });
-      proc.stderr?.on('data', (data: string) => {
-        console.error(data.trimEnd());
-      });
-
-      process.on('beforeExit', () => proc.kill());
-    });
+    this.log.debug('Waiting for first successful tsc build...');
+    await this.spawnAndAwaitOutput(
+      'npm',
+      ['run', 'watch:ts', '--', '--preserveWatchOutput'],
+      this.rootDir,
+      'Watching for',
+      { shell: true },
+    );
   }
 
   private startFileSync(destinationDir: string) {
+    this.log.notice(`Starting file system sync from ${this.rootDir}`);
     const inSrc = (filename: string) => path.join(this.rootDir, filename);
     const inDest = (filename: string) => path.join(destinationDir, filename);
     return new Promise<void>((resolve, reject) => {
@@ -548,6 +528,12 @@ class DevServer {
   private startNodemon(baseDir: string, scriptName: string) {
     const script = path.resolve(baseDir, scriptName);
     this.log.notice(`Starting nodemon for ${script}`);
+
+    let isExiting = false;
+    process.on('SIGINT', () => {
+      isExiting = true;
+    });
+
     var nodemon = require('nodemon');
     nodemon({
       script: script,
@@ -572,6 +558,9 @@ class DevServer {
         );
       })
       .on('log', (msg: { type: 'log' | 'info' | 'status' | 'detail' | 'fail' | 'error'; message: string }) => {
+        if (isExiting) {
+          return;
+        }
         const message = `[nodemon] ${msg.message}`;
         switch (msg.type) {
           case 'info':
@@ -731,7 +720,7 @@ class DevServer {
 
     const command = 'npm pack';
     this.log.debug(`${this.rootDir}> ${command}`);
-    const filename = execSync(command, { cwd: this.rootDir, encoding: 'ascii' }).trim();
+    const filename = cp.execSync(command, { cwd: this.rootDir, encoding: 'ascii' }).trim();
     this.log.info(`Packed to ${filename}`);
 
     const fullPath = path.join(this.rootDir, filename);
@@ -746,20 +735,51 @@ class DevServer {
     await this.installLocalAdapter();
   }
 
-  private execSync(command: string, cwd: string, options?: ExecSyncOptionsWithBufferEncoding): Buffer {
+  private execSync(command: string, cwd: string, options?: cp.ExecSyncOptionsWithBufferEncoding): Buffer {
     options = { cwd: cwd, stdio: 'inherit', ...options };
     this.log.debug(`${cwd}> ${command}`);
-    return execSync(command, options);
+    return cp.execSync(command, options);
   }
 
-  private spawn(command: string, args: ReadonlyArray<string>, cwd: string) {
+  private spawn(command: string, args: ReadonlyArray<string>, cwd: string, options?: cp.SpawnOptions) {
     this.log.debug(`${cwd}> ${command} ${args.join(' ')}`);
-    const proc = spawn(command, args, {
+    const proc = cp.spawn(command, args, {
       stdio: ['ignore', 'inherit', 'inherit'],
       cwd: cwd,
+      ...options,
     });
-    process.on('beforeExit', () => proc.kill());
+    let alive = true;
+    proc.on('exit', () => (alive = false));
+    process.on('exit', () => alive && proc.kill());
     return proc;
+  }
+
+  private spawnAndAwaitOutput(
+    command: string,
+    args: ReadonlyArray<string>,
+    cwd: string,
+    awaitMsg: string,
+    options?: cp.SpawnOptions,
+  ): Promise<cp.ChildProcess> {
+    return new Promise<cp.ChildProcess>((resolve, reject) => {
+      const proc = this.spawn(command, args, cwd, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
+      proc.stdout?.on('data', (data: Buffer) => {
+        const str = data.toString('utf-8');
+        console.log(str.trimEnd());
+        if (str.includes(awaitMsg)) {
+          resolve(proc);
+        }
+      });
+      proc.stderr?.on('data', (data: Buffer) => {
+        const str = data.toString('utf-8').trimEnd();
+        console.error(str);
+        reject(str);
+      });
+      process.on('SIGINT', () => {
+        proc.kill();
+        reject('SIGINT');
+      });
+    });
   }
 
   private rimraf(name: string): Promise<void> {

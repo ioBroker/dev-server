@@ -24,7 +24,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const yargs = require("yargs/yargs");
-const child_process_1 = require("child_process");
+const cp = __importStar(require("child_process"));
 const chokidar_1 = __importDefault(require("chokidar"));
 const express_1 = __importDefault(require("express"));
 const fast_glob_1 = __importDefault(require("fast-glob"));
@@ -342,24 +342,10 @@ class DevServer {
         }
         return generator.toJSON();
     }
-    startParcel() {
+    async startParcel() {
         this.log.notice('Starting parcel');
-        return new Promise((resolve, reject) => {
-            var _a, _b;
-            const proc = child_process_1.exec('npm run watch:parcel');
-            this.log.debug('Waiting for first successful parcel build...');
-            (_a = proc.stdout) === null || _a === void 0 ? void 0 : _a.on('data', (data) => {
-                console.log(data.trimEnd());
-                if (data.includes(`Built in`)) {
-                    resolve();
-                }
-            });
-            (_b = proc.stderr) === null || _b === void 0 ? void 0 : _b.on('data', (data) => {
-                console.error(data.trimEnd());
-                reject();
-            });
-            process.on('beforeExit', () => proc.kill());
-        });
+        this.log.debug('Waiting for first successful parcel build...');
+        await this.spawnAndAwaitOutput('npm', ['run', 'watch:parcel'], this.rootDir, 'Built in', { shell: true });
     }
     startBrowserSync() {
         this.log.notice('Starting browser-sync');
@@ -409,25 +395,13 @@ class DevServer {
         await this.startFileSync(adapterRunDir);
         this.startNodemon(adapterRunDir, pkg.main);
     }
-    startTscWatch() {
+    async startTscWatch() {
         this.log.notice('Starting tsc --watch');
-        return new Promise((resolve) => {
-            var _a, _b;
-            const proc = child_process_1.exec('npm run watch:ts -- --preserveWatchOutput');
-            this.log.debug('Waiting for first successful tsc build...');
-            (_a = proc.stdout) === null || _a === void 0 ? void 0 : _a.on('data', (data) => {
-                console.log(data.trimEnd());
-                if (data.includes(`Watching for`)) {
-                    resolve();
-                }
-            });
-            (_b = proc.stderr) === null || _b === void 0 ? void 0 : _b.on('data', (data) => {
-                console.error(data.trimEnd());
-            });
-            process.on('beforeExit', () => proc.kill());
-        });
+        this.log.debug('Waiting for first successful tsc build...');
+        await this.spawnAndAwaitOutput('npm', ['run', 'watch:ts', '--', '--preserveWatchOutput'], this.rootDir, 'Watching for', { shell: true });
     }
     startFileSync(destinationDir) {
+        this.log.notice(`Starting file system sync from ${this.rootDir}`);
         const inSrc = (filename) => path.join(this.rootDir, filename);
         const inDest = (filename) => path.join(destinationDir, filename);
         return new Promise((resolve, reject) => {
@@ -492,6 +466,10 @@ class DevServer {
     startNodemon(baseDir, scriptName) {
         const script = path.resolve(baseDir, scriptName);
         this.log.notice(`Starting nodemon for ${script}`);
+        let isExiting = false;
+        process.on('SIGINT', () => {
+            isExiting = true;
+        });
         var nodemon = require('nodemon');
         nodemon({
             script: script,
@@ -514,6 +492,9 @@ class DevServer {
             }));
         })
             .on('log', (msg) => {
+            if (isExiting) {
+                return;
+            }
             const message = `[nodemon] ${msg.message}`;
             switch (msg.type) {
                 case 'info':
@@ -659,7 +640,7 @@ class DevServer {
         this.log.notice(`Install local iobroker.${this.adapterName}`);
         const command = 'npm pack';
         this.log.debug(`${this.rootDir}> ${command}`);
-        const filename = child_process_1.execSync(command, { cwd: this.rootDir, encoding: 'ascii' }).trim();
+        const filename = cp.execSync(command, { cwd: this.rootDir, encoding: 'ascii' }).trim();
         this.log.info(`Packed to ${filename}`);
         const fullPath = path.join(this.rootDir, filename);
         this.execSync(`npm install --no-save "${fullPath}"`, this.tempDir);
@@ -673,16 +654,41 @@ class DevServer {
     execSync(command, cwd, options) {
         options = { cwd: cwd, stdio: 'inherit', ...options };
         this.log.debug(`${cwd}> ${command}`);
-        return child_process_1.execSync(command, options);
+        return cp.execSync(command, options);
     }
-    spawn(command, args, cwd) {
+    spawn(command, args, cwd, options) {
         this.log.debug(`${cwd}> ${command} ${args.join(' ')}`);
-        const proc = child_process_1.spawn(command, args, {
+        const proc = cp.spawn(command, args, {
             stdio: ['ignore', 'inherit', 'inherit'],
             cwd: cwd,
+            ...options,
         });
-        process.on('beforeExit', () => proc.kill());
+        let alive = true;
+        proc.on('exit', () => (alive = false));
+        process.on('exit', () => alive && proc.kill());
         return proc;
+    }
+    spawnAndAwaitOutput(command, args, cwd, awaitMsg, options) {
+        return new Promise((resolve, reject) => {
+            var _a, _b;
+            const proc = this.spawn(command, args, cwd, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
+            (_a = proc.stdout) === null || _a === void 0 ? void 0 : _a.on('data', (data) => {
+                const str = data.toString('utf-8');
+                console.log(str.trimEnd());
+                if (str.includes(awaitMsg)) {
+                    resolve(proc);
+                }
+            });
+            (_b = proc.stderr) === null || _b === void 0 ? void 0 : _b.on('data', (data) => {
+                const str = data.toString('utf-8').trimEnd();
+                console.error(str);
+                reject(str);
+            });
+            process.on('SIGINT', () => {
+                proc.kill();
+                reject('SIGINT');
+            });
+        });
     }
     rimraf(name) {
         return new Promise((resolve, reject) => rimraf(name, (err) => (err ? reject(err) : resolve())));
