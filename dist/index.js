@@ -32,133 +32,85 @@ const fs = __importStar(require("fs"));
 const http_proxy_middleware_1 = require("http-proxy-middleware");
 const os_1 = require("os");
 const path = __importStar(require("path"));
+const ps_tree_1 = __importDefault(require("ps-tree"));
 const source_map_1 = require("source-map");
 const util_1 = require("util");
 const logger_1 = require("./logger");
 const chalk = require("chalk");
 const rimraf = require("rimraf");
-const boxen = require("boxen");
 const acorn = require("acorn");
 const mkdirAsync = util_1.promisify(fs.mkdir);
 const writeFileAsync = util_1.promisify(fs.writeFile);
 const readFileAsync = util_1.promisify(fs.readFile);
 const copyFileAsync = util_1.promisify(fs.copyFile);
-const DEFAULT_TEMP_DIR_NAME = '.devserver';
+const DEFAULT_TEMP_DIR_NAME = '.dev-server';
 const CORE_MODULE = 'iobroker.js-controller';
 const IOBROKER_CLI = 'node_modules/iobroker.js-controller/iobroker.js';
 const IOBROKER_COMMAND = `node ${IOBROKER_CLI}`;
 const DEFAULT_ADMIN_PORT = 8081;
-const HIDDEN_ADMIN_PORT = 18881;
-const HIDDEN_BROWSER_SYNC_PORT = 18882;
+const HIDDEN_ADMIN_PORT_OFFSET = 12345;
+const HIDDEN_BROWSER_SYNC_PORT_OFFSET = 14345;
+const STATES_DB_PORT_OFFSET = 16345;
+const OBJECTS_DB_PORT_OFFSET = 18345;
 class DevServer {
     constructor() {
         this.log = new logger_1.Logger();
-        this.runCommands = ['run', 'watch', 'debug'];
-        const argv = yargs(process.argv.slice(2))
-            .usage('Usage: $0 <command> [options]')
-            .command(['install', 'i'], 'Install devserver in the current directory. This should always be called in the directory where the package.json file of your adapter is located.')
-            .command(['update', 'ud'], 'Update devserver and its dependencies to the latest versions')
-            .command(['run', 'r', '*'], 'Run ioBroker devserver, the adapter will not run, but you may test the Admin UI with hot-reload')
-            /*.command(
-              ['watch', 'w'],
-              'Run ioBroker devserver and start the adapter in "watch" mode. The adapter will automatically restart when its source code changes. You may attach a debugger to the running adapter.',
-            )*/
-            .command(['debug', 'd'], 'Run ioBroker devserver and start the adapter from ioBroker in "debug" mode. You may attach a debugger to the running adapter.')
-            .command(['upload', 'ul'], 'Upload the current version of your adapter to the devserver. This is only required if you changed something relevant in your io-package.json')
-            .options({
+        yargs(process.argv.slice(2))
+            .usage('Usage: $0 <command> [options]\n   or: $0 <command> --help   to see available options for a command')
+            .command(['install', 'i'], 'Install dev-server in the current directory. This should always be called in the directory where the io-package.json file of your adapter is located.', {
             adminPort: {
                 type: 'number',
                 default: DEFAULT_ADMIN_PORT,
                 alias: 'p',
                 description: 'TCP port on which ioBroker.admin will be available',
             },
-            temp: {
-                type: 'string',
-                alias: 't',
-                default: DEFAULT_TEMP_DIR_NAME,
-                description: 'Directory where the local devserver will be installed',
-            },
             jsController: {
                 type: 'string',
                 alias: 'j',
                 default: 'latest',
-                description: 'Define which version of js-controller to be used.\n(Only relavant for "install".)',
+                description: 'Define which version of js-controller to be used',
             },
+            forceInstall: { type: 'boolean', hidden: true },
+        }, async (args) => await this.install(args.adminPort, args.jsController, !!args.forceInstall))
+            .command(['update', 'ud'], 'Update ioBroker and its dependencies to the latest versions', {}, async () => await this.update())
+            .command(['run', 'r', '*'], 'Run ioBroker dev-server, the adapter will not run, but you may test the Admin UI with hot-reload', {}, async () => await this.run())
+            .command(['watch', 'w'], 'Run ioBroker dev-server and start the adapter in "watch" mode. The adapter will automatically restart when its source code changes. You may attach a debugger to the running adapter.', {}, async () => await this.watch())
+            .command(['debug', 'd'], 'Run ioBroker dev-server and start the adapter from ioBroker in "debug" mode. You may attach a debugger to the running adapter.', {
             wait: {
                 type: 'boolean',
                 alias: 'w',
-                description: 'Used with "debug" to start the adapter only once the debugger is attached.',
+                description: 'Start the adapter only once the debugger is attached.',
             },
-            forceInstall: { type: 'boolean', hidden: true },
+        }, async (args) => await this.debug(!!args.wait))
+            .command(['upload', 'ul'], 'Upload the current version of your adapter to the ioBroker dev-server. This is only required if you changed something relevant in your io-package.json', {}, async () => await this.upload())
+            .options({
+            temp: {
+                type: 'string',
+                alias: 't',
+                default: DEFAULT_TEMP_DIR_NAME,
+                description: 'Temporary directory where the dev-server data will be located',
+            },
             root: { type: 'string', alias: 'r', hidden: true, default: '.' },
         })
             .check((argv) => {
-            if (argv._.length === 0) {
-                argv._.push('run');
-            }
-            // expand short command names
-            this.runCommands.forEach((cmd) => {
-                if (argv._.includes(cmd[0])) {
-                    argv._.push(cmd);
-                }
-            });
-            // ensure only one of the run commands is included
-            this.runCommands.forEach((cmd) => {
-                if (argv._.includes(cmd)) {
-                    this.runCommands.forEach((other) => {
-                        if (other !== cmd && argv._.includes(other)) {
-                            throw new Error(`Can't combine ${cmd} and ${other}. You may only use one at a time.`);
-                        }
-                    });
-                }
-            });
+            // console.log('check', argv);
+            this.rootDir = path.resolve(argv.root);
+            this.tempDir = path.resolve(this.rootDir, argv.temp);
+            this.adapterName = this.findAdapterName();
             return true;
         })
             .help().argv;
-        //console.log('argv', argv);
-        this.argv = argv;
-        this.rootDir = path.resolve(argv.root);
-        this.tempDir = path.resolve(this.rootDir, argv.temp);
-        this.adapterName = this.findAdapterName();
-    }
-    async run() {
-        const runCommand = this.runCommands.find((c) => this.argv._.includes(c));
-        if (this.argv.forceInstall) {
-            this.log.notice(`Deleting ${this.tempDir}`);
-            await this.rimraf(this.tempDir);
-        }
-        const jsControllerDir = path.join(this.tempDir, 'node_modules', CORE_MODULE);
-        if (!fs.existsSync(jsControllerDir)) {
-            await this.install();
-        }
-        else if (this.argv._.includes('install')) {
-            this.log.error(`Devserver is already installed in "${this.tempDir}".`);
-            this.log.debug(`Use --force-install to reinstall from scratch.`);
-        }
-        if (this.argv._.includes('update') || this.argv._.includes('ud')) {
-            await this.update();
-        }
-        const shouldUpload = this.argv._.includes('upload') || this.argv._.includes('ul');
-        if (shouldUpload || runCommand === 'debug' || runCommand === 'watch') {
-            await this.installLocalAdapter();
-        }
-        if (shouldUpload) {
-            this.uploadAdapter(this.adapterName);
-        }
-        if (runCommand) {
-            await this.runServer(runCommand);
-        }
     }
     findAdapterName() {
         try {
             const ioPackage = this.readJson(path.join(this.rootDir, 'io-package.json'));
             const adapterName = ioPackage.common.name;
-            this.log.debug(`Found adapter name: "${adapterName}"`);
+            this.log.debug(`Using adapter name "${adapterName}"`);
             return adapterName;
         }
         catch (error) {
             this.log.warn(error);
-            this.log.error('You must run dev-server in the adapter root directory\n(where io-package.json resides).');
+            this.log.error('You must run dev-server in the adapter root directory (where io-package.json resides).');
             process.exit(-1);
         }
     }
@@ -169,10 +121,75 @@ class DevServer {
     readPackageJson() {
         return this.readJson(path.join(this.rootDir, 'package.json'));
     }
-    async runServer(runCommand) {
-        this.log.notice(`Running ${runCommand} inside ${this.tempDir}`);
-        if (runCommand === 'debug') {
-            await this.copySourcemaps();
+    getPort(adminPort, offset) {
+        let port = adminPort + offset;
+        if (port > 65000) {
+            port -= 63000;
+        }
+        return port;
+    }
+    ////////////////// Command Handlers //////////////////
+    async install(adminPort, jsController, forceInstall) {
+        if (forceInstall) {
+            this.log.notice(`Deleting ${this.tempDir}`);
+            await this.rimraf(this.tempDir);
+        }
+        if (this.isInstalled()) {
+            this.log.error(`dev-server is already installed in "${this.tempDir}".`);
+            this.log.debug(`Use --force-install to reinstall from scratch.`);
+            return;
+        }
+        await this.installDevServer(adminPort, jsController);
+        this.log.box(`dev-server was sucessfully installed in ${this.tempDir}.`);
+    }
+    async update() {
+        this.checkInstalled();
+        this.log.notice('Updating everything...');
+        this.execSync('npm update --loglevel error', this.tempDir);
+        await this.installLocalAdapter();
+        this.uploadAdapter(this.adapterName);
+        this.log.box(`dev-server was sucessfully updated.`);
+    }
+    async run() {
+        this.checkInstalled();
+        await this.startServer();
+    }
+    async watch() {
+        this.checkInstalled();
+        await this.installLocalAdapter();
+        await this.startServer();
+        await this.startAdapterWatch();
+    }
+    async debug(wait) {
+        this.checkInstalled();
+        await this.installLocalAdapter();
+        await this.copySourcemaps();
+        await this.startServer();
+        await this.startAdapterDebug(wait);
+    }
+    async upload() {
+        this.checkInstalled();
+        await this.installLocalAdapter();
+        this.uploadAdapter(this.adapterName);
+        this.log.box(`The latest content of iobroker.${this.adapterName} was uploaded to ${this.tempDir}.`);
+    }
+    ////////////////// Command Helper Methods //////////////////
+    checkInstalled() {
+        if (!this.isInstalled()) {
+            this.log.error(`dev-server is not installed in ${this.tempDir}.\nPlease use the command "install" first to install dev-server.`);
+            process.exit(-1);
+        }
+    }
+    isInstalled() {
+        const jsControllerDir = path.join(this.tempDir, 'node_modules', CORE_MODULE);
+        return fs.existsSync(jsControllerDir);
+    }
+    async startServer() {
+        this.log.notice(`Running inside ${this.tempDir}`);
+        const tempPkg = this.readJson(path.join(this.tempDir, 'package.json'));
+        const config = tempPkg['dev-server'];
+        if (!config) {
+            throw new Error(`Couldn't find dev-server configuration in package.json`);
         }
         const proc = this.spawn('node', ['node_modules/iobroker.js-controller/controller.js'], this.tempDir);
         proc.on('exit', (code) => {
@@ -180,7 +197,7 @@ class DevServer {
             process.exit(-1);
         });
         process.on('SIGINT', () => {
-            this.log.notice('devserver is exiting...');
+            this.log.notice('dev-server is exiting...');
             server.close();
             // do not kill this process when receiving SIGINT, but let all child processes exit first
         });
@@ -191,40 +208,31 @@ class DevServer {
             // use parcel
             await this.startParcel();
         }
-        this.startBrowserSync();
+        this.startBrowserSync(this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET));
         // browser-sync proxy
         const app = express_1.default();
         const adminPattern = `/adapter/${this.adapterName}/**`;
         const pathRewrite = {};
         pathRewrite[`^/adapter/${this.adapterName}/`] = '/';
         app.use(http_proxy_middleware_1.createProxyMiddleware([adminPattern, '/browser-sync/**'], {
-            target: `http://localhost:${HIDDEN_BROWSER_SYNC_PORT}`,
+            target: `http://localhost:${this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET)}`,
             //ws: true, // can't have two web-socket connections proxying to different locations
             pathRewrite,
         }));
         // admin proxy
         app.use(http_proxy_middleware_1.createProxyMiddleware([`!${adminPattern}`, '!/browser-sync/**'], {
-            target: `http://localhost:${HIDDEN_ADMIN_PORT}`,
+            target: `http://localhost:${this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET)}`,
             ws: true,
         }));
         // start express
-        this.log.notice(`Starting web server on port ${this.argv.adminPort}`);
-        const server = app.listen(this.argv.adminPort);
+        this.log.notice(`Starting web server on port ${config.adminPort}`);
+        const server = app.listen(config.adminPort);
         await new Promise((resolve, reject) => {
             server.on('listening', resolve);
             server.on('error', reject);
             server.on('close', reject);
         });
-        console.log(boxen(chalk.green(`Admin is now reachable under http://localhost:${this.argv.adminPort}/`), {
-            padding: 1,
-            borderStyle: 'round',
-        }));
-        if (runCommand === 'debug') {
-            this.startAdapterDebug();
-        }
-        else if (runCommand === 'watch') {
-            await this.startAdapterWatch();
-        }
+        this.log.box(`Admin is now reachable under http://localhost:${config.adminPort}/`);
     }
     async copySourcemaps() {
         const outDir = path.join(this.tempDir, 'node_modules', `iobroker.${this.adapterName}`);
@@ -344,13 +352,13 @@ class DevServer {
         this.log.debug('Waiting for first successful parcel build...');
         await this.spawnAndAwaitOutput('npm', ['run', 'watch:parcel'], this.rootDir, 'Built in', { shell: true });
     }
-    startBrowserSync() {
+    startBrowserSync(port) {
         this.log.notice('Starting browser-sync');
         var bs = require('browser-sync').create();
         const adminPath = path.resolve(this.rootDir, 'admin/');
         const config = {
             server: { baseDir: adminPath, directory: true },
-            port: HIDDEN_BROWSER_SYNC_PORT,
+            port: port,
             open: false,
             ui: false,
             logLevel: 'silent',
@@ -367,17 +375,38 @@ class DevServer {
         // console.log(config);
         bs.init(config);
     }
-    startAdapterDebug() {
+    async startAdapterDebug(wait) {
         this.log.notice(`Starting ioBroker adapter debugger for ${this.adapterName}.0`);
         const args = [IOBROKER_CLI, 'debug', `${this.adapterName}.0`];
-        if (this.argv.wait) {
+        if (wait) {
             args.push('--wait');
         }
         const proc = this.spawn('node', args, this.tempDir);
         proc.on('exit', (code) => {
-            console.error(chalk.yellow(`Adapter debugger exited with code ${code}`));
+            console.error(chalk.yellow(`Adapter debugging exited with code ${code}`));
             process.exit(-1);
         });
+        let debugProc = await this.waitForNodeChildProcess(proc.pid);
+        this.log.box(`Debugger is now ${wait ? 'waiting' : 'available'} on process id ${debugProc.PID}`);
+    }
+    async waitForNodeChildProcess(parentPid) {
+        while (true) {
+            const processes = await this.getChildProcesses(parentPid);
+            const child = processes.find((p) => p.COMMAND.match(/node/i));
+            if (child) {
+                return child;
+            }
+        }
+    }
+    getChildProcesses(parentPid) {
+        return new Promise((resolve, reject) => ps_tree_1.default(parentPid, (err, children) => {
+            if (err) {
+                reject(err);
+            }
+            else {
+                resolve(children);
+            }
+        }));
     }
     async startAdapterWatch() {
         // figure out if we need to watch for TypeScript changes
@@ -482,18 +511,16 @@ class DevServer {
             args: ['--debug', '0'],
         });
         nodemon
-            .on('start', () => {
-            console.log(boxen(chalk.green(`Your adapter ioBroker.${this.adapterName} is starting.\nYou may now attach a debugger.`), {
-                padding: 1,
-                borderStyle: 'round',
-            }));
-        })
             .on('log', (msg) => {
             if (isExiting) {
                 return;
             }
             const message = `[nodemon] ${msg.message}`;
             switch (msg.type) {
+                case 'detail':
+                    this.log.debug(message);
+                    this.handleNodemonDetailMsg(msg.message);
+                    break;
                 case 'info':
                     this.log.info(message);
                     break;
@@ -516,7 +543,15 @@ class DevServer {
             process.exit(-2);
         });
     }
-    async install() {
+    async handleNodemonDetailMsg(message) {
+        const match = message.match(/child pid: (\d+)/);
+        if (!match) {
+            return;
+        }
+        let debugProc = await this.waitForNodeChildProcess(parseInt(match[1]));
+        this.log.box(`Debugger is now available on process id ${debugProc.PID}`);
+    }
+    async installDevServer(adminPort, jsController) {
         this.log.notice(`Installing to ${this.tempDir}`);
         if (!fs.existsSync(this.tempDir)) {
             await mkdirAsync(this.tempDir);
@@ -549,7 +584,7 @@ class DevServer {
             objects: {
                 type: 'file',
                 host: '127.0.0.1',
-                port: 19901,
+                port: this.getPort(adminPort, OBJECTS_DB_PORT_OFFSET),
                 noFileCache: false,
                 maxQueue: 1000,
                 connectTimeout: 2000,
@@ -566,7 +601,7 @@ class DevServer {
             states: {
                 type: 'file',
                 host: '127.0.0.1',
-                port: 19900,
+                port: this.getPort(adminPort, STATES_DB_PORT_OFFSET),
                 connectTimeout: 2000,
                 writeFileInterval: 30000,
                 dataDir: '',
@@ -599,23 +634,24 @@ class DevServer {
         await writeFileAsync(path.join(dataDir, 'iobroker.json'), JSON.stringify(config, null, 2));
         // create the package file
         const pkg = {
-            name: `devserver.${this.adapterName}`,
+            name: `dev-server.${this.adapterName}`,
             version: '1.0.0',
             private: true,
             dependencies: {
-                'iobroker.js-controller': this.argv.jsController,
+                'iobroker.js-controller': jsController,
                 'iobroker.admin': 'latest',
-                'iobroker.info': 'latest',
+            },
+            'dev-server': {
+                adminPort: adminPort,
             },
         };
         await writeFileAsync(path.join(this.tempDir, 'package.json'), JSON.stringify(pkg, null, 2));
         this.log.notice('Installing everything...');
         this.execSync('npm install --loglevel error --production', this.tempDir);
         this.uploadAndAddAdapter('admin');
-        this.uploadAndAddAdapter('info');
         // reconfigure admin instance (only listen to local IP address)
         this.log.notice('Configure admin.0');
-        this.execSync(`${IOBROKER_COMMAND} set admin.0 --port ${HIDDEN_ADMIN_PORT} --bind 127.0.0.1`, this.tempDir);
+        this.execSync(`${IOBROKER_COMMAND} set admin.0 --port ${this.getPort(adminPort, HIDDEN_ADMIN_PORT_OFFSET)} --bind 127.0.0.1`, this.tempDir);
         // install local adapter
         await this.installLocalAdapter();
         this.uploadAndAddAdapter(this.adapterName);
@@ -642,11 +678,6 @@ class DevServer {
         const fullPath = path.join(this.rootDir, filename);
         this.execSync(`npm install --no-save "${fullPath}"`, this.tempDir);
         await this.rimraf(fullPath);
-    }
-    async update() {
-        this.log.notice('Updating everything...');
-        this.execSync('npm update --loglevel error', this.tempDir);
-        await this.installLocalAdapter();
     }
     execSync(command, cwd, options) {
         options = { cwd: cwd, stdio: 'inherit', ...options };
@@ -691,7 +722,4 @@ class DevServer {
         return new Promise((resolve, reject) => rimraf(name, (err) => (err ? reject(err) : resolve())));
     }
 }
-(() => new DevServer().run().catch((e) => {
-    console.error(chalk.red(e));
-    process.exit(-1);
-}))();
+(() => new DevServer())();
