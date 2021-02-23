@@ -646,7 +646,7 @@ class DevServer {
             },
         };
         await writeFileAsync(path.join(this.tempDir, 'package.json'), JSON.stringify(pkg, null, 2));
-        this.log.notice('Installing ioBroker and Admin...');
+        this.log.notice('Installing js-controller and admin...');
         this.execSync('npm install --loglevel error --production', this.tempDir);
         this.uploadAndAddAdapter('admin');
         // reconfigure admin instance (only listen to local IP address)
@@ -657,6 +657,10 @@ class DevServer {
         this.uploadAndAddAdapter(this.adapterName);
         this.log.notice(`Stop ${this.adapterName}.0`);
         this.execSync(`${IOBROKER_COMMAND} stop ${this.adapterName} 0`, this.tempDir);
+        this.log.notice('Disable statistics reporting');
+        this.execSync(`${IOBROKER_COMMAND} object set system.config common.diag="none"`, this.tempDir);
+        this.log.notice('Disable missing info adapter warning');
+        this.execSync(`${IOBROKER_COMMAND} object set system.config common.infoAdapterInstall=true`, this.tempDir);
     }
     uploadAndAddAdapter(name) {
         // upload the already installed adapter
