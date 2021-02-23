@@ -46,8 +46,8 @@ class DevServer {
     yargs(process.argv.slice(2))
       .usage('Usage: $0 <command> [options]\n   or: $0 <command> --help   to see available options for a command')
       .command(
-        ['install', 'i'],
-        'Install dev-server in the current directory. This should always be called in the directory where the io-package.json file of your adapter is located.',
+        ['setup', 's'],
+        'Set up dev-server in the current directory. This should always be called in the directory where the io-package.json file of your adapter is located.',
         {
           adminPort: {
             type: 'number',
@@ -61,9 +61,9 @@ class DevServer {
             default: 'latest',
             description: 'Define which version of js-controller to be used',
           },
-          forceInstall: { type: 'boolean', hidden: true },
+          force: { type: 'boolean', hidden: true },
         },
-        async (args) => await this.install(args.adminPort, args.jsController, !!args.forceInstall),
+        async (args) => await this.setup(args.adminPort, args.jsController, !!args.force),
       )
       .command(
         ['update', 'ud'],
@@ -152,25 +152,25 @@ class DevServer {
 
   ////////////////// Command Handlers //////////////////
 
-  async install(adminPort: number, jsController: string, forceInstall: boolean): Promise<void> {
-    if (forceInstall) {
+  async setup(adminPort: number, jsController: string, force: boolean): Promise<void> {
+    if (force) {
       this.log.notice(`Deleting ${this.tempDir}`);
       await this.rimraf(this.tempDir);
     }
 
-    if (this.isInstalled()) {
-      this.log.error(`dev-server is already installed in "${this.tempDir}".`);
-      this.log.debug(`Use --force-install to reinstall from scratch.`);
+    if (this.isSetUp()) {
+      this.log.error(`dev-server is already set up in "${this.tempDir}".`);
+      this.log.debug(`Use --force to set it up from scratch (all data will be lost).`);
       return;
     }
 
-    await this.installDevServer(adminPort, jsController);
+    await this.setupDevServer(adminPort, jsController);
 
-    this.log.box(`dev-server was sucessfully installed in ${this.tempDir}.`);
+    this.log.box(`dev-server was sucessfully set up in ${this.tempDir}.`);
   }
 
   private async update(): Promise<void> {
-    this.checkInstalled();
+    this.checkSetup();
     this.log.notice('Updating everything...');
     this.execSync('npm update --loglevel error', this.tempDir);
     await this.installLocalAdapter();
@@ -180,19 +180,19 @@ class DevServer {
   }
 
   async run(): Promise<void> {
-    this.checkInstalled();
+    this.checkSetup();
     await this.startServer();
   }
 
   async watch(): Promise<void> {
-    this.checkInstalled();
+    this.checkSetup();
     await this.installLocalAdapter();
     await this.startServer();
     await this.startAdapterWatch();
   }
 
   async debug(wait: boolean): Promise<void> {
-    this.checkInstalled();
+    this.checkSetup();
     await this.installLocalAdapter();
     await this.copySourcemaps();
     await this.startServer();
@@ -200,7 +200,7 @@ class DevServer {
   }
 
   async upload(): Promise<void> {
-    this.checkInstalled();
+    this.checkSetup();
     await this.installLocalAdapter();
     this.uploadAdapter(this.adapterName);
 
@@ -209,16 +209,16 @@ class DevServer {
 
   ////////////////// Command Helper Methods //////////////////
 
-  checkInstalled() {
-    if (!this.isInstalled()) {
+  checkSetup() {
+    if (!this.isSetUp()) {
       this.log.error(
-        `dev-server is not installed in ${this.tempDir}.\nPlease use the command "install" first to install dev-server.`,
+        `dev-server is not set up in ${this.tempDir}.\nPlease use the command "setup" first to set up dev-server.`,
       );
       process.exit(-1);
     }
   }
 
-  isInstalled(): boolean {
+  isSetUp(): boolean {
     const jsControllerDir = path.join(this.tempDir, 'node_modules', CORE_MODULE);
     return fs.existsSync(jsControllerDir);
   }
@@ -641,8 +641,8 @@ class DevServer {
     this.log.box(`Debugger is now available on process id ${debugProc.PID}`);
   }
 
-  async installDevServer(adminPort: number, jsController: string): Promise<void> {
-    this.log.notice(`Installing to ${this.tempDir}`);
+  async setupDevServer(adminPort: number, jsController: string): Promise<void> {
+    this.log.notice(`Setting up in ${this.tempDir}`);
     if (!fs.existsSync(this.tempDir)) {
       await mkdirAsync(this.tempDir);
     }
@@ -740,7 +740,7 @@ class DevServer {
     };
     await writeFileAsync(path.join(this.tempDir, 'package.json'), JSON.stringify(pkg, null, 2));
 
-    this.log.notice('Installing everything...');
+    this.log.notice('Installing ioBroker and Admin...');
     this.execSync('npm install --loglevel error --production', this.tempDir);
 
     this.uploadAndAddAdapter('admin');

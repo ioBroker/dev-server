@@ -57,7 +57,7 @@ class DevServer {
         this.log = new logger_1.Logger();
         yargs(process.argv.slice(2))
             .usage('Usage: $0 <command> [options]\n   or: $0 <command> --help   to see available options for a command')
-            .command(['install', 'i'], 'Install dev-server in the current directory. This should always be called in the directory where the io-package.json file of your adapter is located.', {
+            .command(['setup', 's'], 'Set up dev-server in the current directory. This should always be called in the directory where the io-package.json file of your adapter is located.', {
             adminPort: {
                 type: 'number',
                 default: DEFAULT_ADMIN_PORT,
@@ -70,8 +70,8 @@ class DevServer {
                 default: 'latest',
                 description: 'Define which version of js-controller to be used',
             },
-            forceInstall: { type: 'boolean', hidden: true },
-        }, async (args) => await this.install(args.adminPort, args.jsController, !!args.forceInstall))
+            force: { type: 'boolean', hidden: true },
+        }, async (args) => await this.setup(args.adminPort, args.jsController, !!args.force))
             .command(['update', 'ud'], 'Update ioBroker and its dependencies to the latest versions', {}, async () => await this.update())
             .command(['run', 'r', '*'], 'Run ioBroker dev-server, the adapter will not run, but you may test the Admin UI with hot-reload', {}, async () => await this.run())
             .command(['watch', 'w'], 'Run ioBroker dev-server and start the adapter in "watch" mode. The adapter will automatically restart when its source code changes. You may attach a debugger to the running adapter.', {}, async () => await this.watch())
@@ -129,21 +129,21 @@ class DevServer {
         return port;
     }
     ////////////////// Command Handlers //////////////////
-    async install(adminPort, jsController, forceInstall) {
-        if (forceInstall) {
+    async setup(adminPort, jsController, force) {
+        if (force) {
             this.log.notice(`Deleting ${this.tempDir}`);
             await this.rimraf(this.tempDir);
         }
-        if (this.isInstalled()) {
-            this.log.error(`dev-server is already installed in "${this.tempDir}".`);
-            this.log.debug(`Use --force-install to reinstall from scratch.`);
+        if (this.isSetUp()) {
+            this.log.error(`dev-server is already set up in "${this.tempDir}".`);
+            this.log.debug(`Use --force to set it up from scratch (all data will be lost).`);
             return;
         }
-        await this.installDevServer(adminPort, jsController);
-        this.log.box(`dev-server was sucessfully installed in ${this.tempDir}.`);
+        await this.setupDevServer(adminPort, jsController);
+        this.log.box(`dev-server was sucessfully set up in ${this.tempDir}.`);
     }
     async update() {
-        this.checkInstalled();
+        this.checkSetup();
         this.log.notice('Updating everything...');
         this.execSync('npm update --loglevel error', this.tempDir);
         await this.installLocalAdapter();
@@ -151,36 +151,36 @@ class DevServer {
         this.log.box(`dev-server was sucessfully updated.`);
     }
     async run() {
-        this.checkInstalled();
+        this.checkSetup();
         await this.startServer();
     }
     async watch() {
-        this.checkInstalled();
+        this.checkSetup();
         await this.installLocalAdapter();
         await this.startServer();
         await this.startAdapterWatch();
     }
     async debug(wait) {
-        this.checkInstalled();
+        this.checkSetup();
         await this.installLocalAdapter();
         await this.copySourcemaps();
         await this.startServer();
         await this.startAdapterDebug(wait);
     }
     async upload() {
-        this.checkInstalled();
+        this.checkSetup();
         await this.installLocalAdapter();
         this.uploadAdapter(this.adapterName);
         this.log.box(`The latest content of iobroker.${this.adapterName} was uploaded to ${this.tempDir}.`);
     }
     ////////////////// Command Helper Methods //////////////////
-    checkInstalled() {
-        if (!this.isInstalled()) {
-            this.log.error(`dev-server is not installed in ${this.tempDir}.\nPlease use the command "install" first to install dev-server.`);
+    checkSetup() {
+        if (!this.isSetUp()) {
+            this.log.error(`dev-server is not set up in ${this.tempDir}.\nPlease use the command "setup" first to set up dev-server.`);
             process.exit(-1);
         }
     }
-    isInstalled() {
+    isSetUp() {
         const jsControllerDir = path.join(this.tempDir, 'node_modules', CORE_MODULE);
         return fs.existsSync(jsControllerDir);
     }
@@ -551,8 +551,8 @@ class DevServer {
         let debugProc = await this.waitForNodeChildProcess(parseInt(match[1]));
         this.log.box(`Debugger is now available on process id ${debugProc.PID}`);
     }
-    async installDevServer(adminPort, jsController) {
-        this.log.notice(`Installing to ${this.tempDir}`);
+    async setupDevServer(adminPort, jsController) {
+        this.log.notice(`Setting up in ${this.tempDir}`);
         if (!fs.existsSync(this.tempDir)) {
             await mkdirAsync(this.tempDir);
         }
@@ -646,7 +646,7 @@ class DevServer {
             },
         };
         await writeFileAsync(path.join(this.tempDir, 'package.json'), JSON.stringify(pkg, null, 2));
-        this.log.notice('Installing everything...');
+        this.log.notice('Installing ioBroker and Admin...');
         this.execSync('npm install --loglevel error --production', this.tempDir);
         this.uploadAndAddAdapter('admin');
         // reconfigure admin instance (only listen to local IP address)
