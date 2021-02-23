@@ -1,37 +1,43 @@
 # dev-server
 
-## How to add this tool to your Adapter
+`dev-server` is a simple command line tool that allows you to quickly develop and test ioBroker adapters and their admin interface.
 
-Note: if you haven't created the adapter with the [Adapter Creator](https://github.com/ioBroker/create-adapter), you might run into issues. We will try to solve those, but in most cases it is the easiest to just follow the Adapter Creator (or template) directory structure.
+## Setup
 
-1. Add this project to your dev-dependencies:
+You need to install the `dev-server` package as well as set it up it in the adapter directory.
+
+### Install package
+
+You can either install this tool as a global tool or install it as a dev-dependency of your adapter. We suggest to install it globally:
 
 ```bash
-npm i --save-dev UncleSamSwiss/iobroker-dev-server
+npm install --global ioBroker/dev-server
 ```
 
-2. Add the tool to your npm scripts: edit `package.json` to contain the following line in your scripts section:
+### Setup local dev-server
 
-```json
-  "scripts": {
-    "devserver": "devserver"
-  },
+To set up and configure a local dev-server in your adapter directory, change to the base directory of your adapter and execute the following command:
+
+```bash
+dev-server setup
 ```
 
-3. Add the temp directory to your `.gitignore` **and** `.npmignore`:
+For additional command line arguments, see blow.
+
+Please note that the executable can either be called with the short name `dev-server` or its full name `iobroker-dev-server`. We will use the first way in this document.
+
+### Exclude temporary folder
+
+By default dev-server creates a temporary directory called `.dev-server` in your adapter directory where all data is stored. This directory must be excluded from NPM and Git.
+
+Your `.gitignore` file must be extended with a single additional line:
 
 ```text
-.devserver/
+.dev-server/
 ```
 
-4. Launch the devserver in your adapter directory:
+If you created your adaper using a recent version of [Adapter Creator](https://github.com/ioBroker/create-adapter), the `.nmpignore` file will already contain a pattern matching this folder, otherwise add the above line or simply ignore all "dot"-files and folders:
 
-```bash
-npm run devserver -- run
-```
-
-You can find more command line options using:
-
-```bash
-npm run devserver -- --help
+```text
+.*
 ```
