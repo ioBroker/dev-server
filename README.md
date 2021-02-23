@@ -122,3 +122,9 @@ This is only required if you changed something relevant in your io-package.json.
 You should only do this when dev-server is not running.
 
 This is a shortcut for `npm pack` and `npm install <package>.tgz`.
+
+## Changelog
+
+### 0.1.0
+
+- (UncleSamSwiss) Initial version
