@@ -66,11 +66,6 @@ class DevServer {
             .command(['debug', 'd'], 'Run ioBroker devserver and start the adapter from ioBroker in "debug" mode. You may attach a debugger to the running adapter.')
             .command(['upload', 'ul'], 'Upload the current version of your adapter to the devserver. This is only required if you changed something relevant in your io-package.json')
             .options({
-            adapter: {
-                type: 'string',
-                alias: 'a',
-                description: 'Overwrite the adapter name\n(by default the name is taken from package.json)',
-            },
             adminPort: {
                 type: 'number',
                 default: DEFAULT_ADMIN_PORT,
@@ -123,8 +118,8 @@ class DevServer {
         //console.log('argv', argv);
         this.argv = argv;
         this.rootDir = path.resolve(argv.root);
-        this.adapterName = argv.adapter || this.findAdapterName();
         this.tempDir = path.resolve(this.rootDir, argv.temp);
+        this.adapterName = this.findAdapterName();
     }
     async run() {
         const runCommand = this.runCommands.find((c) => this.argv._.includes(c));
@@ -155,15 +150,17 @@ class DevServer {
         }
     }
     findAdapterName() {
-        const pkg = this.readPackageJson();
-        const pkgName = pkg.name;
-        const match = pkgName.match(/^iobroker\.(.+)$/);
-        if (!match || !match[1]) {
-            throw new Error(`Invalid package name in package.json: "${pkgName}"`);
+        try {
+            const ioPackage = this.readJson(path.join(this.rootDir, 'io-package.json'));
+            const adapterName = ioPackage.common.name;
+            this.log.debug(`Found adapter name: "${adapterName}"`);
+            return adapterName;
         }
-        const adapterName = match[1];
-        this.log.debug(`Found adapter name: "${adapterName}"`);
-        return adapterName;
+        catch (error) {
+            this.log.warn(error);
+            this.log.error('You must run dev-server in the adapter root directory\n(where io-package.json resides).');
+            process.exit(-1);
+        }
     }
     readJson(filename) {
         const json = fs.readFileSync(filename, 'utf-8');
