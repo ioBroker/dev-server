@@ -1,6 +1,6 @@
 {
-  "name": "iobroker-dev-server",
-  "version": "0.0.1",
+  "name": "@iobroker/dev-server",
+  "version": "0.1.0",
   "description": "Single package develoment server for ioBroker",
   "main": "dist/index.js",
   "bin": {
