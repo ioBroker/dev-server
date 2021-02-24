@@ -1,11 +1,14 @@
 # ioBroker dev-server
 
+[![NPM version](https://img.shields.io/npm/v/@iobroker/dev-server.svg)](https://www.npmjs.com/package/@iobroker/dev-server)
+[![Downloads](https://img.shields.io/npm/dm/@iobroker/dev-server.svg)](https://www.npmjs.com/package/@iobroker/dev-server)
+
 ioBroker dev-server is a simple command line tool that allows you to quickly develop and test ioBroker adapters and their admin interface.
 
 ## TL;DR
 
 ```bash
-npm install --global ioBroker/dev-server
+npm install --global @iobroker/dev-server
 dev-server setup
 dev-server watch
 ```
@@ -30,7 +33,7 @@ You need to install the `dev-server` package as well as set it up it in the adap
 You can either install this tool as a global tool or install it as a dev-dependency of your adapter. We suggest to install it globally:
 
 ```bash
-npm install --global ioBroker/dev-server
+npm install --global @iobroker/dev-server
 ```
 
 ### Setup local dev-server
