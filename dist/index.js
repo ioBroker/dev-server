@@ -24,12 +24,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const yargs = require("yargs/yargs");
+const browser_sync_1 = __importDefault(require("browser-sync"));
 const cp = __importStar(require("child_process"));
 const chokidar_1 = __importDefault(require("chokidar"));
 const express_1 = __importDefault(require("express"));
 const fast_glob_1 = __importDefault(require("fast-glob"));
 const fs = __importStar(require("fs"));
 const http_proxy_middleware_1 = require("http-proxy-middleware");
+const nodemon_1 = __importDefault(require("nodemon"));
 const os_1 = require("os");
 const path = __importStar(require("path"));
 const ps_tree_1 = __importDefault(require("ps-tree"));
@@ -196,11 +198,6 @@ class DevServer {
             console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
             process.exit(-1);
         });
-        process.on('SIGINT', () => {
-            this.log.notice('dev-server is exiting...');
-            server.close();
-            // do not kill this process when receiving SIGINT, but let all child processes exit first
-        });
         // figure out if we need parcel (React)
         const pkg = this.readPackageJson();
         const scripts = pkg.scripts;
@@ -227,6 +224,11 @@ class DevServer {
         // start express
         this.log.notice(`Starting web server on port ${config.adminPort}`);
         const server = app.listen(config.adminPort);
+        process.on('SIGINT', () => {
+            this.log.notice('dev-server is exiting...');
+            server.close();
+            // do not kill this process when receiving SIGINT, but let all child processes exit first
+        });
         await new Promise((resolve, reject) => {
             server.on('listening', resolve);
             server.on('error', reject);
@@ -328,7 +330,7 @@ class DevServer {
         // thanks to https://github.com/gulp-sourcemaps/identity-map/blob/251b51598d02e5aedaea8f1a475dfc42103a2727/lib/generate.js [MIT]
         const generator = new source_map_1.SourceMapGenerator({ file: filename });
         const fileContent = await readFileAsync(filename, { encoding: 'utf-8' });
-        var tokenizer = acorn.tokenizer(fileContent, {
+        const tokenizer = acorn.tokenizer(fileContent, {
             ecmaVersion: 'latest',
             allowHashBang: true,
             locations: true,
@@ -354,7 +356,7 @@ class DevServer {
     }
     startBrowserSync(port) {
         this.log.notice('Starting browser-sync');
-        var bs = require('browser-sync').create();
+        const bs = browser_sync_1.default.create();
         const adminPath = path.resolve(this.rootDir, 'admin/');
         const config = {
             server: { baseDir: adminPath, directory: true },
@@ -386,7 +388,7 @@ class DevServer {
             console.error(chalk.yellow(`Adapter debugging exited with code ${code}`));
             process.exit(-1);
         });
-        let debugProc = await this.waitForNodeChildProcess(proc.pid);
+        const debugProc = await this.waitForNodeChildProcess(proc.pid);
         this.log.box(`Debugger is now ${wait ? 'waiting' : 'available'} on process id ${debugProc.PID}`);
     }
     async waitForNodeChildProcess(parentPid) {
@@ -496,8 +498,7 @@ class DevServer {
         process.on('SIGINT', () => {
             isExiting = true;
         });
-        var nodemon = require('nodemon');
-        nodemon({
+        nodemon_1.default({
             script: script,
             stdin: false,
             verbose: true,
@@ -510,7 +511,7 @@ class DevServer {
             execMap: { js: 'node --inspect' },
             args: ['--debug', '0'],
         });
-        nodemon
+        nodemon_1.default
             .on('log', (msg) => {
             if (isExiting) {
                 return;
@@ -548,7 +549,7 @@ class DevServer {
         if (!match) {
             return;
         }
-        let debugProc = await this.waitForNodeChildProcess(parseInt(match[1]));
+        const debugProc = await this.waitForNodeChildProcess(parseInt(match[1]));
         this.log.box(`Debugger is now available on process id ${debugProc.PID}`);
     }
     async setupDevServer(adminPort, jsController) {

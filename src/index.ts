@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 
 import yargs = require('yargs/yargs');
+import browserSync from 'browser-sync';
 import * as cp from 'child_process';
 import chokidar from 'chokidar';
 import express from 'express';
 import fg from 'fast-glob';
 import * as fs from 'fs';
 import { createProxyMiddleware } from 'http-proxy-middleware';
+import nodemon from 'nodemon';
 import { hostname } from 'os';
 import * as path from 'path';
 import psTree from 'ps-tree';
@@ -142,7 +144,7 @@ class DevServer {
     return this.readJson(path.join(this.rootDir, 'package.json'));
   }
 
-  private getPort(adminPort: number, offset: number) {
+  private getPort(adminPort: number, offset: number): number {
     let port = adminPort + offset;
     if (port > 65000) {
       port -= 63000;
@@ -209,7 +211,7 @@ class DevServer {
 
   ////////////////// Command Helper Methods //////////////////
 
-  checkSetup() {
+  checkSetup(): void {
     if (!this.isSetUp()) {
       this.log.error(
         `dev-server is not set up in ${this.tempDir}.\nPlease use the command "setup" first to set up dev-server.`,
@@ -236,12 +238,6 @@ class DevServer {
     proc.on('exit', (code) => {
       console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
       process.exit(-1);
-    });
-
-    process.on('SIGINT', () => {
-      this.log.notice('dev-server is exiting...');
-      server.close();
-      // do not kill this process when receiving SIGINT, but let all child processes exit first
     });
 
     // figure out if we need parcel (React)
@@ -278,6 +274,13 @@ class DevServer {
     // start express
     this.log.notice(`Starting web server on port ${config.adminPort}`);
     const server = app.listen(config.adminPort);
+
+    process.on('SIGINT', () => {
+      this.log.notice('dev-server is exiting...');
+      server.close();
+      // do not kill this process when receiving SIGINT, but let all child processes exit first
+    });
+
     await new Promise<void>((resolve, reject) => {
       server.on('listening', resolve);
       server.on('error', reject);
@@ -324,7 +327,7 @@ class DevServer {
    * @param dest The path to the JavaScript file which will get a sourcemap attached.
    * @param copyFromSrc Set to true to copy the JavaScript file from src to dest (not just modify dest).
    */
-  private async addSourcemap(src: string, dest: string, copyFromSrc: boolean) {
+  private async addSourcemap(src: string, dest: string, copyFromSrc: boolean): Promise<void> {
     try {
       const mapFile = `${dest}.map`;
       const data = await this.createIdentitySourcemap(src.replace(/\\/g, '/'));
@@ -358,7 +361,7 @@ class DevServer {
    * @param src The path to the original sourcemap file to patch and copy.
    * @param dest The path to the sourcemap file that is created.
    */
-  private async patchSourcemap(src: string, dest: string) {
+  private async patchSourcemap(src: string, dest: string): Promise<void> {
     try {
       const data = this.readJson(src);
       if (data.version !== 3) {
@@ -372,7 +375,7 @@ class DevServer {
     }
   }
 
-  private getFilePatterns(extensions: string | string[], excludeAdmin: boolean) {
+  private getFilePatterns(extensions: string | string[], excludeAdmin: boolean): string[] {
     const exts = typeof extensions === 'string' ? [extensions] : extensions;
     const patterns = exts.map((e) => `./**/*.${e}`);
     patterns.push('!./.*/**');
@@ -392,7 +395,7 @@ class DevServer {
     // thanks to https://github.com/gulp-sourcemaps/identity-map/blob/251b51598d02e5aedaea8f1a475dfc42103a2727/lib/generate.js [MIT]
     const generator = new SourceMapGenerator({ file: filename });
     const fileContent = await readFileAsync(filename, { encoding: 'utf-8' });
-    var tokenizer = acorn.tokenizer(fileContent, {
+    const tokenizer = acorn.tokenizer(fileContent, {
       ecmaVersion: 'latest',
       allowHashBang: true,
       locations: true,
@@ -423,10 +426,10 @@ class DevServer {
 
   private startBrowserSync(port: number): void {
     this.log.notice('Starting browser-sync');
-    var bs = require('browser-sync').create();
+    const bs = browserSync.create();
 
     const adminPath = path.resolve(this.rootDir, 'admin/');
-    const config = {
+    const config: browserSync.Options = {
       server: { baseDir: adminPath, directory: true },
       port: port,
       open: false,
@@ -458,7 +461,7 @@ class DevServer {
       process.exit(-1);
     });
 
-    let debugProc = await this.waitForNodeChildProcess(proc.pid);
+    const debugProc = await this.waitForNodeChildProcess(proc.pid);
 
     this.log.box(`Debugger is now ${wait ? 'waiting' : 'available'} on process id ${debugProc.PID}`);
   }
@@ -513,10 +516,10 @@ class DevServer {
     );
   }
 
-  private startFileSync(destinationDir: string) {
+  private startFileSync(destinationDir: string): Promise<void> {
     this.log.notice(`Starting file system sync from ${this.rootDir}`);
-    const inSrc = (filename: string) => path.join(this.rootDir, filename);
-    const inDest = (filename: string) => path.join(destinationDir, filename);
+    const inSrc = (filename: string): string => path.join(this.rootDir, filename);
+    const inDest = (filename: string): string => path.join(destinationDir, filename);
     return new Promise<void>((resolve, reject) => {
       const patterns = this.getFilePatterns(['js', 'map'], true);
       const ignoreFiles = [] as string[];
@@ -530,7 +533,7 @@ class DevServer {
       /*watcher.on('all', (event, path) => {
         console.log(event, path);
       });*/
-      const syncFile = async (filename: string) => {
+      const syncFile = async (filename: string): Promise<void> => {
         try {
           this.log.debug(`Synchronizing ${filename}`);
           const src = inSrc(filename);
@@ -572,7 +575,7 @@ class DevServer {
     });
   }
 
-  private startNodemon(baseDir: string, scriptName: string) {
+  private startNodemon(baseDir: string, scriptName: string): void {
     const script = path.resolve(baseDir, scriptName);
     this.log.notice(`Starting nodemon for ${script}`);
 
@@ -581,7 +584,6 @@ class DevServer {
       isExiting = true;
     });
 
-    var nodemon = require('nodemon');
     nodemon({
       script: script,
       stdin: false,
@@ -630,13 +632,13 @@ class DevServer {
       });
   }
 
-  async handleNodemonDetailMsg(message: string) {
+  async handleNodemonDetailMsg(message: string): Promise<void> {
     const match = message.match(/child pid: (\d+)/);
     if (!match) {
       return;
     }
 
-    let debugProc = await this.waitForNodeChildProcess(parseInt(match[1]));
+    const debugProc = await this.waitForNodeChildProcess(parseInt(match[1]));
 
     this.log.box(`Debugger is now available on process id ${debugProc.PID}`);
   }
@@ -800,7 +802,7 @@ class DevServer {
     return cp.execSync(command, options);
   }
 
-  private spawn(command: string, args: ReadonlyArray<string>, cwd: string, options?: cp.SpawnOptions) {
+  private spawn(command: string, args: ReadonlyArray<string>, cwd: string, options?: cp.SpawnOptions): cp.ChildProcess {
     this.log.debug(`${cwd}> ${command} ${args.join(' ')}`);
     const proc = cp.spawn(command, args, {
       stdio: ['ignore', 'inherit', 'inherit'],
