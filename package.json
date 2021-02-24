@@ -13,11 +13,13 @@
     "build": "tsc -p tsconfig.build.json",
     "watch": "tsc -p tsconfig.build.json --watch",
     "check": "tsc --noEmit",
-    "lint": "eslint --ext .ts src/"
+    "lint": "eslint --ext .ts src/",
+    "release": "release-script"
   },
   "author": "UncleSamSwiss",
   "license": "MIT",
   "devDependencies": {
+    "@alcalzone/release-script": "^1.8.3",
     "@types/browser-sync": "^2.26.1",
     "@types/express": "^4.17.11",
     "@types/node": "^14.14.25",
