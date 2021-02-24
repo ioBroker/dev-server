@@ -36,7 +36,7 @@ jobs:
       - name: Install Dependencies
         run: npm ci
       - name: Perform a type check
-        run: npm run build:ts -- --noEmit
+        run: npm run build -- --noEmit
         env:
           CI: true
       - name: Lint source code
