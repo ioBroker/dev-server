@@ -4,6 +4,10 @@
 	## __WORK IN PROGRESS__
 -->
 
+## 0.1.2 (2021-02-25)
+
+- (UncleSamSwiss) Fixed automatic NPM deployment.
+
 ## 0.1.1 (2021-02-25)
 
 - (UncleSamSwiss) Added release script and GitHub actions integration.
