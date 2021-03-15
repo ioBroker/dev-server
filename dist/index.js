@@ -406,6 +406,12 @@ class DevServer {
                 reject(err);
             }
             else {
+                // fix for MacOS bug #11
+                children.forEach((c) => {
+                    if (c.COMM && !c.COMMAND) {
+                        c.COMMAND = c.COMM;
+                    }
+                });
                 resolve(children);
             }
         }));
