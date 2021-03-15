@@ -770,6 +770,9 @@ class DevServer {
     this.log.notice('Disable statistics reporting');
     this.execSync(`${IOBROKER_COMMAND} object set system.config common.diag="none"`, this.tempDir);
 
+    this.log.notice('Disable license confirmation');
+    this.execSync(`${IOBROKER_COMMAND} object set system.config common.licenseConfirmed=true`, this.tempDir);
+
     this.log.notice('Disable missing info adapter warning');
     this.execSync(`${IOBROKER_COMMAND} object set system.config common.infoAdapterInstall=true`, this.tempDir);
   }
