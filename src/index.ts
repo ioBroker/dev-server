@@ -832,7 +832,7 @@ class DevServer {
     options?: cp.SpawnOptions,
   ): Promise<cp.ChildProcess> {
     return new Promise<cp.ChildProcess>((resolve, reject) => {
-      const proc = this.spawn(command, args, cwd, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
+      const proc = this.spawn(command, args, cwd, { ...options, stdio: ['ignore', 'pipe', 'inherit'] });
       proc.stdout?.on('data', (data: Buffer) => {
         const str = data.toString('utf-8');
         console.log(str.trimEnd());
@@ -840,11 +840,7 @@ class DevServer {
           resolve(proc);
         }
       });
-      proc.stderr?.on('data', (data: Buffer) => {
-        const str = data.toString('utf-8').trimEnd();
-        console.error(str);
-        reject(str);
-      });
+      proc.on('exit', (code) => reject(`Exited with ${code}`));
       process.on('SIGINT', () => {
         proc.kill();
         reject('SIGINT');

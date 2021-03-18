@@ -4,6 +4,12 @@
 	## __WORK IN PROGRESS__
 -->
 
+## __WORK IN PROGRESS__
+
+- (UncleSamSwiss) Disabled license info dialog at first start-up (#10)
+- (UncleSamSwiss) Fixed issue on MacOS about "COMMAND" property (#11)
+- (UncleSamSwiss) Fixed issue where error output from parcel (or tsc) would kill the application
+
 ## 0.1.2 (2021-02-25)
 
 - (UncleSamSwiss) Fixed automatic NPM deployment.

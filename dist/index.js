@@ -711,8 +711,8 @@ class DevServer {
     }
     spawnAndAwaitOutput(command, args, cwd, awaitMsg, options) {
         return new Promise((resolve, reject) => {
-            var _a, _b;
-            const proc = this.spawn(command, args, cwd, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
+            var _a;
+            const proc = this.spawn(command, args, cwd, { ...options, stdio: ['ignore', 'pipe', 'inherit'] });
             (_a = proc.stdout) === null || _a === void 0 ? void 0 : _a.on('data', (data) => {
                 const str = data.toString('utf-8');
                 console.log(str.trimEnd());
@@ -720,11 +720,7 @@ class DevServer {
                     resolve(proc);
                 }
             });
-            (_b = proc.stderr) === null || _b === void 0 ? void 0 : _b.on('data', (data) => {
-                const str = data.toString('utf-8').trimEnd();
-                console.error(str);
-                reject(str);
-            });
+            proc.on('exit', (code) => reject(`Exited with ${code}`));
             process.on('SIGINT', () => {
                 proc.kill();
                 reject('SIGINT');
