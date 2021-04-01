@@ -4,7 +4,7 @@
 	## __WORK IN PROGRESS__
 -->
 
-## __WORK IN PROGRESS__
+## 0.1.3 (2021-04-01)
 
 - (UncleSamSwiss) Disabled license info dialog at first start-up (#10)
 - (UncleSamSwiss) Fixed issue on MacOS about "COMMAND" property (#11)
