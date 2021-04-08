@@ -3,7 +3,7 @@
 [![NPM version](https://img.shields.io/npm/v/@iobroker/dev-server.svg)](https://www.npmjs.com/package/@iobroker/dev-server)
 [![Downloads](https://img.shields.io/npm/dm/@iobroker/dev-server.svg)](https://www.npmjs.com/package/@iobroker/dev-server)
 
-ioBroker dev-server is a simple command line tool that allows you to quickly develop and test ioBroker adapters and their admin interface.
+ioBroker dev-server is a simple command line tool running on Windows, Linux and MacOS that allows you to quickly develop and test ioBroker adapters and their admin interface.
 
 ## TL;DR
 
@@ -15,6 +15,7 @@ dev-server watch
 
 ## Features
 
+- Runs on all operating systems supported by NodeJS and ioBroker
 - Support for HTML and React UI
 - Support for JavaScript and TypeScript adapters
 - Hot reload of Admin UI upon any changes to HTML and JavaScript files.
