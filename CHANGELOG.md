@@ -4,7 +4,7 @@
 	## __WORK IN PROGRESS__
 -->
 
-## __WORK IN PROGRESS__
+## 0.1.4 (2021-04-14)
 
 - (UncleSamSwiss) Fixed issue with bash reusing the process instead of creating a child
 
