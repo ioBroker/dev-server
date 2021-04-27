@@ -4,6 +4,10 @@
 	## __WORK IN PROGRESS__
 -->
 
+## 0.1.4 (2021-04-14)
+
+- (UncleSamSwiss) Fixed issue with bash reusing the process instead of creating a child
+
 ## 0.1.3 (2021-04-01)
 
 - (UncleSamSwiss) Disabled license info dialog at first start-up (#10)

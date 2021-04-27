@@ -388,17 +388,20 @@ class DevServer {
             console.error(chalk.yellow(`Adapter debugging exited with code ${code}`));
             process.exit(-1);
         });
-        const debugProc = await this.waitForNodeChildProcess(proc.pid);
-        this.log.box(`Debugger is now ${wait ? 'waiting' : 'available'} on process id ${debugProc.PID}`);
+        const debugPid = await this.waitForNodeChildProcess(proc.pid);
+        this.log.box(`Debugger is now ${wait ? 'waiting' : 'available'} on process id ${debugPid}`);
     }
     async waitForNodeChildProcess(parentPid) {
-        while (true) {
+        const start = new Date().getTime();
+        while (start + 2000 > new Date().getTime()) {
             const processes = await this.getChildProcesses(parentPid);
             const child = processes.find((p) => p.COMMAND.match(/node/i));
             if (child) {
-                return child;
+                return parseInt(child.PID);
             }
         }
+        this.log.debug(`No node child process of ${parentPid} found, assuming parent process was reused.`);
+        return parentPid;
     }
     getChildProcesses(parentPid) {
         return new Promise((resolve, reject) => ps_tree_1.default(parentPid, (err, children) => {
@@ -555,8 +558,8 @@ class DevServer {
         if (!match) {
             return;
         }
-        const debugProc = await this.waitForNodeChildProcess(parseInt(match[1]));
-        this.log.box(`Debugger is now available on process id ${debugProc.PID}`);
+        const debigPid = await this.waitForNodeChildProcess(parseInt(match[1]));
+        this.log.box(`Debugger is now available on process id ${debigPid}`);
     }
     async setupDevServer(adminPort, jsController) {
         this.log.notice(`Setting up in ${this.tempDir}`);
