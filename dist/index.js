@@ -443,7 +443,7 @@ class DevServer {
     async startTscWatch() {
         this.log.notice('Starting tsc --watch');
         this.log.debug('Waiting for first successful tsc build...');
-        await this.spawnAndAwaitOutput('npm', ['run', 'watch:ts' /*, '--', '--preserveWatchOutput'*/], this.rootDir, /watching (files )?for/i, { shell: true });
+        await this.spawnAndAwaitOutput('npm', ['run', 'watch:ts'], this.rootDir, /watching (files )?for/i, { shell: true });
     }
     startFileSync(destinationDir) {
         this.log.notice(`Starting file system sync from ${this.rootDir}`);
@@ -725,8 +725,12 @@ class DevServer {
             var _a;
             const proc = this.spawn(command, args, cwd, { ...options, stdio: ['ignore', 'pipe', 'inherit'] });
             (_a = proc.stdout) === null || _a === void 0 ? void 0 : _a.on('data', (data) => {
-                const str = data.toString('utf-8');
-                console.log(str.trimEnd());
+                let str = data.toString('utf-8');
+                str = str.replace(/\x1Bc/, ''); // filter the "clear screen" ANSI code (used by tsc)
+                if (str) {
+                    str = str.trimEnd();
+                    console.log(str);
+                }
                 if (typeof awaitMsg === 'string') {
                     if (str.includes(awaitMsg)) {
                         resolve(proc);
