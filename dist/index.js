@@ -201,9 +201,15 @@ class DevServer {
         // figure out if we need parcel (React)
         const pkg = this.readPackageJson();
         const scripts = pkg.scripts;
-        if (scripts && scripts['watch:parcel']) {
-            // use parcel
-            await this.startParcel();
+        if (scripts) {
+            if (scripts['watch:react']) {
+                // use React with default script name
+                await this.startReact();
+            }
+            else if (scripts['watch:parcel']) {
+                // use React with legacy script name
+                await this.startReact('watch:parcel');
+            }
         }
         this.startBrowserSync(this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET));
         // browser-sync proxy
@@ -349,10 +355,12 @@ class DevServer {
         }
         return generator.toJSON();
     }
-    async startParcel() {
-        this.log.notice('Starting parcel');
-        this.log.debug('Waiting for first successful parcel build...');
-        await this.spawnAndAwaitOutput('npm', ['run', 'watch:parcel'], this.rootDir, 'Built in', { shell: true });
+    async startReact(scriptName = 'watch:react') {
+        this.log.notice('Starting React build');
+        this.log.debug('Waiting for first successful React build...');
+        await this.spawnAndAwaitOutput('npm', ['run', scriptName], this.rootDir, /(done in|watching (files )?for)/i, {
+            shell: true,
+        });
     }
     startBrowserSync(port) {
         this.log.notice('Starting browser-sync');
@@ -435,7 +443,7 @@ class DevServer {
     async startTscWatch() {
         this.log.notice('Starting tsc --watch');
         this.log.debug('Waiting for first successful tsc build...');
-        await this.spawnAndAwaitOutput('npm', ['run', 'watch:ts', '--', '--preserveWatchOutput'], this.rootDir, 'Watching for', { shell: true });
+        await this.spawnAndAwaitOutput('npm', ['run', 'watch:ts' /*, '--', '--preserveWatchOutput'*/], this.rootDir, /watching (files )?for/i, { shell: true });
     }
     startFileSync(destinationDir) {
         this.log.notice(`Starting file system sync from ${this.rootDir}`);
@@ -719,8 +727,15 @@ class DevServer {
             (_a = proc.stdout) === null || _a === void 0 ? void 0 : _a.on('data', (data) => {
                 const str = data.toString('utf-8');
                 console.log(str.trimEnd());
-                if (str.includes(awaitMsg)) {
-                    resolve(proc);
+                if (typeof awaitMsg === 'string') {
+                    if (str.includes(awaitMsg)) {
+                        resolve(proc);
+                    }
+                }
+                else {
+                    if (awaitMsg.test(str)) {
+                        resolve(proc);
+                    }
                 }
             });
             proc.on('exit', (code) => reject(`Exited with ${code}`));
