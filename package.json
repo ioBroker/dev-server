@@ -39,7 +39,7 @@
   },
   "dependencies": {
     "acorn": "^8.1.0",
-    "boxen": "^5.0.0",
+    "boxen": "^5.0.1",
     "browser-sync": "^2.26.14",
     "bs-html-injector": "^3.0.3",
     "chalk": "^4.1.0",
