@@ -772,6 +772,21 @@ class DevServer {
         // install local adapter
         await this.installLocalAdapter();
         this.uploadAndAddAdapter(this.adapterName);
+        // installing any dependencies
+        const { common } = await fs_extra_1.readJson(path.join(this.rootDir, 'io-package.json'));
+        const dependencies = [
+            ...this.getDependencies(common.dependencies),
+            ...this.getDependencies(common.globalDependencies),
+        ];
+        this.log.debug(`Found ${dependencies.length} adapter dependencies`);
+        for (const adapter of dependencies) {
+            try {
+                await this.installRepoAdapter(adapter);
+            }
+            catch (error) {
+                this.log.debug(`Couldn't install iobroker.${adapter}: ${error}`);
+            }
+        }
         this.log.notice(`Stop ${this.adapterName}.0`);
         this.execSync(`${IOBROKER_COMMAND} stop ${this.adapterName} 0`, this.profileDir);
         this.log.notice('Disable statistics reporting');
@@ -805,6 +820,40 @@ class DevServer {
         const fullPath = path.join(this.rootDir, filename);
         this.execSync(`npm install --no-save "${fullPath}"`, this.profileDir);
         await this.rimraf(fullPath);
+    }
+    async installRepoAdapter(adapterName) {
+        this.log.notice(`Install iobroker.${adapterName}`);
+        this.execSync(`${IOBROKER_COMMAND} install ${adapterName}`, this.profileDir);
+    }
+    /**
+     * This method is largely borrowed from ioBroker.js-controller/lib/tools.js
+     * @param dependencies The global or local dependency list from io-package.json
+     * @returns the list of adapters (without js-controller) found in the dependencies.
+     */
+    getDependencies(dependencies) {
+        const adapters = [];
+        if (Array.isArray(dependencies)) {
+            dependencies.forEach((rule) => {
+                if (typeof rule === 'string') {
+                    // No version given, all are okay
+                    adapters.push(rule);
+                }
+                else {
+                    // can be object containing single adapter or multiple
+                    Object.keys(rule)
+                        .filter((adapter) => !adapters.includes(adapter))
+                        .forEach((adapter) => adapters.push(adapter));
+                }
+            });
+        }
+        else if (typeof dependencies === 'string') {
+            // its a single string without version requirement
+            adapters.push(dependencies);
+        }
+        else if (dependencies) {
+            adapters.push(...Object.keys(dependencies));
+        }
+        return adapters.filter((a) => a !== 'js-controller');
     }
     execSync(command, cwd, options) {
         options = { cwd: cwd, stdio: 'inherit', ...options };
