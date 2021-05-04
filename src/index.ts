@@ -12,6 +12,7 @@ import {
   copyFile,
   existsSync,
   mkdir,
+  mkdirp,
   readdir,
   readFile,
   readJson,
@@ -324,6 +325,10 @@ class DevServer {
   ////////////////// Command Helper Methods //////////////////
 
   async getProfiles(): Promise<Record<string, any>> {
+    if (!existsSync(this.tempDir)) {
+      return {};
+    }
+
     const entries = await readdir(this.tempDir);
     const pkgs = await Promise.all(
       entries.map(async (e) => {
@@ -796,15 +801,10 @@ class DevServer {
 
   async setupDevServer(adminPort: number, jsController: string, backupFile?: string): Promise<void> {
     this.log.notice(`Setting up in ${this.profileDir}`);
-    if (!existsSync(this.profileDir)) {
-      await mkdir(this.profileDir);
-    }
 
     // create the data directory
     const dataDir = path.join(this.profileDir, 'iobroker-data');
-    if (!existsSync(dataDir)) {
-      await mkdir(dataDir);
-    }
+    await mkdirp(dataDir);
 
     // create the configuration
     const config = {

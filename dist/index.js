@@ -256,6 +256,9 @@ class DevServer {
     }
     ////////////////// Command Helper Methods //////////////////
     async getProfiles() {
+        if (!fs_extra_1.existsSync(this.tempDir)) {
+            return {};
+        }
         const entries = await fs_extra_1.readdir(this.tempDir);
         const pkgs = await Promise.all(entries.map(async (e) => {
             try {
@@ -667,14 +670,9 @@ class DevServer {
     }
     async setupDevServer(adminPort, jsController, backupFile) {
         this.log.notice(`Setting up in ${this.profileDir}`);
-        if (!fs_extra_1.existsSync(this.profileDir)) {
-            await fs_extra_1.mkdir(this.profileDir);
-        }
         // create the data directory
         const dataDir = path.join(this.profileDir, 'iobroker-data');
-        if (!fs_extra_1.existsSync(dataDir)) {
-            await fs_extra_1.mkdir(dataDir);
-        }
+        await fs_extra_1.mkdirp(dataDir);
         // create the configuration
         const config = {
             system: {
