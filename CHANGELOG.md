@@ -8,6 +8,7 @@
 
 - (UncleSamSwiss) **Breaking Change:** it is no longer possible to use `dev-server` without providing a command. Use `dev-server run` for the same behavior as before.
 - (UncleSamSwiss) Added support for different profiles (#39)
+- (UncleSamSwiss) Added possibility to create a backup (#28)
 
 ## 0.1.4 (2021-04-14)
 

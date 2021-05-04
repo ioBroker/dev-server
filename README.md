@@ -140,6 +140,10 @@ You should only do this when dev-server is not running.
 
 This is a shortcut for `npm pack` and `npm install <package>.tgz`.
 
+### `dev-server backup <filename>`
+
+Create an ioBroker backup to the given file.
+
 ### `dev-server profile`
 
 Lists all available profiles with their meta-data.

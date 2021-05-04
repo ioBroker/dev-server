@@ -116,6 +116,12 @@ class DevServer {
         async () => await this.upload(),
       )
       .command(
+        ['backup <filename> [profile]', 'b'],
+        'Create an ioBroker backup to the given file.',
+        {},
+        async (args) => await this.backup(args.filename as string),
+      )
+      .command(
         ['profile', 'p'],
         'List all dev-server profiles that exist in the current directory.',
         {},
@@ -284,6 +290,12 @@ class DevServer {
     this.uploadAdapter(this.adapterName);
 
     this.log.box(`The latest content of iobroker.${this.adapterName} was uploaded to ${this.profileDir}.`);
+  }
+
+  async backup(filename: string): Promise<void> {
+    const fullPath = path.resolve(filename);
+    this.log.notice('Creating backup');
+    this.execSync(`${IOBROKER_COMMAND} backup "${fullPath}"`, this.profileDir);
   }
 
   async profile(): Promise<void> {

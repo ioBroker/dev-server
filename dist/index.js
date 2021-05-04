@@ -84,6 +84,7 @@ class DevServer {
             },
         }, async (args) => await this.debug(!!args.wait))
             .command(['upload [profile]', 'ul'], 'Upload the current version of your adapter to the ioBroker dev-server. This is only required if you changed something relevant in your io-package.json', {}, async () => await this.upload())
+            .command(['backup <filename> [profile]', 'b'], 'Create an ioBroker backup to the given file.', {}, async (args) => await this.backup(args.filename))
             .command(['profile', 'p'], 'List all dev-server profiles that exist in the current directory.', {}, async () => await this.profile())
             .options({
             temp: {
@@ -225,6 +226,11 @@ class DevServer {
         await this.installLocalAdapter();
         this.uploadAdapter(this.adapterName);
         this.log.box(`The latest content of iobroker.${this.adapterName} was uploaded to ${this.profileDir}.`);
+    }
+    async backup(filename) {
+        const fullPath = path.resolve(filename);
+        this.log.notice('Creating backup');
+        this.execSync(`${IOBROKER_COMMAND} backup "${fullPath}"`, this.profileDir);
     }
     async profile() {
         const profiles = await this.getProfiles();
