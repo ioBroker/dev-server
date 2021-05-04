@@ -4,6 +4,11 @@
 	## __WORK IN PROGRESS__
 -->
 
+## __WORK IN PROGRESS__
+
+- (UncleSamSwiss) **Breaking Change:** it is no longer possible to use `dev-server` without providing a command. Use `dev-server run` for the same behavior as before.
+- (UncleSamSwiss) Added support for different profiles (#39)
+
 ## 0.1.4 (2021-04-14)
 
 - (UncleSamSwiss) Fixed issue with bash reusing the process instead of creating a child

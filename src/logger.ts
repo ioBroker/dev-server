@@ -1,17 +1,18 @@
 import boxen from 'boxen';
-import chalk from 'chalk';
+import { blueBright, greenBright, grey, redBright, yellow } from 'chalk';
+import { table, TableUserConfig } from 'table';
 
 export class Logger {
   public error(message: string): void {
-    console.log(chalk.redBright(message));
+    console.log(redBright(message));
   }
 
   public warn(message: string): void {
-    console.log(chalk.yellow(message));
+    console.log(yellow(message));
   }
 
   public notice(message: string): void {
-    console.log(chalk.blueBright(message));
+    console.log(blueBright(message));
   }
 
   public info(message: string): void {
@@ -19,15 +20,19 @@ export class Logger {
   }
 
   public debug(message: string): void {
-    console.log(chalk.grey(message));
+    console.log(grey(message));
   }
 
   public box(message: string): void {
     console.log(
-      boxen(chalk.greenBright(message), {
+      boxen(greenBright(message), {
         padding: 1,
         borderStyle: 'round',
       }),
     );
+  }
+
+  public table(items: unknown[][], userConfig?: TableUserConfig): void {
+    console.log(table(items, userConfig));
   }
 }

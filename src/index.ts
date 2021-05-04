@@ -2,27 +2,34 @@
 
 import yargs = require('yargs/yargs');
 import browserSync from 'browser-sync';
+import { bold, gray, yellow } from 'chalk';
 import * as cp from 'child_process';
 import chokidar from 'chokidar';
+import { prompt } from 'enquirer';
 import express from 'express';
 import fg from 'fast-glob';
-import * as fs from 'fs';
+import {
+  copyFile,
+  existsSync,
+  mkdir,
+  readdir,
+  readFile,
+  readJson,
+  rename,
+  unlinkSync,
+  writeFile,
+  writeJson,
+} from 'fs-extra';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import nodemon from 'nodemon';
 import { hostname } from 'os';
 import * as path from 'path';
 import psTree from 'ps-tree';
 import { Mapping, RawSourceMap, SourceMapGenerator } from 'source-map';
-import { promisify } from 'util';
 import { Logger } from './logger';
 import chalk = require('chalk');
 import rimraf = require('rimraf');
 import acorn = require('acorn');
-
-const mkdirAsync = promisify(fs.mkdir);
-const writeFileAsync = promisify(fs.writeFile);
-const readFileAsync = promisify(fs.readFile);
-const copyFileAsync = promisify(fs.copyFile);
 
 const DEFAULT_TEMP_DIR_NAME = '.dev-server';
 const CORE_MODULE = 'iobroker.js-controller';
@@ -33,6 +40,7 @@ const HIDDEN_ADMIN_PORT_OFFSET = 12345;
 const HIDDEN_BROWSER_SYNC_PORT_OFFSET = 14345;
 const STATES_DB_PORT_OFFSET = 16345;
 const OBJECTS_DB_PORT_OFFSET = 18345;
+const DEFAULT_PROFILE_NAME = 'default';
 
 interface DevServerConfig {
   adminPort: number;
@@ -43,12 +51,16 @@ class DevServer {
   private rootDir!: string;
   private adapterName!: string;
   private tempDir!: string;
+  private profileDir!: string;
 
   constructor() {
-    yargs(process.argv.slice(2))
-      .usage('Usage: $0 <command> [options]\n   or: $0 <command> --help   to see available options for a command')
+    const parser = yargs(process.argv.slice(2));
+    parser
+      .usage(
+        'Usage: $0 <command> [options] [profile]\n   or: $0 <command> --help   to see available options for a command',
+      )
       .command(
-        ['setup', 's'],
+        ['setup [profile]', 's'],
         'Set up dev-server in the current directory. This should always be called in the directory where the io-package.json file of your adapter is located.',
         {
           adminPort: {
@@ -68,25 +80,25 @@ class DevServer {
         async (args) => await this.setup(args.adminPort, args.jsController, !!args.force),
       )
       .command(
-        ['update', 'ud'],
+        ['update [profile]', 'ud'],
         'Update ioBroker and its dependencies to the latest versions',
         {},
         async () => await this.update(),
       )
       .command(
-        ['run', 'r', '*'],
+        ['run [profile]', 'r'],
         'Run ioBroker dev-server, the adapter will not run, but you may test the Admin UI with hot-reload',
         {},
         async () => await this.run(),
       )
       .command(
-        ['watch', 'w'],
+        ['watch [profile]', 'w'],
         'Run ioBroker dev-server and start the adapter in "watch" mode. The adapter will automatically restart when its source code changes. You may attach a debugger to the running adapter.',
         {},
         async () => await this.watch(),
       )
       .command(
-        ['debug', 'd'],
+        ['debug [profile]', 'd'],
         'Run ioBroker dev-server and start the adapter from ioBroker in "debug" mode. You may attach a debugger to the running adapter.',
         {
           wait: {
@@ -98,10 +110,16 @@ class DevServer {
         async (args) => await this.debug(!!args.wait),
       )
       .command(
-        ['upload', 'ul'],
+        ['upload [profile]', 'ul'],
         'Upload the current version of your adapter to the ioBroker dev-server. This is only required if you changed something relevant in your io-package.json',
         {},
         async () => await this.upload(),
+      )
+      .command(
+        ['profile', 'p'],
+        'List all dev-server profiles that exist in the current directory.',
+        {},
+        async () => await this.profile(),
       )
       .options({
         temp: {
@@ -112,19 +130,83 @@ class DevServer {
         },
         root: { type: 'string', alias: 'r', hidden: true, default: '.' },
       })
-      .check((argv) => {
-        // console.log('check', argv);
-        this.rootDir = path.resolve(argv.root);
-        this.tempDir = path.resolve(this.rootDir, argv.temp);
-        this.adapterName = this.findAdapterName();
-        return true;
-      })
+      .middleware(async (argv) => await this.setDirectories(argv))
+      .wrap(Math.min(100, parser.terminalWidth()))
       .help().argv;
   }
 
-  private findAdapterName(): string {
+  private async setDirectories(argv: {
+    _: (string | number)[];
+    root: string;
+    temp: string;
+    profile?: string;
+  }): Promise<void> {
+    this.rootDir = path.resolve(argv.root);
+    this.tempDir = path.resolve(this.rootDir, argv.temp);
+    if (existsSync(path.join(this.tempDir, 'package.json'))) {
+      // we are still in the old directory structure (no profiles), let's move it
+      const intermediateDir = path.join(this.rootDir, DEFAULT_TEMP_DIR_NAME + '-temp');
+      const defaultProfileDir = path.join(this.tempDir, DEFAULT_PROFILE_NAME);
+      this.log.debug(`Moving temporary data from ${this.tempDir} to ${defaultProfileDir}`);
+      await rename(this.tempDir, intermediateDir);
+      await mkdir(this.tempDir);
+      await rename(intermediateDir, defaultProfileDir);
+    }
+
+    let profileName = argv.profile;
+    const profiles = await this.getProfiles();
+    const profileNames = Object.keys(profiles);
+    if (profileName) {
+      if (!argv._.includes('setup') && !argv._.includes('s')) {
+        // ensure the profile exists
+        if (!profileNames.includes(profileName)) {
+          throw new Error(`Profile ${profileName} doesn't exist`);
+        }
+      }
+    } else {
+      if (argv._.includes('profile') || argv._.includes('p')) {
+        // we don't care about the profile name
+        profileName = DEFAULT_PROFILE_NAME;
+      } else {
+        if (profileNames.length === 0) {
+          profileName = DEFAULT_PROFILE_NAME;
+          this.log.debug(`Using default profile ${profileName}`);
+        } else if (profileNames.length === 1) {
+          profileName = profileNames[0];
+          this.log.debug(`Using profile ${profileName}`);
+        } else {
+          this.log.box(
+            yellow(
+              `You didn't specify the profile name in the command line. ` +
+                `You may do so the next time by appending the profile name to your command.\nExample:\n` +
+                `> dev-server ${process.argv.slice(2).join(' ')} ${profileNames[profileNames.length - 1]} `,
+            ),
+          );
+          const response = await prompt<{ profile: string }>({
+            name: 'profile',
+            type: 'select',
+            message: 'Please choose a profile',
+            choices: profileNames.map((p) => ({
+              name: p,
+              hint: gray(`(Admin Port: ${profiles[p]['dev-server'].adminPort})`),
+            })),
+          });
+          profileName = response.profile;
+        }
+      }
+    }
+
+    if (!profileName.match(/^[a-z0-9_-]+$/i)) {
+      throw new Error(`Invaid profile name: "${profileName}", it may only contain a-z, 0-9, _ and -.`);
+    }
+
+    this.profileDir = path.join(this.tempDir, profileName);
+    this.adapterName = await this.findAdapterName();
+  }
+
+  private async findAdapterName(): Promise<string> {
     try {
-      const ioPackage = this.readJson(path.join(this.rootDir, 'io-package.json'));
+      const ioPackage = await readJson(path.join(this.rootDir, 'io-package.json'));
       const adapterName = ioPackage.common.name;
       this.log.debug(`Using adapter name "${adapterName}"`);
       return adapterName;
@@ -135,13 +217,8 @@ class DevServer {
     }
   }
 
-  private readJson(filename: string): any {
-    const json = fs.readFileSync(filename, 'utf-8');
-    return JSON.parse(json);
-  }
-
-  private readPackageJson(): any {
-    return this.readJson(path.join(this.rootDir, 'package.json'));
+  private readPackageJson(): Promise<any> {
+    return readJson(path.join(this.rootDir, 'package.json'));
   }
 
   private getPort(adminPort: number, offset: number): number {
@@ -156,25 +233,25 @@ class DevServer {
 
   async setup(adminPort: number, jsController: string, force: boolean): Promise<void> {
     if (force) {
-      this.log.notice(`Deleting ${this.tempDir}`);
-      await this.rimraf(this.tempDir);
+      this.log.notice(`Deleting ${this.profileDir}`);
+      await this.rimraf(this.profileDir);
     }
 
     if (this.isSetUp()) {
-      this.log.error(`dev-server is already set up in "${this.tempDir}".`);
+      this.log.error(`dev-server is already set up in "${this.profileDir}".`);
       this.log.debug(`Use --force to set it up from scratch (all data will be lost).`);
       return;
     }
 
     await this.setupDevServer(adminPort, jsController);
 
-    this.log.box(`dev-server was sucessfully set up in ${this.tempDir}.`);
+    this.log.box(`dev-server was sucessfully set up in\n${this.profileDir}.`);
   }
 
   private async update(): Promise<void> {
     this.checkSetup();
     this.log.notice('Updating everything...');
-    this.execSync('npm update --loglevel error', this.tempDir);
+    this.execSync('npm update --loglevel error', this.profileDir);
     await this.installLocalAdapter();
     this.uploadAdapter(this.adapterName);
 
@@ -206,42 +283,82 @@ class DevServer {
     await this.installLocalAdapter();
     this.uploadAdapter(this.adapterName);
 
-    this.log.box(`The latest content of iobroker.${this.adapterName} was uploaded to ${this.tempDir}.`);
+    this.log.box(`The latest content of iobroker.${this.adapterName} was uploaded to ${this.profileDir}.`);
+  }
+
+  async profile(): Promise<void> {
+    const profiles = await this.getProfiles();
+    const table = Object.keys(profiles).map((name) => {
+      const pkg = profiles[name];
+      const infos = pkg['dev-server'];
+      const dependencies = pkg.dependencies;
+      return [
+        name,
+        `http://localhost:${infos.adminPort}`,
+        dependencies['iobroker.js-controller'],
+        dependencies['iobroker.admin'],
+      ];
+    });
+    table.unshift([bold('Profile Name'), bold('Admin URL'), bold('js-controller'), bold('admin')]);
+    this.log.info(`The following profiles exist in ${this.tempDir}`);
+    this.log.table(table.filter((r) => !!r) as any);
   }
 
   ////////////////// Command Helper Methods //////////////////
 
+  async getProfiles(): Promise<Record<string, any>> {
+    const entries = await readdir(this.tempDir);
+    const pkgs = await Promise.all(
+      entries.map(async (e) => {
+        try {
+          const pkg = await readJson(path.join(this.tempDir, e, 'package.json'));
+          const infos = pkg['dev-server'];
+          const dependencies = pkg.dependencies;
+          if (infos?.adminPort && dependencies) {
+            return [e, pkg];
+          }
+        } catch {
+          return undefined;
+        }
+      }, {}),
+    );
+    return (pkgs.filter((p) => !!p) as any[]).reduce<Record<string, any>>(
+      (old, [e, pkg]) => ({ ...old, [e]: pkg }),
+      {},
+    );
+  }
+
   checkSetup(): void {
     if (!this.isSetUp()) {
       this.log.error(
-        `dev-server is not set up in ${this.tempDir}.\nPlease use the command "setup" first to set up dev-server.`,
+        `dev-server is not set up in ${this.profileDir}.\nPlease use the command "setup" first to set up dev-server.`,
       );
       process.exit(-1);
     }
   }
 
   isSetUp(): boolean {
-    const jsControllerDir = path.join(this.tempDir, 'node_modules', CORE_MODULE);
-    return fs.existsSync(jsControllerDir);
+    const jsControllerDir = path.join(this.profileDir, 'node_modules', CORE_MODULE);
+    return existsSync(jsControllerDir);
   }
 
   async startServer(): Promise<void> {
-    this.log.notice(`Running inside ${this.tempDir}`);
+    this.log.notice(`Running inside ${this.profileDir}`);
 
-    const tempPkg = this.readJson(path.join(this.tempDir, 'package.json'));
+    const tempPkg = await readJson(path.join(this.profileDir, 'package.json'));
     const config = tempPkg['dev-server'] as DevServerConfig;
     if (!config) {
       throw new Error(`Couldn't find dev-server configuration in package.json`);
     }
 
-    const proc = this.spawn('node', ['node_modules/iobroker.js-controller/controller.js'], this.tempDir);
+    const proc = this.spawn('node', ['node_modules/iobroker.js-controller/controller.js'], this.profileDir);
     proc.on('exit', (code) => {
       console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
       process.exit(-1);
     });
 
     // figure out if we need parcel (React)
-    const pkg = this.readPackageJson();
+    const pkg = await this.readPackageJson();
     const scripts = pkg.scripts;
     if (scripts) {
       if (scripts['watch:react']) {
@@ -296,7 +413,7 @@ class DevServer {
   }
 
   private async copySourcemaps(): Promise<void> {
-    const outDir = path.join(this.tempDir, 'node_modules', `iobroker.${this.adapterName}`);
+    const outDir = path.join(this.profileDir, 'node_modules', `iobroker.${this.adapterName}`);
     this.log.notice(`Creating or patching sourcemaps in ${outDir}`);
     const sourcemaps = await this.findFiles('map', true);
     if (sourcemaps.length === 0) {
@@ -336,10 +453,10 @@ class DevServer {
     try {
       const mapFile = `${dest}.map`;
       const data = await this.createIdentitySourcemap(src.replace(/\\/g, '/'));
-      await writeFileAsync(mapFile, JSON.stringify(data));
+      await writeFile(mapFile, JSON.stringify(data));
 
       // append the sourcemap reference comment to the bottom of the file
-      const fileContent = await readFileAsync(copyFromSrc ? src : dest, { encoding: 'utf-8' });
+      const fileContent = await readFile(copyFromSrc ? src : dest, { encoding: 'utf-8' });
       const filename = path.basename(mapFile);
       let updatedContent = fileContent.replace(/(\/\/\# sourceMappingURL=).+/, `$1${filename}`);
       if (updatedContent === fileContent) {
@@ -354,7 +471,7 @@ class DevServer {
         updatedContent += `//# sourceMappingURL=${filename}`;
       }
 
-      await writeFileAsync(dest, updatedContent);
+      await writeFile(dest, updatedContent);
       this.log.debug(`Created ${mapFile} from ${src}`);
     } catch (error) {
       this.log.warn(`Couldn't reverse map for ${src}: ${error}`);
@@ -368,12 +485,12 @@ class DevServer {
    */
   private async patchSourcemap(src: string, dest: string): Promise<void> {
     try {
-      const data = this.readJson(src);
+      const data = await readJson(src);
       if (data.version !== 3) {
         throw new Error(`Unsupported sourcemap version: ${data.version}`);
       }
       data.sourceRoot = path.dirname(src).replace(/\\/g, '/');
-      await writeFileAsync(dest, JSON.stringify(data));
+      await writeJson(dest, data);
       this.log.debug(`Patched ${dest} from ${src}`);
     } catch (error) {
       this.log.warn(`Couldn't patch ${dest}: ${error}`);
@@ -399,7 +516,7 @@ class DevServer {
   private async createIdentitySourcemap(filename: string): Promise<RawSourceMap> {
     // thanks to https://github.com/gulp-sourcemaps/identity-map/blob/251b51598d02e5aedaea8f1a475dfc42103a2727/lib/generate.js [MIT]
     const generator = new SourceMapGenerator({ file: filename });
-    const fileContent = await readFileAsync(filename, { encoding: 'utf-8' });
+    const fileContent = await readFile(filename, { encoding: 'utf-8' });
     const tokenizer = acorn.tokenizer(fileContent, {
       ecmaVersion: 'latest',
       allowHashBang: true,
@@ -426,9 +543,15 @@ class DevServer {
   private async startReact(scriptName = 'watch:react'): Promise<void> {
     this.log.notice('Starting React build');
     this.log.debug('Waiting for first successful React build...');
-    await this.spawnAndAwaitOutput('npm', ['run', scriptName], this.rootDir, /(done in|watching (files )?for)/i, {
-      shell: true,
-    });
+    await this.spawnAndAwaitOutput(
+      'npm',
+      ['run', scriptName],
+      this.rootDir,
+      /(built in|done in|watching (files )?for)/i,
+      {
+        shell: true,
+      },
+    );
   }
 
   private startBrowserSync(port: number): void {
@@ -462,7 +585,7 @@ class DevServer {
     if (wait) {
       args.push('--wait');
     }
-    const proc = this.spawn('node', args, this.tempDir);
+    const proc = this.spawn('node', args, this.profileDir);
     proc.on('exit', (code) => {
       console.error(chalk.yellow(`Adapter debugging exited with code ${code}`));
       process.exit(-1);
@@ -507,7 +630,7 @@ class DevServer {
 
   private async startAdapterWatch(): Promise<void> {
     // figure out if we need to watch for TypeScript changes
-    const pkg = this.readPackageJson();
+    const pkg = await this.readPackageJson();
     const scripts = pkg.scripts;
     if (scripts && scripts['watch:ts']) {
       // use TSC
@@ -515,7 +638,7 @@ class DevServer {
     }
 
     // start sync
-    const adapterRunDir = path.join(this.tempDir, 'node_modules', `iobroker.${this.adapterName}`);
+    const adapterRunDir = path.join(this.profileDir, 'node_modules', `iobroker.${this.adapterName}`);
     await this.startFileSync(adapterRunDir);
 
     this.startNodemon(adapterRunDir, pkg.main);
@@ -551,11 +674,11 @@ class DevServer {
           const dest = inDest(filename);
           if (filename.endsWith('.map')) {
             await this.patchSourcemap(src, dest);
-          } else if (!fs.existsSync(inSrc(`${filename}.map`))) {
+          } else if (!existsSync(inSrc(`${filename}.map`))) {
             // copy file and add sourcemap
             await this.addSourcemap(src, dest, true);
           } else {
-            await copyFileAsync(src, dest);
+            await copyFile(src, dest);
           }
         } catch (error) {
           this.log.warn(`Couldn't sync ${filename}`);
@@ -564,7 +687,7 @@ class DevServer {
       watcher.on('add', (filename: string) => {
         if (ready) {
           syncFile(filename);
-        } else if (!filename.endsWith('map') && !fs.existsSync(inDest(filename))) {
+        } else if (!filename.endsWith('map') && !existsSync(inDest(filename))) {
           // ignore files during initial sync if they don't exist in the target directory
           ignoreFiles.push(filename);
         } else {
@@ -577,10 +700,10 @@ class DevServer {
         }
       });
       watcher.on('unlink', (filename: string) => {
-        fs.unlinkSync(inDest(filename));
+        unlinkSync(inDest(filename));
         const map = inDest(filename + '.map');
-        if (fs.existsSync(map)) {
-          fs.unlinkSync(map);
+        if (existsSync(map)) {
+          unlinkSync(map);
         }
       });
     });
@@ -655,15 +778,15 @@ class DevServer {
   }
 
   async setupDevServer(adminPort: number, jsController: string): Promise<void> {
-    this.log.notice(`Setting up in ${this.tempDir}`);
-    if (!fs.existsSync(this.tempDir)) {
-      await mkdirAsync(this.tempDir);
+    this.log.notice(`Setting up in ${this.profileDir}`);
+    if (!existsSync(this.profileDir)) {
+      await mkdir(this.profileDir);
     }
 
     // create the data directory
-    const dataDir = path.join(this.tempDir, 'iobroker-data');
-    if (!fs.existsSync(dataDir)) {
-      await mkdirAsync(dataDir);
+    const dataDir = path.join(this.profileDir, 'iobroker-data');
+    if (!existsSync(dataDir)) {
+      await mkdir(dataDir);
     }
 
     // create the configuration
@@ -736,7 +859,7 @@ class DevServer {
       plugins: {},
       dataDir: '../../iobroker-data/',
     };
-    await writeFileAsync(path.join(dataDir, 'iobroker.json'), JSON.stringify(config, null, 2));
+    await writeJson(path.join(dataDir, 'iobroker.json'), config, { spaces: 2 });
 
     // create the package file
     const pkg = {
@@ -751,10 +874,10 @@ class DevServer {
         adminPort: adminPort,
       },
     };
-    await writeFileAsync(path.join(this.tempDir, 'package.json'), JSON.stringify(pkg, null, 2));
+    await writeJson(path.join(this.profileDir, 'package.json'), pkg, { spaces: 2 });
 
     this.log.notice('Installing js-controller and admin...');
-    this.execSync('npm install --loglevel error --production', this.tempDir);
+    this.execSync('npm install --loglevel error --production', this.profileDir);
 
     this.uploadAndAddAdapter('admin');
 
@@ -762,7 +885,7 @@ class DevServer {
     this.log.notice('Configure admin.0');
     this.execSync(
       `${IOBROKER_COMMAND} set admin.0 --port ${this.getPort(adminPort, HIDDEN_ADMIN_PORT_OFFSET)} --bind 127.0.0.1`,
-      this.tempDir,
+      this.profileDir,
     );
 
     // install local adapter
@@ -770,16 +893,16 @@ class DevServer {
     this.uploadAndAddAdapter(this.adapterName);
 
     this.log.notice(`Stop ${this.adapterName}.0`);
-    this.execSync(`${IOBROKER_COMMAND} stop ${this.adapterName} 0`, this.tempDir);
+    this.execSync(`${IOBROKER_COMMAND} stop ${this.adapterName} 0`, this.profileDir);
 
     this.log.notice('Disable statistics reporting');
-    this.execSync(`${IOBROKER_COMMAND} object set system.config common.diag="none"`, this.tempDir);
+    this.execSync(`${IOBROKER_COMMAND} object set system.config common.diag="none"`, this.profileDir);
 
     this.log.notice('Disable license confirmation');
-    this.execSync(`${IOBROKER_COMMAND} object set system.config common.licenseConfirmed=true`, this.tempDir);
+    this.execSync(`${IOBROKER_COMMAND} object set system.config common.licenseConfirmed=true`, this.profileDir);
 
     this.log.notice('Disable missing info adapter warning');
-    this.execSync(`${IOBROKER_COMMAND} object set system.config common.infoAdapterInstall=true`, this.tempDir);
+    this.execSync(`${IOBROKER_COMMAND} object set system.config common.infoAdapterInstall=true`, this.profileDir);
   }
 
   private uploadAndAddAdapter(name: string): void {
@@ -788,12 +911,12 @@ class DevServer {
 
     // create an instance
     this.log.notice(`Add ${name}.0`);
-    this.execSync(`${IOBROKER_COMMAND} add ${name} 0`, this.tempDir);
+    this.execSync(`${IOBROKER_COMMAND} add ${name} 0`, this.profileDir);
   }
 
   private uploadAdapter(name: string): void {
     this.log.notice(`Upload iobroker.${name}`);
-    this.execSync(`${IOBROKER_COMMAND} upload ${name}`, this.tempDir);
+    this.execSync(`${IOBROKER_COMMAND} upload ${name}`, this.profileDir);
   }
 
   private async installLocalAdapter(): Promise<void> {
@@ -805,7 +928,7 @@ class DevServer {
     this.log.info(`Packed to ${filename}`);
 
     const fullPath = path.join(this.rootDir, filename);
-    this.execSync(`npm install --no-save "${fullPath}"`, this.tempDir);
+    this.execSync(`npm install --no-save "${fullPath}"`, this.profileDir);
 
     await this.rimraf(fullPath);
   }

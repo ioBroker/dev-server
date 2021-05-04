@@ -22,6 +22,7 @@ dev-server watch
 - Hot reload of adapter upon code changes
 - Live log in the console
 - Debug adapter during start-up
+- Multiple "profiles" allow for different datasets
 - Multiple instances of dev-server can run in parallel (using different ports)
 - All ports are only available locally (127.0.0.1)
 
@@ -67,13 +68,25 @@ If you created your adaper using a recent version of [Adapter Creator](https://g
 
 ## Command line
 
-Usage: `dev-server <command> [options]`
+Usage: `dev-server <command> [options] [profile]`
 
 All long-running commands can be stopped using `Ctrl-C`.
 
 The following global options are available for all commands:
 
 `--temp <path>` Change the temporary directory where the dev-server data will be located (default: ".dev-server").
+
+### Profiles
+
+All commands (except of course `dev-server profile`) support the `[profile]` command line argument. It allows the user to use choose between different profiles.
+
+Each profile is a completely independent instance of ioBroker and can run in parallel with other profiles of the same adapter (if different ports are configured).
+
+If no profile is specified on the command line, dev-server will do the following:
+
+- if only one profile exists, it will be used
+- if no profile exists, a profile called `default` will be created (only valid for `dev-server setup`)
+- if multiple profiles exist, the user has to choose one from a list
 
 ### `dev-server setup`
 
@@ -85,7 +98,7 @@ The following options are available:
 
 `--jsController <version>` Define which version of js-controller to be used (default: "latest").
 
-### `dev-server` or `dev-server run`
+### `dev-server run`
 
 Run dev-server, the adapter will not run, but you may test the Admin UI with hot-reload.
 
@@ -126,3 +139,7 @@ This is only required if you changed something relevant in your io-package.json.
 You should only do this when dev-server is not running.
 
 This is a shortcut for `npm pack` and `npm install <package>.tgz`.
+
+### `dev-server profile`
+
+Lists all available profiles with their meta-data.
