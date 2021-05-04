@@ -71,8 +71,13 @@ class DevServer {
                 default: 'latest',
                 description: 'Define which version of js-controller to be used',
             },
+            backupFile: {
+                type: 'string',
+                alias: 'b',
+                description: 'Provide an ioBroker backup file to restore in this dev-server',
+            },
             force: { type: 'boolean', hidden: true },
-        }, async (args) => await this.setup(args.adminPort, args.jsController, !!args.force))
+        }, async (args) => await this.setup(args.adminPort, args.jsController, args.backupFile, !!args.force))
             .command(['update [profile]', 'ud'], 'Update ioBroker and its dependencies to the latest versions', {}, async () => await this.update())
             .command(['run [profile]', 'r'], 'Run ioBroker dev-server, the adapter will not run, but you may test the Admin UI with hot-reload', {}, async () => await this.run())
             .command(['watch [profile]', 'w'], 'Run ioBroker dev-server and start the adapter in "watch" mode. The adapter will automatically restart when its source code changes. You may attach a debugger to the running adapter.', {}, async () => await this.watch())
@@ -183,7 +188,7 @@ class DevServer {
         return port;
     }
     ////////////////// Command Handlers //////////////////
-    async setup(adminPort, jsController, force) {
+    async setup(adminPort, jsController, backupFile, force) {
         if (force) {
             this.log.notice(`Deleting ${this.profileDir}`);
             await this.rimraf(this.profileDir);
@@ -193,7 +198,7 @@ class DevServer {
             this.log.debug(`Use --force to set it up from scratch (all data will be lost).`);
             return;
         }
-        await this.setupDevServer(adminPort, jsController);
+        await this.setupDevServer(adminPort, jsController, backupFile);
         this.log.box(`dev-server was sucessfully set up in\n${this.profileDir}.`);
     }
     async update() {
@@ -660,7 +665,7 @@ class DevServer {
         const debigPid = await this.waitForNodeChildProcess(parseInt(match[1]));
         this.log.box(`Debugger is now available on process id ${debigPid}`);
     }
-    async setupDevServer(adminPort, jsController) {
+    async setupDevServer(adminPort, jsController, backupFile) {
         this.log.notice(`Setting up in ${this.profileDir}`);
         if (!fs_extra_1.existsSync(this.profileDir)) {
             await fs_extra_1.mkdir(this.profileDir);
@@ -757,6 +762,11 @@ class DevServer {
         await fs_extra_1.writeJson(path.join(this.profileDir, 'package.json'), pkg, { spaces: 2 });
         this.log.notice('Installing js-controller and admin...');
         this.execSync('npm install --loglevel error --production', this.profileDir);
+        if (backupFile) {
+            const fullPath = path.resolve(backupFile);
+            this.log.notice(`Restoring backup from ${fullPath}`);
+            this.execSync(`${IOBROKER_COMMAND} restore "${fullPath}"`, this.profileDir);
+        }
         this.uploadAndAddAdapter('admin');
         // reconfigure admin instance (only listen to local IP address)
         this.log.notice('Configure admin.0');
@@ -776,6 +786,12 @@ class DevServer {
     uploadAndAddAdapter(name) {
         // upload the already installed adapter
         this.uploadAdapter(name);
+        const command = `${IOBROKER_COMMAND} list instances`;
+        const instances = this.getExecSyncOutput(command, this.profileDir);
+        if (instances.includes(`system.adapter.${name}.0 `)) {
+            this.log.info(`Instance ${name}.0 already exists, not adding it again`);
+            return;
+        }
         // create an instance
         this.log.notice(`Add ${name}.0`);
         this.execSync(`${IOBROKER_COMMAND} add ${name} 0`, this.profileDir);
@@ -786,9 +802,7 @@ class DevServer {
     }
     async installLocalAdapter() {
         this.log.notice(`Install local iobroker.${this.adapterName}`);
-        const command = 'npm pack';
-        this.log.debug(`${this.rootDir}> ${command}`);
-        const filename = cp.execSync(command, { cwd: this.rootDir, encoding: 'ascii' }).trim();
+        const filename = this.getExecSyncOutput('npm pack', this.rootDir).trim();
         this.log.info(`Packed to ${filename}`);
         const fullPath = path.join(this.rootDir, filename);
         this.execSync(`npm install --no-save "${fullPath}"`, this.profileDir);
@@ -798,6 +812,10 @@ class DevServer {
         options = { cwd: cwd, stdio: 'inherit', ...options };
         this.log.debug(`${cwd}> ${command}`);
         return cp.execSync(command, options);
+    }
+    getExecSyncOutput(command, cwd) {
+        this.log.debug(`${cwd}> ${command}`);
+        return cp.execSync(command, { cwd, encoding: 'ascii' });
     }
     spawn(command, args, cwd, options) {
         this.log.debug(`${cwd}> ${command} ${args.join(' ')}`);
