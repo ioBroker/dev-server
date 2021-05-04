@@ -10,6 +10,7 @@
 - (UncleSamSwiss) Added support for different profiles (#39)
 - (UncleSamSwiss) Added possibility to create a backup (#28)
 - (UncleSamSwiss) Added possibility to restore a backup file during `dev-server setup` (#28)
+- (UncleSamSwiss) Added automatic installation of adapter dependencies (#8)
 
 ## 0.1.4 (2021-04-14)
 
