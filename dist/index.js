@@ -239,6 +239,7 @@ class DevServer {
         this.checkSetup();
         this.log.notice('Updating everything...');
         this.execSync('npm update --loglevel error', this.profileDir);
+        this.uploadAdapter('admin');
         await this.installLocalAdapter();
         this.uploadAdapter(this.adapterName);
         this.log.box(`dev-server was sucessfully updated.`);

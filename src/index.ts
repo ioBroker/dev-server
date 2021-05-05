@@ -316,7 +316,10 @@ class DevServer {
   private async update(): Promise<void> {
     this.checkSetup();
     this.log.notice('Updating everything...');
+
     this.execSync('npm update --loglevel error', this.profileDir);
+    this.uploadAdapter('admin');
+
     await this.installLocalAdapter();
     this.uploadAdapter(this.adapterName);
 
