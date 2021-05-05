@@ -13,6 +13,7 @@
 - (UncleSamSwiss) Added possibility to restore a backup file during `dev-server setup` (#28)
 - (UncleSamSwiss) Added automatic installation of adapter dependencies (#8)
 - (UncleSamSwiss) Added version check when starting dev-server
+- (UncleSamSwiss) Added option to specify the ioBroker.admin version to use
 
 ## 0.1.4 (2021-04-14)
 

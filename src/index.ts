@@ -49,6 +49,11 @@ interface DevServerConfig {
   adminPort: number;
 }
 
+interface DependencyVersions {
+  jsController: string;
+  admin: string;
+}
+
 class DevServer {
   private readonly log = new Logger();
   private rootDir!: string;
@@ -78,6 +83,12 @@ class DevServer {
             default: 'latest',
             description: 'Define which version of js-controller to be used',
           },
+          admin: {
+            type: 'string',
+            alias: 'a',
+            default: 'latest',
+            description: 'Define which version of admin to be used',
+          },
           backupFile: {
             type: 'string',
             alias: 'b',
@@ -85,7 +96,13 @@ class DevServer {
           },
           force: { type: 'boolean', hidden: true },
         },
-        async (args) => await this.setup(args.adminPort, args.jsController, args.backupFile, !!args.force),
+        async (args) =>
+          await this.setup(
+            args.adminPort,
+            { jsController: args.jsController, admin: args.admin },
+            args.backupFile,
+            !!args.force,
+          ),
       )
       .command(
         ['update [profile]', 'ud'],
@@ -274,7 +291,12 @@ class DevServer {
 
   ////////////////// Command Handlers //////////////////
 
-  async setup(adminPort: number, jsController: string, backupFile?: string, force?: boolean): Promise<void> {
+  async setup(
+    adminPort: number,
+    dependencies: DependencyVersions,
+    backupFile?: string,
+    force?: boolean,
+  ): Promise<void> {
     if (force) {
       this.log.notice(`Deleting ${this.profileDir}`);
       await this.rimraf(this.profileDir);
@@ -286,7 +308,7 @@ class DevServer {
       return;
     }
 
-    await this.setupDevServer(adminPort, jsController, backupFile);
+    await this.setupDevServer(adminPort, dependencies, backupFile);
 
     this.log.box(`dev-server was sucessfully set up in\n${this.profileDir}.`);
   }
@@ -830,7 +852,7 @@ class DevServer {
     this.log.box(`Debugger is now available on process id ${debigPid}`);
   }
 
-  async setupDevServer(adminPort: number, jsController: string, backupFile?: string): Promise<void> {
+  async setupDevServer(adminPort: number, dependencies: DependencyVersions, backupFile?: string): Promise<void> {
     this.log.notice(`Setting up in ${this.profileDir}`);
 
     // create the data directory
@@ -915,8 +937,8 @@ class DevServer {
       version: '1.0.0',
       private: true,
       dependencies: {
-        'iobroker.js-controller': jsController,
-        'iobroker.admin': 'latest',
+        'iobroker.js-controller': dependencies.jsController,
+        'iobroker.admin': dependencies.admin,
       },
       'dev-server': {
         adminPort: adminPort,
@@ -948,12 +970,12 @@ class DevServer {
 
     // installing any dependencies
     const { common } = await readJson(path.join(this.rootDir, 'io-package.json'));
-    const dependencies = [
+    const adapterDeps = [
       ...this.getDependencies(common.dependencies),
       ...this.getDependencies(common.globalDependencies),
     ];
-    this.log.debug(`Found ${dependencies.length} adapter dependencies`);
-    for (const adapter of dependencies) {
+    this.log.debug(`Found ${adapterDeps.length} adapter dependencies`);
+    for (const adapter of adapterDeps) {
       try {
         await this.installRepoAdapter(adapter);
       } catch (error) {

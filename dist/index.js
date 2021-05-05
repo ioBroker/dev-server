@@ -73,13 +73,19 @@ class DevServer {
                 default: 'latest',
                 description: 'Define which version of js-controller to be used',
             },
+            admin: {
+                type: 'string',
+                alias: 'a',
+                default: 'latest',
+                description: 'Define which version of admin to be used',
+            },
             backupFile: {
                 type: 'string',
                 alias: 'b',
                 description: 'Provide an ioBroker backup file to restore in this dev-server',
             },
             force: { type: 'boolean', hidden: true },
-        }, async (args) => await this.setup(args.adminPort, args.jsController, args.backupFile, !!args.force))
+        }, async (args) => await this.setup(args.adminPort, { jsController: args.jsController, admin: args.admin }, args.backupFile, !!args.force))
             .command(['update [profile]', 'ud'], 'Update ioBroker and its dependencies to the latest versions', {}, async () => await this.update())
             .command(['run [profile]', 'r'], 'Run ioBroker dev-server, the adapter will not run, but you may test the Admin UI with hot-reload', {}, async () => await this.run())
             .command(['watch [profile]', 'w'], 'Run ioBroker dev-server and start the adapter in "watch" mode. The adapter will automatically restart when its source code changes. You may attach a debugger to the running adapter.', {}, async () => await this.watch())
@@ -216,7 +222,7 @@ class DevServer {
         return port;
     }
     ////////////////// Command Handlers //////////////////
-    async setup(adminPort, jsController, backupFile, force) {
+    async setup(adminPort, dependencies, backupFile, force) {
         if (force) {
             this.log.notice(`Deleting ${this.profileDir}`);
             await this.rimraf(this.profileDir);
@@ -226,7 +232,7 @@ class DevServer {
             this.log.debug(`Use --force to set it up from scratch (all data will be lost).`);
             return;
         }
-        await this.setupDevServer(adminPort, jsController, backupFile);
+        await this.setupDevServer(adminPort, dependencies, backupFile);
         this.log.box(`dev-server was sucessfully set up in\n${this.profileDir}.`);
     }
     async update() {
@@ -696,7 +702,7 @@ class DevServer {
         const debigPid = await this.waitForNodeChildProcess(parseInt(match[1]));
         this.log.box(`Debugger is now available on process id ${debigPid}`);
     }
-    async setupDevServer(adminPort, jsController, backupFile) {
+    async setupDevServer(adminPort, dependencies, backupFile) {
         this.log.notice(`Setting up in ${this.profileDir}`);
         // create the data directory
         const dataDir = path.join(this.profileDir, 'iobroker-data');
@@ -778,8 +784,8 @@ class DevServer {
             version: '1.0.0',
             private: true,
             dependencies: {
-                'iobroker.js-controller': jsController,
-                'iobroker.admin': 'latest',
+                'iobroker.js-controller': dependencies.jsController,
+                'iobroker.admin': dependencies.admin,
             },
             'dev-server': {
                 adminPort: adminPort,
@@ -802,12 +808,12 @@ class DevServer {
         this.uploadAndAddAdapter(this.adapterName);
         // installing any dependencies
         const { common } = await fs_extra_1.readJson(path.join(this.rootDir, 'io-package.json'));
-        const dependencies = [
+        const adapterDeps = [
             ...this.getDependencies(common.dependencies),
             ...this.getDependencies(common.globalDependencies),
         ];
-        this.log.debug(`Found ${dependencies.length} adapter dependencies`);
-        for (const adapter of dependencies) {
+        this.log.debug(`Found ${adapterDeps.length} adapter dependencies`);
+        for (const adapter of adapterDeps) {
             try {
                 await this.installRepoAdapter(adapter);
             }

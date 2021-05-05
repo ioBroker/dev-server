@@ -98,6 +98,8 @@ The following options are available:
 
 `--jsController <version>` Define which version of js-controller to be used (default: "latest").
 
+`--admin <version>` Define which version of admin to be used (default: "latest").
+
 `--backupFile <filename>` Provide an ioBroker backup file to restore in this dev-server. Use this option to populate the dev-server with data (and possibly other adapters).
 
 ### `dev-server run`
