@@ -7,6 +7,7 @@
 ## __WORK IN PROGRESS__
 
 - (UncleSamSwiss) **Breaking Change:** it is no longer possible to use `dev-server` without providing a command. Use `dev-server run` for the same behavior as before.
+- (AlCalzone) Made build script handling more flexible (#23)
 - (UncleSamSwiss) Added support for different profiles (#39)
 - (UncleSamSwiss) Added possibility to create a backup (#28)
 - (UncleSamSwiss) Added possibility to restore a backup file during `dev-server setup` (#28)
