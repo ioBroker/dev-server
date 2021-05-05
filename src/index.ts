@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import yargs = require('yargs/yargs');
+import axios from 'axios';
 import browserSync from 'browser-sync';
 import { bold, gray, yellow } from 'chalk';
 import * as cp from 'child_process';
@@ -26,6 +27,7 @@ import nodemon from 'nodemon';
 import { hostname } from 'os';
 import * as path from 'path';
 import psTree from 'ps-tree';
+import { gt } from 'semver';
 import { Mapping, RawSourceMap, SourceMapGenerator } from 'source-map';
 import { Logger } from './logger';
 import chalk = require('chalk');
@@ -142,9 +144,38 @@ class DevServer {
         },
         root: { type: 'string', alias: 'r', hidden: true, default: '.' },
       })
+      .middleware(async () => await this.checkVersion())
       .middleware(async (argv) => await this.setDirectories(argv))
       .wrap(Math.min(100, parser.terminalWidth()))
       .help().argv;
+  }
+
+  private async checkVersion(): Promise<void> {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { name, version: localVersion } = require('../package.json');
+      const {
+        data: { version: releaseVersion },
+      } = await axios.get(`https://cdn.jsdelivr.net/npm/${name}/package.json`, { timeout: 1000 });
+      if (gt(releaseVersion, localVersion)) {
+        this.log.debug(`Found update from ${localVersion} to ${releaseVersion}`);
+        const response = await prompt<{ update: boolean }>({
+          name: 'update',
+          type: 'confirm',
+          message: `Version ${releaseVersion} of ${name} is available.\nWould you like to exit and update?`,
+          initial: true,
+        });
+        if (response.update) {
+          this.log.box(
+            `Please update ${name} manually and restart your last command afterwards.\n` +
+              `If you installed ${name} globally, you can simply call:\n\nnpm install --global ${name}`,
+          );
+          process.exit(0);
+        } else {
+          this.log.warn(`We strongly recommend to update ${name} as soon as possible.`);
+        }
+      }
+    } catch (error) {}
   }
 
   private async setDirectories(argv: {

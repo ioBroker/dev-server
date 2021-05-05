@@ -27,6 +27,7 @@
     "@types/nodemon": "^1.19.0",
     "@types/ps-tree": "^1.1.0",
     "@types/rimraf": "^3.0.0",
+    "@types/semver": "^7.3.5",
     "@types/table": "^6.3.2",
     "@types/yargs": "^16.0.1",
     "@typescript-eslint/eslint-plugin": "^4.22.0",
@@ -41,6 +42,7 @@
   },
   "dependencies": {
     "acorn": "^8.2.2",
+    "axios": "^0.21.1",
     "boxen": "^5.0.1",
     "browser-sync": "^2.26.14",
     "bs-html-injector": "^3.0.3",
@@ -54,6 +56,7 @@
     "nodemon": "^2.0.7",
     "ps-tree": "^1.2.0",
     "rimraf": "^3.0.2",
+    "semver": "^7.3.5",
     "source-map": "^0.7.3",
     "table": "^6.6.0",
     "yargs": "^16.2.0"

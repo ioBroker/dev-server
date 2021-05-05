@@ -24,6 +24,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const yargs = require("yargs/yargs");
+const axios_1 = __importDefault(require("axios"));
 const browser_sync_1 = __importDefault(require("browser-sync"));
 const chalk_1 = require("chalk");
 const cp = __importStar(require("child_process"));
@@ -37,6 +38,7 @@ const nodemon_1 = __importDefault(require("nodemon"));
 const os_1 = require("os");
 const path = __importStar(require("path"));
 const ps_tree_1 = __importDefault(require("ps-tree"));
+const semver_1 = require("semver");
 const source_map_1 = require("source-map");
 const logger_1 = require("./logger");
 const chalk = require("chalk");
@@ -100,9 +102,35 @@ class DevServer {
             },
             root: { type: 'string', alias: 'r', hidden: true, default: '.' },
         })
+            .middleware(async () => await this.checkVersion())
             .middleware(async (argv) => await this.setDirectories(argv))
             .wrap(Math.min(100, parser.terminalWidth()))
             .help().argv;
+    }
+    async checkVersion() {
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { name, version: localVersion } = require('../package.json');
+            const { data: { version: releaseVersion }, } = await axios_1.default.get(`https://cdn.jsdelivr.net/npm/${name}/package.json`, { timeout: 1000 });
+            if (semver_1.gt(releaseVersion, localVersion)) {
+                this.log.debug(`Found update from ${localVersion} to ${releaseVersion}`);
+                const response = await enquirer_1.prompt({
+                    name: 'update',
+                    type: 'confirm',
+                    message: `Version ${releaseVersion} of ${name} is available.\nWould you like to exit and update?`,
+                    initial: true,
+                });
+                if (response.update) {
+                    this.log.box(`Please update ${name} manually and restart your last command afterwards.\n` +
+                        `If you installed ${name} globally, you can simply call:\n\nnpm install --global ${name}`);
+                    process.exit(0);
+                }
+                else {
+                    this.log.warn(`We strongly recommend to update ${name} as soon as possible.`);
+                }
+            }
+        }
+        catch (error) { }
     }
     async setDirectories(argv) {
         this.rootDir = path.resolve(argv.root);
