@@ -330,22 +330,36 @@ class DevServer {
 
   async run(): Promise<void> {
     this.checkSetup();
+    await this.startJsController();
     await this.startServer();
   }
 
   async watch(): Promise<void> {
     this.checkSetup();
     await this.installLocalAdapter();
-    await this.startServer();
-    if (!this.isJSController()) await this.startAdapterWatch();
+    if (this.isJSController()) {
+      // this watches actually js-controller
+      await this.startAdapterWatch();
+      await this.startServer();
+    } else {
+      await this.startJsController();
+      await this.startServer();
+      await this.startAdapterWatch();
+    }
   }
 
   async debug(wait: boolean): Promise<void> {
     this.checkSetup();
     await this.installLocalAdapter();
-    if (!this.isJSController()) await this.copySourcemaps();
-    await this.startServer();
-    if (!this.isJSController()) await this.startAdapterDebug(wait);
+    await this.copySourcemaps();
+    if (this.isJSController()) {
+      await this.startJsControllerDebug(wait);
+      await this.startServer();
+    } else {
+      await this.startJsController();
+      await this.startServer();
+      await this.startAdapterDebug(wait);
+    }
   }
 
   async upload(): Promise<void> {
@@ -422,6 +436,32 @@ class DevServer {
     return existsSync(jsControllerDir);
   }
 
+  async startJsController(): Promise<void> {
+    const proc = this.spawn('node', ['node_modules/iobroker.js-controller/controller.js'], this.profileDir);
+    proc.on('exit', (code) => {
+      console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
+      process.exit(-1);
+    });
+  }
+
+  private async startJsControllerDebug(wait: boolean): Promise<void> {
+    this.log.notice(`Starting debugger for ${this.adapterName}`);
+
+    const nodeArgs = ['node_modules/iobroker.js-controller/controller.js'];
+    if (wait) {
+      nodeArgs.unshift('--inspect-brk');
+    } else {
+      nodeArgs.unshift('--inspect');
+    }
+    const proc = this.spawn('node', nodeArgs, this.profileDir);
+    proc.on('exit', (code) => {
+      console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
+      process.exit(-1);
+    });
+
+    this.log.box(`Debugger is now ${wait ? 'waiting' : 'available'} on process id ${proc.pid}`);
+  }
+
   async startServer(): Promise<void> {
     this.log.notice(`Running inside ${this.profileDir}`);
 
@@ -430,16 +470,6 @@ class DevServer {
     if (!config) {
       throw new Error(`Couldn't find dev-server configuration in package.json`);
     }
-
-    const nodeArgs = ['node_modules/iobroker.js-controller/controller.js'];
-    if (this.isJSController()) {
-      nodeArgs.unshift('--inspect');
-    }
-    const proc = this.spawn('node', nodeArgs, this.profileDir);
-    proc.on('exit', (code) => {
-      console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
-      process.exit(-1);
-    });
 
     // figure out if we need parcel (React)
     if (!this.isJSController()) {
@@ -804,6 +834,8 @@ class DevServer {
       isExiting = true;
     });
 
+    const args = this.isJSController() ? [] : ['--debug', '0'];
+
     nodemon({
       script: script,
       stdin: false,
@@ -815,7 +847,8 @@ class DevServer {
       ignoreRoot: [],
       delay: 2000,
       execMap: { js: 'node --inspect' },
-      args: ['--debug', '0'],
+      signal: 'SIGINT' as any, // wrong type definition: signal is of type "string?"
+      args,
     });
     nodemon
       .on('log', (msg: { type: 'log' | 'info' | 'status' | 'detail' | 'fail' | 'error'; message: string }) => {
@@ -849,6 +882,12 @@ class DevServer {
       .on('quit', () => {
         this.log.error('nodemon has exited');
         process.exit(-2);
+      })
+      .on('crash', () => {
+        if (this.isJSController()) {
+          this.log.debug('nodemon has exited as expected');
+          process.exit(-1);
+        }
       });
   }
 
