@@ -49,10 +49,8 @@ interface DevServerConfig {
   adminPort: number;
 }
 
-interface DependencyVersions {
-  jsController?: string;
-  admin: string;
-}
+type CoreDependency = 'iobroker.js-controller' | 'iobroker.admin';
+type DependencyVersions = Partial<Record<CoreDependency, string>>;
 
 class DevServer {
   private readonly log = new Logger();
@@ -99,7 +97,7 @@ class DevServer {
         async (args) =>
           await this.setup(
             args.adminPort,
-            { jsController: args.jsController, admin: args.admin },
+            { ['iobroker.js-controller']: args.jsController, ['iobroker.admin']: args.admin },
             args.backupFile,
             !!args.force,
           ),
@@ -947,7 +945,7 @@ class DevServer {
     // create the package file
     if (this.isJSController()) {
       // if this dev-server is used to debug JS-Controller, don't install a published version
-      delete dependencies.jsController;
+      delete dependencies['iobroker.js-controller'];
     }
     const pkg = {
       name: `dev-server.${this.adapterName}`,

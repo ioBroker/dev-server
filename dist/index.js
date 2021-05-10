@@ -85,7 +85,7 @@ class DevServer {
                 description: 'Provide an ioBroker backup file to restore in this dev-server',
             },
             force: { type: 'boolean', hidden: true },
-        }, async (args) => await this.setup(args.adminPort, { jsController: args.jsController, admin: args.admin }, args.backupFile, !!args.force))
+        }, async (args) => await this.setup(args.adminPort, { ['iobroker.js-controller']: args.jsController, ['iobroker.admin']: args.admin }, args.backupFile, !!args.force))
             .command(['update [profile]', 'ud'], 'Update ioBroker and its dependencies to the latest versions', {}, async () => await this.update())
             .command(['run [profile]', 'r'], 'Run ioBroker dev-server, the adapter will not run, but you may test the Admin UI with hot-reload', {}, async () => await this.run())
             .command(['watch [profile]', 'w'], 'Run ioBroker dev-server and start the adapter in "watch" mode. The adapter will automatically restart when its source code changes. You may attach a debugger to the running adapter.', {}, async () => await this.watch())
@@ -796,7 +796,7 @@ class DevServer {
         // create the package file
         if (this.isJSController()) {
             // if this dev-server is used to debug JS-Controller, don't install a published version
-            delete dependencies.jsController;
+            delete dependencies['iobroker.js-controller'];
         }
         const pkg = {
             name: `dev-server.${this.adapterName}`,
