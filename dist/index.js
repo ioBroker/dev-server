@@ -873,7 +873,7 @@ class DevServer {
         const filename = this.getExecSyncOutput('npm pack', this.rootDir).trim();
         this.log.info(`Packed to ${filename}`);
         const fullPath = path.join(this.rootDir, filename);
-        this.execSync(`npm install --no-save "${fullPath}"`, this.profileDir);
+        this.execSync(`npm install "${fullPath}"`, this.profileDir);
         await this.rimraf(fullPath);
     }
     async installRepoAdapter(adapterName) {
