@@ -250,23 +250,36 @@ class DevServer {
     }
     async run() {
         this.checkSetup();
+        await this.startJsController();
         await this.startServer();
     }
     async watch() {
         this.checkSetup();
         await this.installLocalAdapter();
-        await this.startServer();
-        if (!this.isJSController())
+        if (this.isJSController()) {
+            // this watches actually js-controller
             await this.startAdapterWatch();
+            await this.startServer();
+        }
+        else {
+            await this.startJsController();
+            await this.startServer();
+            await this.startAdapterWatch();
+        }
     }
     async debug(wait) {
         this.checkSetup();
         await this.installLocalAdapter();
-        if (!this.isJSController())
-            await this.copySourcemaps();
-        await this.startServer();
-        if (!this.isJSController())
+        await this.copySourcemaps();
+        if (this.isJSController()) {
+            await this.startJsControllerDebug(wait);
+            await this.startServer();
+        }
+        else {
+            await this.startJsController();
+            await this.startServer();
             await this.startAdapterDebug(wait);
+        }
     }
     async upload() {
         this.checkSetup();
@@ -328,15 +341,20 @@ class DevServer {
         const jsControllerDir = path.join(this.profileDir, 'node_modules', CORE_MODULE);
         return fs_extra_1.existsSync(jsControllerDir);
     }
-    async startServer() {
-        this.log.notice(`Running inside ${this.profileDir}`);
-        const tempPkg = await fs_extra_1.readJson(path.join(this.profileDir, 'package.json'));
-        const config = tempPkg['dev-server'];
-        if (!config) {
-            throw new Error(`Couldn't find dev-server configuration in package.json`);
-        }
+    async startJsController() {
+        const proc = this.spawn('node', ['node_modules/iobroker.js-controller/controller.js'], this.profileDir);
+        proc.on('exit', (code) => {
+            console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
+            process.exit(-1);
+        });
+    }
+    async startJsControllerDebug(wait) {
+        this.log.notice(`Starting debugger for ${this.adapterName}`);
         const nodeArgs = ['node_modules/iobroker.js-controller/controller.js'];
-        if (this.isJSController()) {
+        if (wait) {
+            nodeArgs.unshift('--inspect-brk');
+        }
+        else {
             nodeArgs.unshift('--inspect');
         }
         const proc = this.spawn('node', nodeArgs, this.profileDir);
@@ -344,6 +362,15 @@ class DevServer {
             console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
             process.exit(-1);
         });
+        this.log.box(`Debugger is now ${wait ? 'waiting' : 'available'} on process id ${proc.pid}`);
+    }
+    async startServer() {
+        this.log.notice(`Running inside ${this.profileDir}`);
+        const tempPkg = await fs_extra_1.readJson(path.join(this.profileDir, 'package.json'));
+        const config = tempPkg['dev-server'];
+        if (!config) {
+            throw new Error(`Couldn't find dev-server configuration in package.json`);
+        }
         // figure out if we need parcel (React)
         if (!this.isJSController()) {
             const pkg = await this.readPackageJson();
@@ -663,6 +690,7 @@ class DevServer {
         process.on('SIGINT', () => {
             isExiting = true;
         });
+        const args = this.isJSController() ? [] : ['--debug', '0'];
         nodemon_1.default({
             script: script,
             stdin: false,
@@ -674,7 +702,8 @@ class DevServer {
             ignoreRoot: [],
             delay: 2000,
             execMap: { js: 'node --inspect' },
-            args: ['--debug', '0'],
+            signal: 'SIGINT',
+            args,
         });
         nodemon_1.default
             .on('log', (msg) => {
@@ -707,6 +736,12 @@ class DevServer {
             .on('quit', () => {
             this.log.error('nodemon has exited');
             process.exit(-2);
+        })
+            .on('crash', () => {
+            if (this.isJSController()) {
+                this.log.debug('nodemon has exited as expected');
+                process.exit(-1);
+            }
         });
     }
     async handleNodemonDetailMsg(message) {
