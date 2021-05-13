@@ -85,7 +85,7 @@ class DevServer {
                 description: 'Provide an ioBroker backup file to restore in this dev-server',
             },
             force: { type: 'boolean', hidden: true },
-        }, async (args) => await this.setup(args.adminPort, { jsController: args.jsController, admin: args.admin }, args.backupFile, !!args.force))
+        }, async (args) => await this.setup(args.adminPort, { ['iobroker.js-controller']: args.jsController, ['iobroker.admin']: args.admin }, args.backupFile, !!args.force))
             .command(['update [profile]', 'ud'], 'Update ioBroker and its dependencies to the latest versions', {}, async () => await this.update())
             .command(['run [profile]', 'r'], 'Run ioBroker dev-server, the adapter will not run, but you may test the Admin UI with hot-reload', {}, async () => await this.run())
             .command(['watch [profile]', 'w'], 'Run ioBroker dev-server and start the adapter in "watch" mode. The adapter will automatically restart when its source code changes. You may attach a debugger to the running adapter.', {}, async () => await this.watch())
@@ -211,6 +211,9 @@ class DevServer {
             process.exit(-1);
         }
     }
+    isJSController() {
+        return this.adapterName === 'js-controller';
+    }
     readPackageJson() {
         return fs_extra_1.readJson(path.join(this.rootDir, 'package.json'));
     }
@@ -241,30 +244,48 @@ class DevServer {
         this.execSync('npm update --loglevel error', this.profileDir);
         this.uploadAdapter('admin');
         await this.installLocalAdapter();
-        this.uploadAdapter(this.adapterName);
+        if (!this.isJSController())
+            this.uploadAdapter(this.adapterName);
         this.log.box(`dev-server was sucessfully updated.`);
     }
     async run() {
         this.checkSetup();
+        await this.startJsController();
         await this.startServer();
     }
     async watch() {
         this.checkSetup();
         await this.installLocalAdapter();
-        await this.startServer();
-        await this.startAdapterWatch();
+        if (this.isJSController()) {
+            // this watches actually js-controller
+            await this.startAdapterWatch();
+            await this.startServer();
+        }
+        else {
+            await this.startJsController();
+            await this.startServer();
+            await this.startAdapterWatch();
+        }
     }
     async debug(wait) {
         this.checkSetup();
         await this.installLocalAdapter();
         await this.copySourcemaps();
-        await this.startServer();
-        await this.startAdapterDebug(wait);
+        if (this.isJSController()) {
+            await this.startJsControllerDebug(wait);
+            await this.startServer();
+        }
+        else {
+            await this.startJsController();
+            await this.startServer();
+            await this.startAdapterDebug(wait);
+        }
     }
     async upload() {
         this.checkSetup();
         await this.installLocalAdapter();
-        this.uploadAdapter(this.adapterName);
+        if (!this.isJSController())
+            this.uploadAdapter(this.adapterName);
         this.log.box(`The latest content of iobroker.${this.adapterName} was uploaded to ${this.profileDir}.`);
     }
     async backup(filename) {
@@ -320,6 +341,29 @@ class DevServer {
         const jsControllerDir = path.join(this.profileDir, 'node_modules', CORE_MODULE);
         return fs_extra_1.existsSync(jsControllerDir);
     }
+    async startJsController() {
+        const proc = this.spawn('node', ['node_modules/iobroker.js-controller/controller.js'], this.profileDir);
+        proc.on('exit', (code) => {
+            console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
+            process.exit(-1);
+        });
+    }
+    async startJsControllerDebug(wait) {
+        this.log.notice(`Starting debugger for ${this.adapterName}`);
+        const nodeArgs = ['node_modules/iobroker.js-controller/controller.js'];
+        if (wait) {
+            nodeArgs.unshift('--inspect-brk');
+        }
+        else {
+            nodeArgs.unshift('--inspect');
+        }
+        const proc = this.spawn('node', nodeArgs, this.profileDir);
+        proc.on('exit', (code) => {
+            console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
+            process.exit(-1);
+        });
+        this.log.box(`Debugger is now ${wait ? 'waiting' : 'available'} on process id ${proc.pid}`);
+    }
     async startServer() {
         this.log.notice(`Running inside ${this.profileDir}`);
         const tempPkg = await fs_extra_1.readJson(path.join(this.profileDir, 'package.json'));
@@ -327,22 +371,19 @@ class DevServer {
         if (!config) {
             throw new Error(`Couldn't find dev-server configuration in package.json`);
         }
-        const proc = this.spawn('node', ['node_modules/iobroker.js-controller/controller.js'], this.profileDir);
-        proc.on('exit', (code) => {
-            console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
-            process.exit(-1);
-        });
         // figure out if we need parcel (React)
-        const pkg = await this.readPackageJson();
-        const scripts = pkg.scripts;
-        if (scripts) {
-            if (scripts['watch:react']) {
-                // use React with default script name
-                await this.startReact();
-            }
-            else if (scripts['watch:parcel']) {
-                // use React with legacy script name
-                await this.startReact('watch:parcel');
+        if (!this.isJSController()) {
+            const pkg = await this.readPackageJson();
+            const scripts = pkg.scripts;
+            if (scripts) {
+                if (scripts['watch:react']) {
+                    // use React with default script name
+                    await this.startReact();
+                }
+                else if (scripts['watch:parcel']) {
+                    // use React with legacy script name
+                    await this.startReact('watch:parcel');
+                }
             }
         }
         this.startBrowserSync(this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET));
@@ -649,6 +690,7 @@ class DevServer {
         process.on('SIGINT', () => {
             isExiting = true;
         });
+        const args = this.isJSController() ? [] : ['--debug', '0'];
         nodemon_1.default({
             script: script,
             stdin: false,
@@ -660,7 +702,8 @@ class DevServer {
             ignoreRoot: [],
             delay: 2000,
             execMap: { js: 'node --inspect' },
-            args: ['--debug', '0'],
+            signal: 'SIGINT',
+            args,
         });
         nodemon_1.default
             .on('log', (msg) => {
@@ -693,6 +736,12 @@ class DevServer {
             .on('quit', () => {
             this.log.error('nodemon has exited');
             process.exit(-2);
+        })
+            .on('crash', () => {
+            if (this.isJSController()) {
+                this.log.debug('nodemon has exited as expected');
+                process.exit(-1);
+            }
         });
     }
     async handleNodemonDetailMsg(message) {
@@ -780,14 +829,15 @@ class DevServer {
         };
         await fs_extra_1.writeJson(path.join(dataDir, 'iobroker.json'), config, { spaces: 2 });
         // create the package file
+        if (this.isJSController()) {
+            // if this dev-server is used to debug JS-Controller, don't install a published version
+            delete dependencies['iobroker.js-controller'];
+        }
         const pkg = {
             name: `dev-server.${this.adapterName}`,
             version: '1.0.0',
             private: true,
-            dependencies: {
-                'iobroker.js-controller': dependencies.jsController,
-                'iobroker.admin': dependencies.admin,
-            },
+            dependencies,
             'dev-server': {
                 adminPort: adminPort,
             },
@@ -800,30 +850,35 @@ class DevServer {
             this.log.notice(`Restoring backup from ${fullPath}`);
             this.execSync(`${IOBROKER_COMMAND} restore "${fullPath}"`, this.profileDir);
         }
+        if (this.isJSController()) {
+            await this.installLocalAdapter();
+        }
         this.uploadAndAddAdapter('admin');
         // reconfigure admin instance (only listen to local IP address)
         this.log.notice('Configure admin.0');
         this.execSync(`${IOBROKER_COMMAND} set admin.0 --port ${this.getPort(adminPort, HIDDEN_ADMIN_PORT_OFFSET)} --bind 127.0.0.1`, this.profileDir);
-        // install local adapter
-        await this.installLocalAdapter();
-        this.uploadAndAddAdapter(this.adapterName);
-        // installing any dependencies
-        const { common } = await fs_extra_1.readJson(path.join(this.rootDir, 'io-package.json'));
-        const adapterDeps = [
-            ...this.getDependencies(common.dependencies),
-            ...this.getDependencies(common.globalDependencies),
-        ];
-        this.log.debug(`Found ${adapterDeps.length} adapter dependencies`);
-        for (const adapter of adapterDeps) {
-            try {
-                await this.installRepoAdapter(adapter);
+        if (!this.isJSController()) {
+            // install local adapter
+            await this.installLocalAdapter();
+            this.uploadAndAddAdapter(this.adapterName);
+            // installing any dependencies
+            const { common } = await fs_extra_1.readJson(path.join(this.rootDir, 'io-package.json'));
+            const adapterDeps = [
+                ...this.getDependencies(common.dependencies),
+                ...this.getDependencies(common.globalDependencies),
+            ];
+            this.log.debug(`Found ${adapterDeps.length} adapter dependencies`);
+            for (const adapter of adapterDeps) {
+                try {
+                    await this.installRepoAdapter(adapter);
+                }
+                catch (error) {
+                    this.log.debug(`Couldn't install iobroker.${adapter}: ${error}`);
+                }
             }
-            catch (error) {
-                this.log.debug(`Couldn't install iobroker.${adapter}: ${error}`);
-            }
+            this.log.notice(`Stop ${this.adapterName}.0`);
+            this.execSync(`${IOBROKER_COMMAND} stop ${this.adapterName} 0`, this.profileDir);
         }
-        this.log.notice(`Stop ${this.adapterName}.0`);
-        this.execSync(`${IOBROKER_COMMAND} stop ${this.adapterName} 0`, this.profileDir);
         this.log.notice('Disable statistics reporting');
         this.execSync(`${IOBROKER_COMMAND} object set system.config common.diag="none"`, this.profileDir);
         this.log.notice('Disable license confirmation');
@@ -853,7 +908,7 @@ class DevServer {
         const filename = this.getExecSyncOutput('npm pack', this.rootDir).trim();
         this.log.info(`Packed to ${filename}`);
         const fullPath = path.join(this.rootDir, filename);
-        this.execSync(`npm install --no-save "${fullPath}"`, this.profileDir);
+        this.execSync(`npm install "${fullPath}"`, this.profileDir);
         await this.rimraf(fullPath);
     }
     async installRepoAdapter(adapterName) {
