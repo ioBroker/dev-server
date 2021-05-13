@@ -26,6 +26,10 @@ dev-server watch
 - Multiple instances of dev-server can run in parallel (using different ports)
 - All ports are only available locally (127.0.0.1)
 
+### Debugging ioBroker.js-controller
+
+It is possible to run `dev-server` in the root directory of your local copy of [ioBroker.js-controller](https://github.com/ioBroker/ioBroker.js-controller/). This way you can debug and work on js-controller itself; `watch`, `debug` and `debug --wait` are all supported.
+
 ## Setup
 
 You need to install the `dev-server` package as well as set it up it in the adapter directory.

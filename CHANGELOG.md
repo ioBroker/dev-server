@@ -4,6 +4,10 @@
 	## __WORK IN PROGRESS__
 -->
 
+## __WORK IN PROGRESS__
+
+- (AlCalzone & UncleSamSwiss) Added support for debugging `js-controller` (including `watch` and `debug --wait`)
+
 ## 0.2.1 (2021-05-05)
 
 - (UncleSamSwiss) Fixed issue with `dev-server update` not properly updating admin
