@@ -4,7 +4,7 @@
 	## __WORK IN PROGRESS__
 -->
 
-## __WORK IN PROGRESS__
+## 0.3.0 (2021-05-13)
 
 - (AlCalzone & UncleSamSwiss) Added support for debugging `js-controller` (including `watch` and `debug --wait`)
 
