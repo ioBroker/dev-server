@@ -47,7 +47,7 @@
     "browser-sync": "^2.26.14",
     "bs-html-injector": "^3.0.3",
     "chalk": "^4.1.1",
-    "chokidar": "^3.5.1",
+    "chokidar": "^3.5.2",
     "enquirer": "^2.3.6",
     "express": "^4.17.1",
     "fast-glob": "^3.2.5",
