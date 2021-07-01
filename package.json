@@ -19,7 +19,7 @@
   "author": "UncleSamSwiss",
   "license": "MIT",
   "devDependencies": {
-    "@alcalzone/release-script": "^1.10.0",
+    "@alcalzone/release-script": "^2.1.0",
     "@types/browser-sync": "^2.26.1",
     "@types/express": "^4.17.12",
     "@types/fs-extra": "^9.0.11",
