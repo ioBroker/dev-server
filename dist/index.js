@@ -571,6 +571,9 @@ class DevServer {
             console.error(chalk.yellow(`Adapter debugging exited with code ${code}`));
             process.exit(-1);
         });
+        if (!proc.pid) {
+            throw new Error(`PID of adapter debugger unknown!`);
+        }
         const debugPid = await this.waitForNodeChildProcess(proc.pid);
         this.log.box(`Debugger is now ${wait ? 'waiting' : 'available'} on process id ${debugPid}`);
     }
