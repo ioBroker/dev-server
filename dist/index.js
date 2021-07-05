@@ -894,6 +894,10 @@ class DevServer {
         this.execSync(`${IOBROKER_COMMAND} object set system.config common.licenseConfirmed=true`, this.profileDir);
         this.log.notice('Disable missing info adapter warning');
         this.execSync(`${IOBROKER_COMMAND} object set system.config common.infoAdapterInstall=true`, this.profileDir);
+        this.log.notice('Set default log level for adapters to debug');
+        this.execSync(`${IOBROKER_COMMAND} object set system.config common.defaultLogLevel="debug"`, this.profileDir);
+        this.log.notice('Set adapter repository to beta');
+        this.execSync(`${IOBROKER_COMMAND} object set system.config common.activeRepo="beta"`, this.profileDir);
     }
     uploadAndAddAdapter(name) {
         // upload the already installed adapter
