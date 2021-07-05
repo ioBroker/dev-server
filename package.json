@@ -44,7 +44,7 @@
     "acorn": "^8.2.4",
     "axios": "^0.21.1",
     "boxen": "^5.0.1",
-    "browser-sync": "^2.26.14",
+    "browser-sync": "^2.27.4",
     "bs-html-injector": "^3.0.3",
     "chalk": "^4.1.1",
     "chokidar": "^3.5.2",
