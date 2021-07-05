@@ -4,6 +4,10 @@
 	## __WORK IN PROGRESS__
 -->
 
+## __WORK IN PROGRESS__
+
+- (UncleSamSwiss) Changed default log level to `debug` and adapter repo to `beta`.
+
 ## 0.3.0 (2021-05-13)
 
 - (AlCalzone & UncleSamSwiss) Added support for debugging `js-controller` (including `watch` and `debug --wait`)
