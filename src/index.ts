@@ -65,6 +65,8 @@ class DevServer {
 
   private readonly socketEvents = new EventEmitter();
 
+  private readonly childProcesses: cp.ChildProcess[] = [];
+
   constructor() {
     const parser = yargs(process.argv.slice(2));
     parser
@@ -191,7 +193,7 @@ class DevServer {
             `Please update ${name} manually and restart your last command afterwards.\n` +
               `If you installed ${name} globally, you can simply call:\n\nnpm install --global ${name}`,
           );
-          process.exit(0);
+          return this.exit(0);
         } else {
           this.log.warn(`We strongly recommend to update ${name} as soon as possible.`);
         }
@@ -279,7 +281,7 @@ class DevServer {
     } catch (error) {
       this.log.warn(error);
       this.log.error('You must run dev-server in the adapter root directory (where io-package.json resides).');
-      process.exit(-1);
+      return this.exit(-1);
     }
   }
 
@@ -330,7 +332,7 @@ class DevServer {
   }
 
   private async update(): Promise<void> {
-    this.checkSetup();
+    await this.checkSetup();
     this.log.notice('Updating everything...');
 
     this.execSync('npm update --loglevel error', this.profileDir);
@@ -343,13 +345,13 @@ class DevServer {
   }
 
   async run(): Promise<void> {
-    this.checkSetup();
+    await this.checkSetup();
     await this.startJsController();
     await this.startServer();
   }
 
   async watch(): Promise<void> {
-    this.checkSetup();
+    await this.checkSetup();
     await this.installLocalAdapter();
     if (this.isJSController()) {
       // this watches actually js-controller
@@ -363,7 +365,7 @@ class DevServer {
   }
 
   async debug(wait: boolean): Promise<void> {
-    this.checkSetup();
+    await this.checkSetup();
     await this.installLocalAdapter();
     await this.copySourcemaps();
     if (this.isJSController()) {
@@ -377,7 +379,7 @@ class DevServer {
   }
 
   async upload(): Promise<void> {
-    this.checkSetup();
+    await this.checkSetup();
     await this.installLocalAdapter();
     if (!this.isJSController()) this.uploadAdapter(this.adapterName);
 
@@ -436,12 +438,12 @@ class DevServer {
     );
   }
 
-  checkSetup(): void {
+  async checkSetup(): Promise<void> {
     if (!this.isSetUp()) {
       this.log.error(
         `dev-server is not set up in ${this.profileDir}.\nPlease use the command "setup" first to set up dev-server.`,
       );
-      process.exit(-1);
+      return this.exit(-1);
     }
   }
 
@@ -452,9 +454,9 @@ class DevServer {
 
   async startJsController(): Promise<void> {
     const proc = this.spawn('node', ['node_modules/iobroker.js-controller/controller.js'], this.profileDir);
-    proc.on('exit', (code) => {
+    proc.on('exit', async (code) => {
       console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
-      process.exit(-1);
+      return this.exit(-1);
     });
   }
 
@@ -470,7 +472,7 @@ class DevServer {
     const proc = this.spawn('node', nodeArgs, this.profileDir);
     proc.on('exit', (code) => {
       console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
-      process.exit(-1);
+      return this.exit(-1);
     });
 
     this.log.box(`Debugger is now ${wait ? 'waiting' : 'available'} on process id ${proc.pid}`);
@@ -756,7 +758,7 @@ class DevServer {
     const proc = this.spawn('node', args, this.profileDir);
     proc.on('exit', (code) => {
       console.error(chalk.yellow(`Adapter debugging exited with code ${code}`));
-      process.exit(-1);
+      return this.exit(-1);
     });
 
     if (!proc.pid) {
@@ -936,12 +938,12 @@ class DevServer {
       })
       .on('quit', () => {
         this.log.error('nodemon has exited');
-        process.exit(-2);
+        return this.exit(-2);
       })
       .on('crash', () => {
         if (this.isJSController()) {
           this.log.debug('nodemon has exited as expected');
-          process.exit(-1);
+          return this.exit(-1);
         }
       });
 
@@ -1176,7 +1178,7 @@ class DevServer {
             action = 'abort';
           }
           if (action === 'abort') {
-            process.exit(-1);
+            return this.exit(-1);
           }
           const filepath = path.resolve(this.rootDir, filename);
           let content = '';
@@ -1275,13 +1277,15 @@ class DevServer {
   private getExecOutput(command: string, cwd: string): Promise<{ stdout: string; stderr: string }> {
     this.log.debug(`${cwd}> ${command}`);
     return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-      cp.exec(command, { cwd, encoding: 'ascii' }, (err, stdout, stderr) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve({ stdout, stderr });
-        }
-      });
+      this.childProcesses.push(
+        cp.exec(command, { cwd, encoding: 'ascii' }, (err, stdout, stderr) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve({ stdout, stderr });
+          }
+        }),
+      );
     });
   }
 
@@ -1292,6 +1296,7 @@ class DevServer {
       cwd: cwd,
       ...options,
     });
+    this.childProcesses.push(proc);
     let alive = true;
     proc.on('exit', () => (alive = false));
     process.on('exit', () => alive && proc.kill());
@@ -1335,6 +1340,25 @@ class DevServer {
 
   private rimraf(name: string): Promise<void> {
     return new Promise<void>((resolve, reject) => rimraf(name, (err) => (err ? reject(err) : resolve())));
+  }
+
+  private async exit(exitCode: number): Promise<never> {
+    const childPids = this.childProcesses.map((p) => p.pid).filter((p) => !!p) as number[];
+    const tryKill = (pid: number): void => {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {
+        // ignore
+      }
+    };
+    try {
+      const children = await Promise.all(childPids.map((pid) => this.getChildProcesses(pid)));
+      children.forEach((ch) => ch.forEach((c) => tryKill(parseInt(c.PID))));
+    } catch (error) {
+      this.log.error(`Couldn't kill grand-child processes: ${error}`);
+    }
+    childPids.forEach((pid) => tryKill(pid));
+    process.exit(exitCode);
   }
 }
 

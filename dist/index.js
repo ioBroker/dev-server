@@ -61,6 +61,7 @@ class DevServer {
     constructor() {
         this.log = new logger_1.Logger();
         this.socketEvents = new EventEmitter();
+        this.childProcesses = [];
         const parser = yargs(process.argv.slice(2));
         parser
             .usage('Usage: $0 <command> [options] [profile]\n   or: $0 <command> --help   to see available options for a command')
@@ -133,7 +134,7 @@ class DevServer {
                 if (response.update) {
                     this.log.box(`Please update ${name} manually and restart your last command afterwards.\n` +
                         `If you installed ${name} globally, you can simply call:\n\nnpm install --global ${name}`);
-                    process.exit(0);
+                    return this.exit(0);
                 }
                 else {
                     this.log.warn(`We strongly recommend to update ${name} as soon as possible.`);
@@ -214,7 +215,7 @@ class DevServer {
         catch (error) {
             this.log.warn(error);
             this.log.error('You must run dev-server in the adapter root directory (where io-package.json resides).');
-            process.exit(-1);
+            return this.exit(-1);
         }
     }
     isJSController() {
@@ -249,7 +250,7 @@ class DevServer {
                 .join('\n')}\n\nto use dev-server.`);
     }
     async update() {
-        this.checkSetup();
+        await this.checkSetup();
         this.log.notice('Updating everything...');
         this.execSync('npm update --loglevel error', this.profileDir);
         this.uploadAdapter('admin');
@@ -259,12 +260,12 @@ class DevServer {
         this.log.box(`dev-server was sucessfully updated.`);
     }
     async run() {
-        this.checkSetup();
+        await this.checkSetup();
         await this.startJsController();
         await this.startServer();
     }
     async watch() {
-        this.checkSetup();
+        await this.checkSetup();
         await this.installLocalAdapter();
         if (this.isJSController()) {
             // this watches actually js-controller
@@ -278,7 +279,7 @@ class DevServer {
         }
     }
     async debug(wait) {
-        this.checkSetup();
+        await this.checkSetup();
         await this.installLocalAdapter();
         await this.copySourcemaps();
         if (this.isJSController()) {
@@ -292,7 +293,7 @@ class DevServer {
         }
     }
     async upload() {
-        this.checkSetup();
+        await this.checkSetup();
         await this.installLocalAdapter();
         if (!this.isJSController())
             this.uploadAdapter(this.adapterName);
@@ -341,10 +342,10 @@ class DevServer {
         }, {}));
         return pkgs.filter((p) => !!p).reduce((old, [e, pkg]) => ({ ...old, [e]: pkg }), {});
     }
-    checkSetup() {
+    async checkSetup() {
         if (!this.isSetUp()) {
             this.log.error(`dev-server is not set up in ${this.profileDir}.\nPlease use the command "setup" first to set up dev-server.`);
-            process.exit(-1);
+            return this.exit(-1);
         }
     }
     isSetUp() {
@@ -353,9 +354,9 @@ class DevServer {
     }
     async startJsController() {
         const proc = this.spawn('node', ['node_modules/iobroker.js-controller/controller.js'], this.profileDir);
-        proc.on('exit', (code) => {
+        proc.on('exit', async (code) => {
             console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
-            process.exit(-1);
+            return this.exit(-1);
         });
     }
     async startJsControllerDebug(wait) {
@@ -370,7 +371,7 @@ class DevServer {
         const proc = this.spawn('node', nodeArgs, this.profileDir);
         proc.on('exit', (code) => {
             console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
-            process.exit(-1);
+            return this.exit(-1);
         });
         this.log.box(`Debugger is now ${wait ? 'waiting' : 'available'} on process id ${proc.pid}`);
     }
@@ -618,7 +619,7 @@ class DevServer {
         const proc = this.spawn('node', args, this.profileDir);
         proc.on('exit', (code) => {
             console.error(chalk.yellow(`Adapter debugging exited with code ${code}`));
-            process.exit(-1);
+            return this.exit(-1);
         });
         if (!proc.pid) {
             throw new Error(`PID of adapter debugger unknown!`);
@@ -787,12 +788,12 @@ class DevServer {
         })
             .on('quit', () => {
             this.log.error('nodemon has exited');
-            process.exit(-2);
+            return this.exit(-2);
         })
             .on('crash', () => {
             if (this.isJSController()) {
                 this.log.debug('nodemon has exited as expected');
-                process.exit(-1);
+                return this.exit(-1);
             }
         });
         if (!this.isJSController()) {
@@ -997,7 +998,7 @@ class DevServer {
                         action = 'abort';
                     }
                     if (action === 'abort') {
-                        process.exit(-1);
+                        return this.exit(-1);
                     }
                     const filepath = path.resolve(this.rootDir, filename);
                     let content = '';
@@ -1089,14 +1090,14 @@ class DevServer {
     getExecOutput(command, cwd) {
         this.log.debug(`${cwd}> ${command}`);
         return new Promise((resolve, reject) => {
-            cp.exec(command, { cwd, encoding: 'ascii' }, (err, stdout, stderr) => {
+            this.childProcesses.push(cp.exec(command, { cwd, encoding: 'ascii' }, (err, stdout, stderr) => {
                 if (err) {
                     reject(err);
                 }
                 else {
                     resolve({ stdout, stderr });
                 }
-            });
+            }));
         });
     }
     spawn(command, args, cwd, options) {
@@ -1106,6 +1107,7 @@ class DevServer {
             cwd: cwd,
             ...options,
         });
+        this.childProcesses.push(proc);
         let alive = true;
         proc.on('exit', () => (alive = false));
         process.on('exit', () => alive && proc.kill());
@@ -1142,6 +1144,26 @@ class DevServer {
     }
     rimraf(name) {
         return new Promise((resolve, reject) => rimraf(name, (err) => (err ? reject(err) : resolve())));
+    }
+    async exit(exitCode) {
+        const childPids = this.childProcesses.map((p) => p.pid).filter((p) => !!p);
+        const tryKill = (pid) => {
+            try {
+                process.kill(pid, 'SIGKILL');
+            }
+            catch (_a) {
+                // ignore
+            }
+        };
+        try {
+            const children = await Promise.all(childPids.map((pid) => this.getChildProcesses(pid)));
+            children.forEach((ch) => ch.forEach((c) => tryKill(parseInt(c.PID))));
+        }
+        catch (error) {
+            this.log.error(`Couldn't kill grand-child processes: ${error}`);
+        }
+        childPids.forEach((pid) => tryKill(pid));
+        process.exit(exitCode);
     }
 }
 (() => new DevServer())();
