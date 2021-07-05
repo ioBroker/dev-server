@@ -30,6 +30,7 @@ const chalk_1 = require("chalk");
 const cp = __importStar(require("child_process"));
 const chokidar_1 = __importDefault(require("chokidar"));
 const enquirer_1 = require("enquirer");
+const escape_string_regexp_1 = __importDefault(require("escape-string-regexp"));
 const express_1 = __importDefault(require("express"));
 const fast_glob_1 = __importDefault(require("fast-glob"));
 const fs_extra_1 = require("fs-extra");
@@ -852,6 +853,7 @@ class DevServer {
             },
         };
         await fs_extra_1.writeJson(path.join(this.profileDir, 'package.json'), pkg, { spaces: 2 });
+        await this.verifyIgnoreFiles();
         this.log.notice('Installing js-controller and admin...');
         this.execSync('npm install --loglevel error --production', this.profileDir);
         if (backupFile) {
@@ -862,14 +864,14 @@ class DevServer {
         if (this.isJSController()) {
             await this.installLocalAdapter();
         }
-        this.uploadAndAddAdapter('admin');
+        await this.uploadAndAddAdapter('admin');
         // reconfigure admin instance (only listen to local IP address)
         this.log.notice('Configure admin.0');
         this.execSync(`${IOBROKER_COMMAND} set admin.0 --port ${this.getPort(adminPort, HIDDEN_ADMIN_PORT_OFFSET)} --bind 127.0.0.1`, this.profileDir);
         if (!this.isJSController()) {
             // install local adapter
             await this.installLocalAdapter();
-            this.uploadAndAddAdapter(this.adapterName);
+            await this.uploadAndAddAdapter(this.adapterName);
             // installing any dependencies
             const { common } = await fs_extra_1.readJson(path.join(this.rootDir, 'io-package.json'));
             const adapterDeps = [
@@ -899,12 +901,82 @@ class DevServer {
         this.log.notice('Set adapter repository to beta');
         this.execSync(`${IOBROKER_COMMAND} object set system.config common.activeRepo="beta"`, this.profileDir);
     }
-    uploadAndAddAdapter(name) {
+    async verifyIgnoreFiles() {
+        this.log.notice(`Verifying .npmignore and .gitignore`);
+        let relative = path.relative(this.rootDir, this.tempDir).replace('\\', '/');
+        if (relative.startsWith('..')) {
+            // the temporary directory is outside the root, so no worries!
+            return;
+        }
+        if (!relative.endsWith('/')) {
+            relative += '/';
+        }
+        const tempDirRegex = new RegExp(`\\s${escape_string_regexp_1.default(relative)
+            .replace(/[\\/]$/, '')
+            .replace(/(\\\\|\/)/g, '[\\/]')}`);
+        const verifyFile = async (filename, command, allowStar) => {
+            try {
+                const { stdout, stderr } = await this.getExecOutput(command, this.rootDir);
+                if (stdout.match(tempDirRegex) || stderr.match(tempDirRegex)) {
+                    this.log.error(chalk_1.bold(`Your ${filename} doesn't exclude the temporary directory "${relative}"`));
+                    const choices = [];
+                    if (allowStar) {
+                        choices.push({
+                            message: `Add wildcard to ${filename} for ".*" (recommended)`,
+                            name: 'add-star',
+                        });
+                    }
+                    choices.push({
+                        message: `Add "${relative}" to ${filename}`,
+                        name: 'add-explicit',
+                    }, {
+                        message: `Abort setup`,
+                        name: 'abort',
+                    });
+                    let action;
+                    try {
+                        const result = await enquirer_1.prompt({
+                            name: 'action',
+                            type: 'select',
+                            message: 'What would you like to do?',
+                            choices,
+                        });
+                        action = result.action;
+                    }
+                    catch (error) {
+                        action = 'abort';
+                    }
+                    if (action === 'abort') {
+                        process.exit(-1);
+                    }
+                    const filepath = path.resolve(this.rootDir, filename);
+                    let content = '';
+                    if (fs_extra_1.existsSync(filepath)) {
+                        content = await fs_extra_1.readFile(filepath, { encoding: 'utf-8' });
+                    }
+                    const eol = content.match(/\r\n/) ? '\r\n' : content.match(/\n/) ? '\n' : os_1.EOL;
+                    if (action === 'add-star') {
+                        content = `# exclude all dot-files and directories${eol}.*${eol}${eol}${content}`;
+                    }
+                    else {
+                        content = `${content}${eol}${eol}# ioBroker dev-server${eol}${relative}${eol}`;
+                    }
+                    await fs_extra_1.writeFile(filepath, content);
+                }
+            }
+            catch (error) {
+                this.log.debug(`Couldn't check ${filename}: ${error}`);
+            }
+        };
+        await verifyFile('.npmignore', 'npm pack --dry-run', true);
+        await verifyFile('.gitignore', 'git status --short --untracked-files=all', false);
+    }
+    async uploadAndAddAdapter(name) {
         // upload the already installed adapter
         this.uploadAdapter(name);
         const command = `${IOBROKER_COMMAND} list instances`;
-        const instances = this.getExecSyncOutput(command, this.profileDir);
-        if (instances.includes(`system.adapter.${name}.0 `)) {
+        const { stdout } = await this.getExecOutput(command, this.profileDir);
+        if (stdout.includes(`system.adapter.${name}.0 `)) {
             this.log.info(`Instance ${name}.0 already exists, not adding it again`);
             return;
         }
@@ -918,7 +990,8 @@ class DevServer {
     }
     async installLocalAdapter() {
         this.log.notice(`Install local iobroker.${this.adapterName}`);
-        const filename = this.getExecSyncOutput('npm pack', this.rootDir).trim();
+        const { stdout } = await this.getExecOutput('npm pack', this.rootDir);
+        const filename = stdout.trim();
         this.log.info(`Packed to ${filename}`);
         const fullPath = path.join(this.rootDir, filename);
         this.execSync(`npm install "${fullPath}"`, this.profileDir);
@@ -963,9 +1036,18 @@ class DevServer {
         this.log.debug(`${cwd}> ${command}`);
         return cp.execSync(command, options);
     }
-    getExecSyncOutput(command, cwd) {
+    getExecOutput(command, cwd) {
         this.log.debug(`${cwd}> ${command}`);
-        return cp.execSync(command, { cwd, encoding: 'ascii' });
+        return new Promise((resolve, reject) => {
+            cp.exec(command, { cwd, encoding: 'ascii' }, (err, stdout, stderr) => {
+                if (err) {
+                    reject(err);
+                }
+                else {
+                    resolve({ stdout, stderr });
+                }
+            });
+        });
     }
     spawn(command, args, cwd, options) {
         this.log.debug(`${cwd}> ${command} ${args.join(' ')}`);

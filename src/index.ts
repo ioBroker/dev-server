@@ -7,6 +7,7 @@ import { bold, gray, yellow } from 'chalk';
 import * as cp from 'child_process';
 import chokidar from 'chokidar';
 import { prompt } from 'enquirer';
+import escapeStringRegexp from 'escape-string-regexp';
 import express from 'express';
 import fg from 'fast-glob';
 import {
@@ -24,7 +25,7 @@ import {
 } from 'fs-extra';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import nodemon from 'nodemon';
-import { hostname } from 'os';
+import { EOL, hostname } from 'os';
 import * as path from 'path';
 import psTree from 'ps-tree';
 import { gt } from 'semver';
@@ -1009,6 +1010,8 @@ class DevServer {
     };
     await writeJson(path.join(this.profileDir, 'package.json'), pkg, { spaces: 2 });
 
+    await this.verifyIgnoreFiles();
+
     this.log.notice('Installing js-controller and admin...');
     this.execSync('npm install --loglevel error --production', this.profileDir);
 
@@ -1022,7 +1025,7 @@ class DevServer {
       await this.installLocalAdapter();
     }
 
-    this.uploadAndAddAdapter('admin');
+    await this.uploadAndAddAdapter('admin');
 
     // reconfigure admin instance (only listen to local IP address)
     this.log.notice('Configure admin.0');
@@ -1034,7 +1037,7 @@ class DevServer {
     if (!this.isJSController()) {
       // install local adapter
       await this.installLocalAdapter();
-      this.uploadAndAddAdapter(this.adapterName);
+      await this.uploadAndAddAdapter(this.adapterName);
 
       // installing any dependencies
       const { common } = await readJson(path.join(this.rootDir, 'io-package.json'));
@@ -1071,13 +1074,87 @@ class DevServer {
     this.execSync(`${IOBROKER_COMMAND} object set system.config common.activeRepo="beta"`, this.profileDir);
   }
 
-  private uploadAndAddAdapter(name: string): void {
+  private async verifyIgnoreFiles(): Promise<void> {
+    this.log.notice(`Verifying .npmignore and .gitignore`);
+    let relative = path.relative(this.rootDir, this.tempDir).replace('\\', '/');
+    if (relative.startsWith('..')) {
+      // the temporary directory is outside the root, so no worries!
+      return;
+    }
+    if (!relative.endsWith('/')) {
+      relative += '/';
+    }
+    const tempDirRegex = new RegExp(
+      `\\s${escapeStringRegexp(relative)
+        .replace(/[\\/]$/, '')
+        .replace(/(\\\\|\/)/g, '[\\/]')}`,
+    );
+    const verifyFile = async (filename: string, command: string, allowStar: boolean): Promise<void> => {
+      try {
+        const { stdout, stderr } = await this.getExecOutput(command, this.rootDir);
+        if (stdout.match(tempDirRegex) || stderr.match(tempDirRegex)) {
+          this.log.error(bold(`Your ${filename} doesn't exclude the temporary directory "${relative}"`));
+          const choices = [];
+          if (allowStar) {
+            choices.push({
+              message: `Add wildcard to ${filename} for ".*" (recommended)`,
+              name: 'add-star',
+            });
+          }
+          choices.push(
+            {
+              message: `Add "${relative}" to ${filename}`,
+              name: 'add-explicit',
+            },
+            {
+              message: `Abort setup`,
+              name: 'abort',
+            },
+          );
+          type Action = 'add-star' | 'add-explicit' | 'abort';
+          let action: Action;
+          try {
+            const result = await prompt<{ action: Action }>({
+              name: 'action',
+              type: 'select',
+              message: 'What would you like to do?',
+              choices,
+            });
+            action = result.action;
+          } catch (error) {
+            action = 'abort';
+          }
+          if (action === 'abort') {
+            process.exit(-1);
+          }
+          const filepath = path.resolve(this.rootDir, filename);
+          let content = '';
+          if (existsSync(filepath)) {
+            content = await readFile(filepath, { encoding: 'utf-8' });
+          }
+          const eol = content.match(/\r\n/) ? '\r\n' : content.match(/\n/) ? '\n' : EOL;
+          if (action === 'add-star') {
+            content = `# exclude all dot-files and directories${eol}.*${eol}${eol}${content}`;
+          } else {
+            content = `${content}${eol}${eol}# ioBroker dev-server${eol}${relative}${eol}`;
+          }
+          await writeFile(filepath, content);
+        }
+      } catch (error) {
+        this.log.debug(`Couldn't check ${filename}: ${error}`);
+      }
+    };
+    await verifyFile('.npmignore', 'npm pack --dry-run', true);
+    await verifyFile('.gitignore', 'git status --short --untracked-files=all', false);
+  }
+
+  private async uploadAndAddAdapter(name: string): Promise<void> {
     // upload the already installed adapter
     this.uploadAdapter(name);
 
     const command = `${IOBROKER_COMMAND} list instances`;
-    const instances = this.getExecSyncOutput(command, this.profileDir);
-    if (instances.includes(`system.adapter.${name}.0 `)) {
+    const { stdout } = await this.getExecOutput(command, this.profileDir);
+    if (stdout.includes(`system.adapter.${name}.0 `)) {
       this.log.info(`Instance ${name}.0 already exists, not adding it again`);
       return;
     }
@@ -1095,7 +1172,8 @@ class DevServer {
   private async installLocalAdapter(): Promise<void> {
     this.log.notice(`Install local iobroker.${this.adapterName}`);
 
-    const filename = this.getExecSyncOutput('npm pack', this.rootDir).trim();
+    const { stdout } = await this.getExecOutput('npm pack', this.rootDir);
+    const filename = stdout.trim();
     this.log.info(`Packed to ${filename}`);
 
     const fullPath = path.join(this.rootDir, filename);
@@ -1143,9 +1221,17 @@ class DevServer {
     return cp.execSync(command, options);
   }
 
-  private getExecSyncOutput(command: string, cwd: string): string {
+  private getExecOutput(command: string, cwd: string): Promise<{ stdout: string; stderr: string }> {
     this.log.debug(`${cwd}> ${command}`);
-    return cp.execSync(command, { cwd, encoding: 'ascii' });
+    return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+      cp.exec(command, { cwd, encoding: 'ascii' }, (err, stdout, stderr) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ stdout, stderr });
+        }
+      });
+    });
   }
 
   private spawn(command: string, args: ReadonlyArray<string>, cwd: string, options?: cp.SpawnOptions): cp.ChildProcess {

@@ -6,7 +6,8 @@
 
 ## __WORK IN PROGRESS__
 
-- (UncleSamSwiss) Changed default log level to `debug` and adapter repo to `beta`.
+- (UncleSamSwiss) Changed default log level to `debug` and adapter repo to `beta` (#74)
+- (UncleSamSwiss) Added verification of .npmignore and .gitignore (#46)
 
 ## 0.3.0 (2021-05-13)
 
