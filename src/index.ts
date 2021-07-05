@@ -1225,6 +1225,11 @@ class DevServer {
   private async installLocalAdapter(): Promise<void> {
     this.log.notice(`Install local iobroker.${this.adapterName}`);
 
+    const pkg = await this.readPackageJson();
+    if (pkg.scripts?.build) {
+      this.execSync('npm run build', this.rootDir);
+    }
+
     const { stdout } = await this.getExecOutput('npm pack', this.rootDir);
     const filename = stdout.trim();
     this.log.info(`Packed to ${filename}`);

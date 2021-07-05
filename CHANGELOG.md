@@ -9,6 +9,7 @@
 - (UncleSamSwiss) Changed default log level to `debug` and adapter repo to `beta` (#74)
 - (UncleSamSwiss) Added verification of .npmignore and .gitignore (#46)
 - (UncleSamSwiss) Restarting adapter with `watch` when adapter config changes (#47)
+- (UncleSamSwiss) Running "npm run build" before installing the adapter (#77)
 
 ## 0.3.0 (2021-05-13)
 

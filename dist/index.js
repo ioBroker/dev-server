@@ -1040,7 +1040,12 @@ class DevServer {
         this.execSync(`${IOBROKER_COMMAND} upload ${name}`, this.profileDir);
     }
     async installLocalAdapter() {
+        var _a;
         this.log.notice(`Install local iobroker.${this.adapterName}`);
+        const pkg = await this.readPackageJson();
+        if ((_a = pkg.scripts) === null || _a === void 0 ? void 0 : _a.build) {
+            this.execSync('npm run build', this.rootDir);
+        }
         const { stdout } = await this.getExecOutput('npm pack', this.rootDir);
         const filename = stdout.trim();
         this.log.info(`Packed to ${filename}`);
