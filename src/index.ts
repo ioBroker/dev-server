@@ -57,6 +57,7 @@ class DevServer {
   private rootDir!: string;
   private adapterName!: string;
   private tempDir!: string;
+  private profileName!: string;
   private profileDir!: string;
 
   constructor() {
@@ -258,6 +259,8 @@ class DevServer {
       throw new Error(`Invaid profile name: "${profileName}", it may only contain a-z, 0-9, _ and -.`);
     }
 
+    this.profileName = profileName;
+    this.log.debug(`Using profile name "${this.profileName}"`);
     this.profileDir = path.join(this.tempDir, profileName);
     this.adapterName = await this.findAdapterName();
   }
@@ -312,7 +315,13 @@ class DevServer {
 
     await this.setupDevServer(adminPort, dependencies, backupFile);
 
-    this.log.box(`dev-server was sucessfully set up in\n${this.profileDir}.`);
+    const commands = ['run', 'watch', 'debug'];
+    this.log.box(
+      `dev-server was sucessfully set up in\n${this.profileDir}.\n\n` +
+        `You may now execute one of the following commands\n\n${commands
+          .map((command) => `dev-server ${command} ${this.profileName}`)
+          .join('\n')}\n\nto use dev-server.`,
+    );
   }
 
   private async update(): Promise<void> {
