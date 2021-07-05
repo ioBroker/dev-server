@@ -41,10 +41,12 @@ const path = __importStar(require("path"));
 const ps_tree_1 = __importDefault(require("ps-tree"));
 const semver_1 = require("semver");
 const source_map_1 = require("source-map");
+const ws_1 = __importDefault(require("ws"));
 const logger_1 = require("./logger");
 const chalk = require("chalk");
 const rimraf = require("rimraf");
 const acorn = require("acorn");
+const EventEmitter = require("events");
 const DEFAULT_TEMP_DIR_NAME = '.dev-server';
 const CORE_MODULE = 'iobroker.js-controller';
 const IOBROKER_CLI = 'node_modules/iobroker.js-controller/iobroker.js';
@@ -58,6 +60,7 @@ const DEFAULT_PROFILE_NAME = 'default';
 class DevServer {
     constructor() {
         this.log = new logger_1.Logger();
+        this.socketEvents = new EventEmitter();
         const parser = yargs(process.argv.slice(2));
         parser
             .usage('Usage: $0 <command> [options] [profile]\n   or: $0 <command> --help   to see available options for a command')
@@ -405,15 +408,18 @@ class DevServer {
             pathRewrite,
         }));
         // admin proxy
+        const hiddenAdminPort = this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET);
         app.use(http_proxy_middleware_1.createProxyMiddleware([`!${adminPattern}`, '!/browser-sync/**'], {
-            target: `http://localhost:${this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET)}`,
+            target: `http://localhost:${hiddenAdminPort}`,
             ws: true,
         }));
         // start express
         this.log.notice(`Starting web server on port ${config.adminPort}`);
         const server = app.listen(config.adminPort);
+        let exiting = false;
         process.on('SIGINT', () => {
             this.log.notice('dev-server is exiting...');
+            exiting = true;
             server.close();
             // do not kill this process when receiving SIGINT, but let all child processes exit first
         });
@@ -422,6 +428,42 @@ class DevServer {
             server.on('error', reject);
             server.on('close', reject);
         });
+        const connectWebSocketClient = () => {
+            if (exiting)
+                return;
+            // TODO: replace this with @iobroker/socket-client
+            const client = new ws_1.default(`ws://localhost:${hiddenAdminPort}/?sid=${Date.now()}&name=admin`);
+            client.on('open', () => this.log.debug('WebSocket open'));
+            client.on('close', () => {
+                this.log.debug('WebSocket closed');
+                setTimeout(connectWebSocketClient, 1000);
+            });
+            client.on('error', (error) => this.log.debug(`WebSocket error: ${error}`));
+            client.on('message', (msg) => {
+                if (typeof msg === 'string') {
+                    try {
+                        const data = JSON.parse(msg);
+                        if (!Array.isArray(data) || data.length === 0)
+                            return;
+                        switch (data[0]) {
+                            case 0:
+                                if (data.length > 3) {
+                                    this.socketEvents.emit(data[2], data[3]);
+                                }
+                                break;
+                            case 1:
+                                // ping received, send pong (keep-alive)
+                                client.send('[2]');
+                                break;
+                        }
+                    }
+                    catch (error) {
+                        this.log.error(`Couldn't handle WebSocket message: ${error}`);
+                    }
+                }
+            });
+        };
+        connectWebSocketClient();
         this.log.box(`Admin is now reachable under http://localhost:${config.adminPort}/`);
     }
     async copySourcemaps() {
@@ -623,7 +665,7 @@ class DevServer {
         // start sync
         const adapterRunDir = path.join(this.profileDir, 'node_modules', `iobroker.${this.adapterName}`);
         await this.startFileSync(adapterRunDir);
-        this.startNodemon(adapterRunDir, pkg.main);
+        await this.startNodemon(adapterRunDir, pkg.main);
     }
     async startTscWatch() {
         this.log.notice('Starting tsc --watch');
@@ -693,7 +735,7 @@ class DevServer {
             });
         });
     }
-    startNodemon(baseDir, scriptName) {
+    async startNodemon(baseDir, scriptName) {
         const script = path.resolve(baseDir, scriptName);
         this.log.notice(`Starting nodemon for ${script}`);
         let isExiting = false;
@@ -753,6 +795,14 @@ class DevServer {
                 process.exit(-1);
             }
         });
+        if (!this.isJSController()) {
+            this.socketEvents.on('objectChange', (args) => {
+                if (Array.isArray(args) && args.length > 1 && args[0] === `system.adapter.${this.adapterName}.0`) {
+                    this.log.notice(`Adapter configuration changed, restarting nodemon...`);
+                    nodemon_1.default.restart();
+                }
+            });
+        }
     }
     async handleNodemonDetailMsg(message) {
         const match = message.match(/child pid: (\d+)/);

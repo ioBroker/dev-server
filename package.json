@@ -29,6 +29,7 @@
     "@types/rimraf": "^3.0.0",
     "@types/semver": "^7.3.6",
     "@types/table": "^6.3.2",
+    "@types/ws": "^7.4.6",
     "@types/yargs": "^17.0.1",
     "@typescript-eslint/eslint-plugin": "^4.28.1",
     "@typescript-eslint/parser": "^4.28.1",
@@ -60,6 +61,7 @@
     "semver": "^7.3.5",
     "source-map": "^0.7.3",
     "table": "^6.7.1",
+    "ws": "^7.5.2",
     "yargs": "^17.0.1"
   }
 }
