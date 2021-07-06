@@ -243,3 +243,66 @@ Take note of the two paths and create (or extend) a file called `.vscode/launch.
 ```
 
 You may now launch this configuration with "Start Debugging" (F5).
+
+### Webstorm
+
+Depending on your preferences, you can either start the adapter with dev-server and then attach your debugger or you can start dev-server and then launch the adapter from Webstorm. Both setups are explained below.
+
+In order to improve performance of Webstorm, I recomend to exclude the .dev-server directory from the context menu (see screenshot). This will prevent Webstorm from indexing the directory, which could take some time.
+
+![webstorm-devserer-exclude](https://user-images.githubusercontent.com/620860/124592809-27be3100-de5e-11eb-85f5-262edce936b5.JPG)
+
+Now cancel the exclusion for the adapter directory in .dev-server\default\node_modules\ioBroker.ADAPTER like in the screenshot below. This is necessary to get breakpoints for the attached/debugged process working again.
+
+![webstorm-cancel-exclusion](https://user-images.githubusercontent.com/620860/124593083-82578d00-de5e-11eb-9dd6-0d2edbbbc96d.JPG)
+
+
+#### Attach to dev-server
+
+If you want dev-server to take care of the adapter by building (if needed), uploading, running and relaunching upon changes, start it from the built-in Terminal in Webstorm:
+
+```bash
+dev-server watch
+```
+
+Setup a launch configuration to attach to the process like this:
+
+![webstorm-deverser-attach](https://user-images.githubusercontent.com/620860/124592493-d57d1000-de5d-11eb-9306-57839e0f0106.JPG)
+
+When the adapter is ready, you will see a message like the following:
+
+```
+╭──────────────────────────────────────────────────╮
+│                                                  │
+│   Debugger is now available on process id 1234   │
+│                                                  │
+╰──────────────────────────────────────────────────╯
+```
+
+You can now start the attach configuration and use the debugger console as usual. 
+
+#### Launch adapter independently
+
+If you want to launch the adapter from Visual Studio Code, start dev-server without the adapter from the built-in Terminal:
+
+```bash
+dev-server watch --noStart
+```
+
+When dev-server is ready, you will see a message like the following:
+
+```
+╭──────────────────────────────────────────────────────────────────────────╮
+│                                                                          │
+│   You can now start the adapter manually by running                      │
+│       node node_modules/iobroker.<adapter>/<path-to-main.js> --debug 0   │
+│   from within                                                            │
+│       <your-project-root>/.dev-server/default                            │
+│                                                                          │
+╰──────────────────────────────────────────────────────────────────────────╯
+```
+Take not of the paths and setup a launch configuration like in the screenshot below:
+
+![webstorm-devserver-nostart](https://user-images.githubusercontent.com/620860/124593354-d6627180-de5e-11eb-8f7f-3e5d26ac11c1.JPG)
+
+Now you can run / debug and restart the process from Webstorm and changes will automatically be synced.
