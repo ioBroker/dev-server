@@ -248,14 +248,13 @@ You may now launch this configuration with "Start Debugging" (F5).
 
 Depending on your preferences, you can either start the adapter with dev-server and then attach your debugger or you can start dev-server and then launch the adapter from Webstorm. Both setups are explained below.
 
-In order to improve performance of Webstorm, I recomend to exclude the .dev-server directory from the context menu (see screenshot). This will prevent Webstorm from indexing the directory, which could take some time.
+In order to improve performance of Webstorm, I recommend to exclude the .dev-server directory from the context menu (see screenshot). This will prevent Webstorm from indexing the directory, which could take some time.
 
-![webstorm-devserer-exclude](https://user-images.githubusercontent.com/620860/124592809-27be3100-de5e-11eb-85f5-262edce936b5.JPG)
+![Exclude .dev-server directory](docs/images/webstorm-exclude-dir.jpg)
 
 Now cancel the exclusion for the adapter directory in .dev-server\default\node_modules\ioBroker.ADAPTER like in the screenshot below. This is necessary to get breakpoints for the attached/debugged process working again.
 
-![webstorm-cancel-exclusion](https://user-images.githubusercontent.com/620860/124593083-82578d00-de5e-11eb-9dd6-0d2edbbbc96d.JPG)
-
+![Cancel exclusion for adapter module directory](docs/images/webstorm-cancel-exclusion.jpg)
 
 #### Attach to dev-server
 
@@ -267,7 +266,7 @@ dev-server watch
 
 Setup a launch configuration to attach to the process like this:
 
-![webstorm-deverser-attach](https://user-images.githubusercontent.com/620860/124592493-d57d1000-de5d-11eb-9306-57839e0f0106.JPG)
+![Attach to running process](docs/images/webstorm-attach.jpg)
 
 When the adapter is ready, you will see a message like the following:
 
@@ -279,7 +278,7 @@ When the adapter is ready, you will see a message like the following:
 ╰──────────────────────────────────────────────────╯
 ```
 
-You can now start the attach configuration and use the debugger console as usual. 
+You can now start the attach configuration and use the debugger console as usual.
 
 #### Launch adapter independently
 
@@ -301,8 +300,9 @@ When dev-server is ready, you will see a message like the following:
 │                                                                          │
 ╰──────────────────────────────────────────────────────────────────────────╯
 ```
-Take not of the paths and setup a launch configuration like in the screenshot below:
 
-![webstorm-devserver-nostart](https://user-images.githubusercontent.com/620860/124593354-d6627180-de5e-11eb-8f7f-3e5d26ac11c1.JPG)
+Take note of the paths and setup a launch configuration like in the screenshot below:
+
+![Run or debug adapter](docs/images/webstorm-debug.jpg)
 
 Now you can run / debug and restart the process from Webstorm and changes will automatically be synced.
