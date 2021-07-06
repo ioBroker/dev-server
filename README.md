@@ -25,6 +25,7 @@ dev-server watch
 - Multiple "profiles" allow for different datasets
 - Multiple instances of dev-server can run in parallel (using different ports)
 - All ports are only available locally (127.0.0.1)
+- Easy integration in your preferred IDE
 
 ### Debugging ioBroker.js-controller
 
@@ -122,6 +123,10 @@ You may attach a debugger to the running adapter. Keep in mind that the debugger
 
 If you are using TypeScript, make sure you have the `watch:ts` script defined the same way it is done by [Adapter Creator](https://github.com/ioBroker/create-adapter). There is no need to run `npm run watch:ts` separately, this is automatically done by dev-server.
 
+The following options are available:
+
+`--noStart` Do not start the adapter itself, but only watch for changes and synchronize them between the development and the temporary directory.
+
 ### `dev-server debug`
 
 Run dev-server and start the adapter from ioBroker in "debug" mode.
@@ -155,3 +160,86 @@ Create an ioBroker backup to the given file.
 ### `dev-server profile`
 
 Lists all available profiles with their meta-data.
+
+## IDEs
+
+You can of course use dev-server together with you preferred IDE.
+
+The following chapters all assume you have dev-server installed and set up correctly (see above).
+
+### Visual Studio Code
+
+Depending on your preferences, you can either start the adapter with dev-server and then attach your debugger or you can start dev-server and then launch the adapter from Visual Studio Code. Both setups are explained below.
+
+#### Attach to dev-server
+
+If you want dev-server to take care of the adapter by building (if needed), uploading, running and relaunching upon changes, start it from the built-in Terminal in Visual Studio Code:
+
+```bash
+dev-server watch
+```
+
+When the adapter is ready, you will see a message like the following:
+
+```
+╭──────────────────────────────────────────────────╮
+│                                                  │
+│   Debugger is now available on process id 1234   │
+│                                                  │
+╰──────────────────────────────────────────────────╯
+```
+
+You can now attach the Visual Studio Code debugger to the given process ID:
+
+- Open the Command Pallette (Ctrl-Shift-P)
+- Choose "Debug: Attach to Node Process (legacy)"
+- Select the right process, it usually looks like follows:
+
+```
+node  --inspect <path to your dev-server directory>/node_modules/...
+process id: 1234, debug port: 9229
+```
+
+Now you can set breakpoints (or they are hit, if you set them before) and inspect your adapter while running.
+
+#### Launch adapter independently
+
+If you want to launch the adapter from Visual Studio Code, start dev-server without the adapter from the built-in Terminal:
+
+```bash
+dev-server watch --noStart
+```
+
+When dev-server is ready, you will see a message like the following:
+
+```
+╭──────────────────────────────────────────────────────────────────────────╮
+│                                                                          │
+│   You can now start the adapter manually by running                      │
+│       node node_modules/iobroker.<adapter>/<path-to-main.js> --debug 0   │
+│   from within                                                            │
+│       <your-project-root>/.dev-server/default                            │
+│                                                                          │
+╰──────────────────────────────────────────────────────────────────────────╯
+```
+
+Take note of the two paths and create (or extend) a file called `.vscode/launch.json`:
+
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Launch ioBroker Adapter",
+      "skipFiles": ["<node_internals>/**"],
+      "args": ["--debug", "0"],
+      "program": "node_modules/iobroker.<adapter>/<path-to-main.js>",
+      "cwd": "${workspaceFolder}/.dev-server/default"
+    }
+  ]
+}
+```
+
+You may now launch this configuration with "Start Debugging" (F5).

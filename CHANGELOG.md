@@ -11,6 +11,7 @@
 - (UncleSamSwiss) Restarting adapter with `watch` when adapter config changes (#47)
 - (UncleSamSwiss) Running "npm run build" before installing the adapter (#77)
 - (UncleSamSwiss) Fixed bug that "watch" wasn't syncing files upon start-up, but only when they changed (this was causing issues with sourcemaps).
+- (UncleSamSwiss) Added `--noStart` option to `watch`, this allows to start the adapter from an IDE afterwards
 
 ## 0.3.0 (2021-05-13)
 

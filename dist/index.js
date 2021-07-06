@@ -93,7 +93,13 @@ class DevServer {
         }, async (args) => await this.setup(args.adminPort, { ['iobroker.js-controller']: args.jsController, ['iobroker.admin']: args.admin }, args.backupFile, !!args.force))
             .command(['update [profile]', 'ud'], 'Update ioBroker and its dependencies to the latest versions', {}, async () => await this.update())
             .command(['run [profile]', 'r'], 'Run ioBroker dev-server, the adapter will not run, but you may test the Admin UI with hot-reload', {}, async () => await this.run())
-            .command(['watch [profile]', 'w'], 'Run ioBroker dev-server and start the adapter in "watch" mode. The adapter will automatically restart when its source code changes. You may attach a debugger to the running adapter.', {}, async () => await this.watch())
+            .command(['watch [profile]', 'w'], 'Run ioBroker dev-server and start the adapter in "watch" mode. The adapter will automatically restart when its source code changes. You may attach a debugger to the running adapter.', {
+            noStart: {
+                type: 'boolean',
+                alias: 'n',
+                description: 'Do not start the adapter itself, only watch for changes and sync them.',
+            },
+        }, async (args) => await this.watch(!args.noStart))
             .command(['debug [profile]', 'd'], 'Run ioBroker dev-server and start the adapter from ioBroker in "debug" mode. You may attach a debugger to the running adapter.', {
             wait: {
                 type: 'boolean',
@@ -264,18 +270,18 @@ class DevServer {
         await this.startJsController();
         await this.startServer();
     }
-    async watch() {
+    async watch(startAdapter) {
         await this.checkSetup();
         await this.installLocalAdapter();
         if (this.isJSController()) {
             // this watches actually js-controller
-            await this.startAdapterWatch();
+            await this.startAdapterWatch(startAdapter);
             await this.startServer();
         }
         else {
             await this.startJsController();
             await this.startServer();
-            await this.startAdapterWatch();
+            await this.startAdapterWatch(startAdapter);
         }
     }
     async debug(wait) {
@@ -655,7 +661,7 @@ class DevServer {
             }
         }));
     }
-    async startAdapterWatch() {
+    async startAdapterWatch(startAdapter) {
         // figure out if we need to watch for TypeScript changes
         const pkg = await this.readPackageJson();
         const scripts = pkg.scripts;
@@ -666,7 +672,14 @@ class DevServer {
         // start sync
         const adapterRunDir = path.join(this.profileDir, 'node_modules', `iobroker.${this.adapterName}`);
         await this.startFileSync(adapterRunDir);
-        await this.startNodemon(adapterRunDir, pkg.main);
+        if (startAdapter) {
+            await this.startNodemon(adapterRunDir, pkg.main);
+        }
+        else {
+            this.log.box(`You can now start the adapter manually by running\n    ` +
+                `node node_modules/iobroker.${this.adapterName}/${pkg.main} --debug 0\nfrom within\n    ` +
+                this.profileDir);
+        }
     }
     async startTscWatch() {
         this.log.notice('Starting tsc --watch');
