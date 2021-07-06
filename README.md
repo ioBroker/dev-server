@@ -64,7 +64,7 @@ Your `.gitignore` file must be extended with a single additional line:
 .dev-server/
 ```
 
-If you created your adaper using a recent version of [Adapter Creator](https://github.com/ioBroker/create-adapter), the `.nmpignore` file will already contain a pattern matching this folder, otherwise add the above line or simply ignore all "dot"-files and folders:
+If you created your adapter using a recent version of [Adapter Creator](https://github.com/ioBroker/create-adapter), the `.nmpignore` file will already contain a pattern matching this folder, otherwise add the above line or simply ignore all "dot"-files and folders:
 
 ```text
 .*
@@ -110,7 +110,7 @@ The following options are available:
 
 Run dev-server, the adapter will not run, but you may test the Admin UI with hot-reload.
 
-If you start the adapter from Admin, be aware that it will use the code uploaded during setup (or when `dev-server upload` was called explicitely).
+If you start the adapter from Admin, be aware that it will use the code uploaded during setup (or when `dev-server upload` was called explicitly).
 
 ### `dev-server watch`
 
