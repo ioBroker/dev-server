@@ -715,11 +715,11 @@ class DevServer {
                     syncFile(filename);
                 }
                 else if (!filename.endsWith('map') && !fs_extra_1.existsSync(inDest(filename))) {
-                    // ignore files during initial sync if they don't exist in the target directory
+                    // ignore files during initial sync if they don't exist in the target directory (except for sourcemaps)
                     ignoreFiles.push(filename);
                 }
                 else {
-                    this.log.debug(`Watching ${filename}`);
+                    syncFile(filename);
                 }
             });
             watcher.on('change', (filename) => {

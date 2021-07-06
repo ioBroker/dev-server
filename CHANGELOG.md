@@ -10,6 +10,7 @@
 - (UncleSamSwiss) Added verification of .npmignore and .gitignore (#46)
 - (UncleSamSwiss) Restarting adapter with `watch` when adapter config changes (#47)
 - (UncleSamSwiss) Running "npm run build" before installing the adapter (#77)
+- (UncleSamSwiss) Fixed bug that "watch" wasn't syncing files upon start-up, but only when they changed (this was causing issues with sourcemaps).
 
 ## 0.3.0 (2021-05-13)
 
