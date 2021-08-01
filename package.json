@@ -47,7 +47,7 @@
     "boxen": "^5.0.1",
     "browser-sync": "^2.27.4",
     "bs-html-injector": "^3.0.3",
-    "chalk": "^4.1.1",
+    "chalk": "^4.1.2",
     "chokidar": "^3.5.2",
     "enquirer": "^2.3.6",
     "escape-string-regexp": "^4.0.0",
