@@ -52,7 +52,7 @@
     "enquirer": "^2.3.6",
     "escape-string-regexp": "^4.0.0",
     "express": "^4.17.1",
-    "fast-glob": "^3.2.6",
+    "fast-glob": "^3.2.7",
     "fs-extra": "^10.0.0",
     "http-proxy-middleware": "^2.0.1",
     "nodemon": "^2.0.9",
