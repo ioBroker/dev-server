@@ -9,28 +9,28 @@ const chalk_1 = require("chalk");
 const table_1 = require("table");
 class Logger {
     error(message) {
-        console.log(chalk_1.redBright(message));
+        console.log((0, chalk_1.redBright)(message));
     }
     warn(message) {
-        console.log(chalk_1.yellow(message));
+        console.log((0, chalk_1.yellow)(message));
     }
     notice(message) {
-        console.log(chalk_1.blueBright(message));
+        console.log((0, chalk_1.blueBright)(message));
     }
     info(message) {
         console.log(message);
     }
     debug(message) {
-        console.log(chalk_1.grey(message));
+        console.log((0, chalk_1.grey)(message));
     }
     box(message) {
-        console.log(boxen_1.default(chalk_1.greenBright(message), {
+        console.log((0, boxen_1.default)((0, chalk_1.greenBright)(message), {
             padding: 1,
             borderStyle: 'round',
         }));
     }
     table(items, userConfig) {
-        console.log(table_1.table(items, userConfig));
+        console.log((0, table_1.table)(items, userConfig));
     }
 }
 exports.Logger = Logger;

@@ -129,9 +129,9 @@ class DevServer {
             // eslint-disable-next-line @typescript-eslint/no-var-requires
             const { name, version: localVersion } = require('../package.json');
             const { data: { version: releaseVersion }, } = await axios_1.default.get(`https://cdn.jsdelivr.net/npm/${name}/package.json`, { timeout: 1000 });
-            if (semver_1.gt(releaseVersion, localVersion)) {
+            if ((0, semver_1.gt)(releaseVersion, localVersion)) {
                 this.log.debug(`Found update from ${localVersion} to ${releaseVersion}`);
-                const response = await enquirer_1.prompt({
+                const response = await (0, enquirer_1.prompt)({
                     name: 'update',
                     type: 'confirm',
                     message: `Version ${releaseVersion} of ${name} is available.\nWould you like to exit and update?`,
@@ -152,14 +152,14 @@ class DevServer {
     async setDirectories(argv) {
         this.rootDir = path.resolve(argv.root);
         this.tempDir = path.resolve(this.rootDir, argv.temp);
-        if (fs_extra_1.existsSync(path.join(this.tempDir, 'package.json'))) {
+        if ((0, fs_extra_1.existsSync)(path.join(this.tempDir, 'package.json'))) {
             // we are still in the old directory structure (no profiles), let's move it
             const intermediateDir = path.join(this.rootDir, DEFAULT_TEMP_DIR_NAME + '-temp');
             const defaultProfileDir = path.join(this.tempDir, DEFAULT_PROFILE_NAME);
             this.log.debug(`Moving temporary data from ${this.tempDir} to ${defaultProfileDir}`);
-            await fs_extra_1.rename(this.tempDir, intermediateDir);
-            await fs_extra_1.mkdir(this.tempDir);
-            await fs_extra_1.rename(intermediateDir, defaultProfileDir);
+            await (0, fs_extra_1.rename)(this.tempDir, intermediateDir);
+            await (0, fs_extra_1.mkdir)(this.tempDir);
+            await (0, fs_extra_1.rename)(intermediateDir, defaultProfileDir);
         }
         let profileName = argv.profile;
         const profiles = await this.getProfiles();
@@ -187,16 +187,16 @@ class DevServer {
                     this.log.debug(`Using profile ${profileName}`);
                 }
                 else {
-                    this.log.box(chalk_1.yellow(`You didn't specify the profile name in the command line. ` +
+                    this.log.box((0, chalk_1.yellow)(`You didn't specify the profile name in the command line. ` +
                         `You may do so the next time by appending the profile name to your command.\nExample:\n` +
                         `> dev-server ${process.argv.slice(2).join(' ')} ${profileNames[profileNames.length - 1]} `));
-                    const response = await enquirer_1.prompt({
+                    const response = await (0, enquirer_1.prompt)({
                         name: 'profile',
                         type: 'select',
                         message: 'Please choose a profile',
                         choices: profileNames.map((p) => ({
                             name: p,
-                            hint: chalk_1.gray(`(Admin Port: ${profiles[p]['dev-server'].adminPort})`),
+                            hint: (0, chalk_1.gray)(`(Admin Port: ${profiles[p]['dev-server'].adminPort})`),
                         })),
                     });
                     profileName = response.profile;
@@ -213,7 +213,7 @@ class DevServer {
     }
     async findAdapterName() {
         try {
-            const ioPackage = await fs_extra_1.readJson(path.join(this.rootDir, 'io-package.json'));
+            const ioPackage = await (0, fs_extra_1.readJson)(path.join(this.rootDir, 'io-package.json'));
             const adapterName = ioPackage.common.name;
             this.log.debug(`Using adapter name "${adapterName}"`);
             return adapterName;
@@ -228,7 +228,7 @@ class DevServer {
         return this.adapterName === 'js-controller';
     }
     readPackageJson() {
-        return fs_extra_1.readJson(path.join(this.rootDir, 'package.json'));
+        return (0, fs_extra_1.readJson)(path.join(this.rootDir, 'package.json'));
     }
     getPort(adminPort, offset) {
         let port = adminPort + offset;
@@ -323,19 +323,19 @@ class DevServer {
                 dependencies['iobroker.admin'],
             ];
         });
-        table.unshift([chalk_1.bold('Profile Name'), chalk_1.bold('Admin URL'), chalk_1.bold('js-controller'), chalk_1.bold('admin')]);
+        table.unshift([(0, chalk_1.bold)('Profile Name'), (0, chalk_1.bold)('Admin URL'), (0, chalk_1.bold)('js-controller'), (0, chalk_1.bold)('admin')]);
         this.log.info(`The following profiles exist in ${this.tempDir}`);
         this.log.table(table.filter((r) => !!r));
     }
     ////////////////// Command Helper Methods //////////////////
     async getProfiles() {
-        if (!fs_extra_1.existsSync(this.tempDir)) {
+        if (!(0, fs_extra_1.existsSync)(this.tempDir)) {
             return {};
         }
-        const entries = await fs_extra_1.readdir(this.tempDir);
+        const entries = await (0, fs_extra_1.readdir)(this.tempDir);
         const pkgs = await Promise.all(entries.map(async (e) => {
             try {
-                const pkg = await fs_extra_1.readJson(path.join(this.tempDir, e, 'package.json'));
+                const pkg = await (0, fs_extra_1.readJson)(path.join(this.tempDir, e, 'package.json'));
                 const infos = pkg['dev-server'];
                 const dependencies = pkg.dependencies;
                 if ((infos === null || infos === void 0 ? void 0 : infos.adminPort) && dependencies) {
@@ -356,7 +356,7 @@ class DevServer {
     }
     isSetUp() {
         const jsControllerDir = path.join(this.profileDir, 'node_modules', CORE_MODULE);
-        return fs_extra_1.existsSync(jsControllerDir);
+        return (0, fs_extra_1.existsSync)(jsControllerDir);
     }
     async startJsController() {
         const proc = this.spawn('node', ['node_modules/iobroker.js-controller/controller.js'], this.profileDir);
@@ -383,7 +383,7 @@ class DevServer {
     }
     async startServer() {
         this.log.notice(`Running inside ${this.profileDir}`);
-        const tempPkg = await fs_extra_1.readJson(path.join(this.profileDir, 'package.json'));
+        const tempPkg = await (0, fs_extra_1.readJson)(path.join(this.profileDir, 'package.json'));
         const config = tempPkg['dev-server'];
         if (!config) {
             throw new Error(`Couldn't find dev-server configuration in package.json`);
@@ -405,18 +405,18 @@ class DevServer {
         }
         this.startBrowserSync(this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET));
         // browser-sync proxy
-        const app = express_1.default();
+        const app = (0, express_1.default)();
         const adminPattern = `/adapter/${this.adapterName}/**`;
         const pathRewrite = {};
         pathRewrite[`^/adapter/${this.adapterName}/`] = '/';
-        app.use(http_proxy_middleware_1.createProxyMiddleware([adminPattern, '/browser-sync/**'], {
+        app.use((0, http_proxy_middleware_1.createProxyMiddleware)([adminPattern, '/browser-sync/**'], {
             target: `http://localhost:${this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET)}`,
             //ws: true, // can't have two web-socket connections proxying to different locations
             pathRewrite,
         }));
         // admin proxy
         const hiddenAdminPort = this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET);
-        app.use(http_proxy_middleware_1.createProxyMiddleware([`!${adminPattern}`, '!/browser-sync/**'], {
+        app.use((0, http_proxy_middleware_1.createProxyMiddleware)([`!${adminPattern}`, '!/browser-sync/**'], {
             target: `http://localhost:${hiddenAdminPort}`,
             ws: true,
         }));
@@ -507,9 +507,9 @@ class DevServer {
         try {
             const mapFile = `${dest}.map`;
             const data = await this.createIdentitySourcemap(src.replace(/\\/g, '/'));
-            await fs_extra_1.writeFile(mapFile, JSON.stringify(data));
+            await (0, fs_extra_1.writeFile)(mapFile, JSON.stringify(data));
             // append the sourcemap reference comment to the bottom of the file
-            const fileContent = await fs_extra_1.readFile(copyFromSrc ? src : dest, { encoding: 'utf-8' });
+            const fileContent = await (0, fs_extra_1.readFile)(copyFromSrc ? src : dest, { encoding: 'utf-8' });
             const filename = path.basename(mapFile);
             let updatedContent = fileContent.replace(/(\/\/\# sourceMappingURL=).+/, `$1${filename}`);
             if (updatedContent === fileContent) {
@@ -523,7 +523,7 @@ class DevServer {
                 }
                 updatedContent += `//# sourceMappingURL=${filename}`;
             }
-            await fs_extra_1.writeFile(dest, updatedContent);
+            await (0, fs_extra_1.writeFile)(dest, updatedContent);
             this.log.debug(`Created ${mapFile} from ${src}`);
         }
         catch (error) {
@@ -537,12 +537,12 @@ class DevServer {
      */
     async patchSourcemap(src, dest) {
         try {
-            const data = await fs_extra_1.readJson(src);
+            const data = await (0, fs_extra_1.readJson)(src);
             if (data.version !== 3) {
                 throw new Error(`Unsupported sourcemap version: ${data.version}`);
             }
             data.sourceRoot = path.dirname(src).replace(/\\/g, '/');
-            await fs_extra_1.writeJson(dest, data);
+            await (0, fs_extra_1.writeJson)(dest, data);
             this.log.debug(`Patched ${dest} from ${src}`);
         }
         catch (error) {
@@ -561,12 +561,12 @@ class DevServer {
         return patterns;
     }
     async findFiles(extension, excludeAdmin) {
-        return await fast_glob_1.default(this.getFilePatterns(extension, excludeAdmin), { cwd: this.rootDir });
+        return await (0, fast_glob_1.default)(this.getFilePatterns(extension, excludeAdmin), { cwd: this.rootDir });
     }
     async createIdentitySourcemap(filename) {
         // thanks to https://github.com/gulp-sourcemaps/identity-map/blob/251b51598d02e5aedaea8f1a475dfc42103a2727/lib/generate.js [MIT]
         const generator = new source_map_1.SourceMapGenerator({ file: filename });
-        const fileContent = await fs_extra_1.readFile(filename, { encoding: 'utf-8' });
+        const fileContent = await (0, fs_extra_1.readFile)(filename, { encoding: 'utf-8' });
         const tokenizer = acorn.tokenizer(fileContent, {
             ecmaVersion: 'latest',
             allowHashBang: true,
@@ -646,7 +646,7 @@ class DevServer {
         return parentPid;
     }
     getChildProcesses(parentPid) {
-        return new Promise((resolve, reject) => ps_tree_1.default(parentPid, (err, children) => {
+        return new Promise((resolve, reject) => (0, ps_tree_1.default)(parentPid, (err, children) => {
             if (err) {
                 reject(err);
             }
@@ -711,12 +711,12 @@ class DevServer {
                     if (filename.endsWith('.map')) {
                         await this.patchSourcemap(src, dest);
                     }
-                    else if (!fs_extra_1.existsSync(inSrc(`${filename}.map`))) {
+                    else if (!(0, fs_extra_1.existsSync)(inSrc(`${filename}.map`))) {
                         // copy file and add sourcemap
                         await this.addSourcemap(src, dest, true);
                     }
                     else {
-                        await fs_extra_1.copyFile(src, dest);
+                        await (0, fs_extra_1.copyFile)(src, dest);
                     }
                 }
                 catch (error) {
@@ -727,7 +727,7 @@ class DevServer {
                 if (ready) {
                     syncFile(filename);
                 }
-                else if (!filename.endsWith('map') && !fs_extra_1.existsSync(inDest(filename))) {
+                else if (!filename.endsWith('map') && !(0, fs_extra_1.existsSync)(inDest(filename))) {
                     // ignore files during initial sync if they don't exist in the target directory (except for sourcemaps)
                     ignoreFiles.push(filename);
                 }
@@ -741,10 +741,10 @@ class DevServer {
                 }
             });
             watcher.on('unlink', (filename) => {
-                fs_extra_1.unlinkSync(inDest(filename));
+                (0, fs_extra_1.unlinkSync)(inDest(filename));
                 const map = inDest(filename + '.map');
-                if (fs_extra_1.existsSync(map)) {
-                    fs_extra_1.unlinkSync(map);
+                if ((0, fs_extra_1.existsSync)(map)) {
+                    (0, fs_extra_1.unlinkSync)(map);
                 }
             });
         });
@@ -757,7 +757,7 @@ class DevServer {
             isExiting = true;
         });
         const args = this.isJSController() ? [] : ['--debug', '0'];
-        nodemon_1.default({
+        (0, nodemon_1.default)({
             script: script,
             stdin: false,
             verbose: true,
@@ -830,12 +830,12 @@ class DevServer {
         this.log.notice(`Setting up in ${this.profileDir}`);
         // create the data directory
         const dataDir = path.join(this.profileDir, 'iobroker-data');
-        await fs_extra_1.mkdirp(dataDir);
+        await (0, fs_extra_1.mkdirp)(dataDir);
         // create the configuration
         const config = {
             system: {
                 memoryLimitMB: 0,
-                hostname: `dev-${this.adapterName}-${os_1.hostname()}`,
+                hostname: `dev-${this.adapterName}-${(0, os_1.hostname)()}`,
                 instanceStartInterval: 2000,
                 compact: false,
                 allowShellCommands: false,
@@ -901,7 +901,7 @@ class DevServer {
             plugins: {},
             dataDir: '../../iobroker-data/',
         };
-        await fs_extra_1.writeJson(path.join(dataDir, 'iobroker.json'), config, { spaces: 2 });
+        await (0, fs_extra_1.writeJson)(path.join(dataDir, 'iobroker.json'), config, { spaces: 2 });
         // create the package file
         if (this.isJSController()) {
             // if this dev-server is used to debug JS-Controller, don't install a published version
@@ -916,7 +916,7 @@ class DevServer {
                 adminPort: adminPort,
             },
         };
-        await fs_extra_1.writeJson(path.join(this.profileDir, 'package.json'), pkg, { spaces: 2 });
+        await (0, fs_extra_1.writeJson)(path.join(this.profileDir, 'package.json'), pkg, { spaces: 2 });
         await this.verifyIgnoreFiles();
         this.log.notice('Installing js-controller and admin...');
         this.execSync('npm install --loglevel error --production', this.profileDir);
@@ -937,7 +937,7 @@ class DevServer {
             await this.installLocalAdapter();
             await this.uploadAndAddAdapter(this.adapterName);
             // installing any dependencies
-            const { common } = await fs_extra_1.readJson(path.join(this.rootDir, 'io-package.json'));
+            const { common } = await (0, fs_extra_1.readJson)(path.join(this.rootDir, 'io-package.json'));
             const adapterDeps = [
                 ...this.getDependencies(common.dependencies),
                 ...this.getDependencies(common.globalDependencies),
@@ -975,14 +975,14 @@ class DevServer {
         if (!relative.endsWith('/')) {
             relative += '/';
         }
-        const tempDirRegex = new RegExp(`\\s${escape_string_regexp_1.default(relative)
+        const tempDirRegex = new RegExp(`\\s${(0, escape_string_regexp_1.default)(relative)
             .replace(/[\\/]$/, '')
             .replace(/(\\\\|\/)/g, '[\\/]')}`);
         const verifyFile = async (filename, command, allowStar) => {
             try {
                 const { stdout, stderr } = await this.getExecOutput(command, this.rootDir);
                 if (stdout.match(tempDirRegex) || stderr.match(tempDirRegex)) {
-                    this.log.error(chalk_1.bold(`Your ${filename} doesn't exclude the temporary directory "${relative}"`));
+                    this.log.error((0, chalk_1.bold)(`Your ${filename} doesn't exclude the temporary directory "${relative}"`));
                     const choices = [];
                     if (allowStar) {
                         choices.push({
@@ -999,7 +999,7 @@ class DevServer {
                     });
                     let action;
                     try {
-                        const result = await enquirer_1.prompt({
+                        const result = await (0, enquirer_1.prompt)({
                             name: 'action',
                             type: 'select',
                             message: 'What would you like to do?',
@@ -1015,8 +1015,8 @@ class DevServer {
                     }
                     const filepath = path.resolve(this.rootDir, filename);
                     let content = '';
-                    if (fs_extra_1.existsSync(filepath)) {
-                        content = await fs_extra_1.readFile(filepath, { encoding: 'utf-8' });
+                    if ((0, fs_extra_1.existsSync)(filepath)) {
+                        content = await (0, fs_extra_1.readFile)(filepath, { encoding: 'utf-8' });
                     }
                     const eol = content.match(/\r\n/) ? '\r\n' : content.match(/\n/) ? '\n' : os_1.EOL;
                     if (action === 'add-star') {
@@ -1025,7 +1025,7 @@ class DevServer {
                     else {
                         content = `${content}${eol}${eol}# ioBroker dev-server${eol}${relative}${eol}`;
                     }
-                    await fs_extra_1.writeFile(filepath, content);
+                    await (0, fs_extra_1.writeFile)(filepath, content);
                 }
             }
             catch (error) {

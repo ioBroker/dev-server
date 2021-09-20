@@ -284,7 +284,7 @@ class DevServer {
       const adapterName = ioPackage.common.name;
       this.log.debug(`Using adapter name "${adapterName}"`);
       return adapterName;
-    } catch (error) {
+    } catch (error: any) {
       this.log.warn(error);
       this.log.error('You must run dev-server in the adapter root directory (where io-package.json resides).');
       return this.exit(-1);
