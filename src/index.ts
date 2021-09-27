@@ -676,7 +676,7 @@ class DevServer {
     const exts = typeof extensions === 'string' ? [extensions] : extensions;
     const patterns = exts.map((e) => `./**/*.${e}`);
     patterns.push('!./.*/**');
-    patterns.push('!./node_modules/**');
+    patterns.push('!./**/node_modules/**');
     patterns.push('!./test/**');
     if (excludeAdmin) {
       patterns.push('!./admin/**');
