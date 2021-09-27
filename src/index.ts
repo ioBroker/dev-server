@@ -7,7 +7,6 @@ import { bold, gray, yellow } from 'chalk';
 import * as cp from 'child_process';
 import chokidar from 'chokidar';
 import { prompt } from 'enquirer';
-import escapeStringRegexp from 'escape-string-regexp';
 import express from 'express';
 import fg from 'fast-glob';
 import {
@@ -1152,7 +1151,7 @@ class DevServer {
       relative += '/';
     }
     const tempDirRegex = new RegExp(
-      `\\s${escapeStringRegexp(relative)
+      `\\s${this.escapeStringRegexp(relative)
         .replace(/[\\/]$/, '')
         .replace(/(\\\\|\/)/g, '[\\/]')}`,
     );
@@ -1359,6 +1358,12 @@ class DevServer {
 
   private rimraf(name: string): Promise<void> {
     return new Promise<void>((resolve, reject) => rimraf(name, (err) => (err ? reject(err) : resolve())));
+  }
+
+  private escapeStringRegexp(value: string): string {
+    // Escape characters with special meaning either inside or outside character sets.
+    // Use a simple backslash escape when it’s always valid, and a `\xnn` escape when the simpler form would be disallowed by Unicode patterns’ stricter grammar.
+    return value.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&').replace(/-/g, '\\x2d');
   }
 
   private async exit(exitCode: number): Promise<never> {
