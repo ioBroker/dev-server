@@ -4,6 +4,10 @@
 	## __WORK IN PROGRESS__
 -->
 
+## __WORK IN PROGRESS__
+
+- (UncleSamSwiss) Fixed warnings when debugging "old-style" React adapters like ioBroker.javascript
+
 ## 0.4.0 (2021-07-06)
 
 - (UncleSamSwiss) Changed default log level to `debug` and adapter repo to `beta` (#74)
