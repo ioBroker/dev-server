@@ -27,10 +27,8 @@ const yargs = require("yargs/yargs");
 const axios_1 = __importDefault(require("axios"));
 const browser_sync_1 = __importDefault(require("browser-sync"));
 const chalk_1 = require("chalk");
-const cp = __importStar(require("child_process"));
 const chokidar_1 = __importDefault(require("chokidar"));
 const enquirer_1 = require("enquirer");
-const escape_string_regexp_1 = __importDefault(require("escape-string-regexp"));
 const express_1 = __importDefault(require("express"));
 const fast_glob_1 = __importDefault(require("fast-glob"));
 const fs_extra_1 = require("fs-extra");
@@ -38,13 +36,13 @@ const http_proxy_middleware_1 = require("http-proxy-middleware");
 const nodemon_1 = __importDefault(require("nodemon"));
 const os_1 = require("os");
 const path = __importStar(require("path"));
-const ps_tree_1 = __importDefault(require("ps-tree"));
 const semver_1 = require("semver");
 const source_map_1 = require("source-map");
 const ws_1 = __importDefault(require("ws"));
 const logger_1 = require("./logger");
+const target_1 = require("./target");
+const utils_1 = require("./utils");
 const chalk = require("chalk");
-const rimraf = require("rimraf");
 const acorn = require("acorn");
 const EventEmitter = require("events");
 const DEFAULT_TEMP_DIR_NAME = '.dev-server';
@@ -60,8 +58,8 @@ const DEFAULT_PROFILE_NAME = 'default';
 class DevServer {
     constructor() {
         this.log = new logger_1.Logger();
+        this.executor = new target_1.ProcessExecutor(this.log);
         this.socketEvents = new EventEmitter();
-        this.childProcesses = [];
         const parser = yargs(process.argv.slice(2));
         parser
             .usage('Usage: $0 <command> [options] [profile]\n   or: $0 <command> --help   to see available options for a command')
@@ -89,8 +87,13 @@ class DevServer {
                 alias: 'b',
                 description: 'Provide an ioBroker backup file to restore in this dev-server',
             },
+            ssh: {
+                type: 'string',
+                alias: 's',
+                description: 'Run ioBroker on a remote system over SSH.\nFormat: <user>:<password>@<hostname>',
+            },
             force: { type: 'boolean', hidden: true },
-        }, async (args) => await this.setup(args.adminPort, { ['iobroker.js-controller']: args.jsController, ['iobroker.admin']: args.admin }, args.backupFile, !!args.force))
+        }, async (args) => await this.setup(args.adminPort, { ['iobroker.js-controller']: args.jsController, ['iobroker.admin']: args.admin }, args.backupFile, args.ssh, !!args.force))
             .command(['update [profile]', 'ud'], 'Update ioBroker and its dependencies to the latest versions', {}, async () => await this.update())
             .command(['run [profile]', 'r'], 'Run ioBroker dev-server, the adapter will not run, but you may test the Admin UI with hot-reload', {}, async () => await this.run())
             .command(['watch [profile]', 'w'], 'Run ioBroker dev-server and start the adapter in "watch" mode. The adapter will automatically restart when its source code changes. You may attach a debugger to the running adapter.', {
@@ -161,6 +164,7 @@ class DevServer {
             await (0, fs_extra_1.mkdir)(this.tempDir);
             await (0, fs_extra_1.rename)(intermediateDir, defaultProfileDir);
         }
+        this.adapterName = await this.findAdapterName();
         let profileName = argv.profile;
         const profiles = await this.getProfiles();
         const profileNames = Object.keys(profiles);
@@ -204,12 +208,23 @@ class DevServer {
             }
         }
         if (!profileName.match(/^[a-z0-9_-]+$/i)) {
-            throw new Error(`Invaid profile name: "${profileName}", it may only contain a-z, 0-9, _ and -.`);
+            throw new Error(`Invalid profile name: "${profileName}", it may only contain a-z, 0-9, _ and -.`);
         }
         this.profileName = profileName;
         this.log.debug(`Using profile name "${this.profileName}"`);
         this.profileDir = path.join(this.tempDir, profileName);
-        this.adapterName = await this.findAdapterName();
+        if (argv.ssh) {
+            this.target = new target_1.RemoteTarget(argv.ssh, this.profileDir, this.adapterName, this.log);
+        }
+        else {
+            const config = await this.readDevServerConfig();
+            if (config === null || config === void 0 ? void 0 : config.remote) {
+                this.target = new target_1.RemoteTarget(config.remote, this.profileDir, this.adapterName, this.log);
+            }
+            else {
+                this.target = new target_1.LocalTarget(this.profileDir, this.log);
+            }
+        }
     }
     async findAdapterName() {
         try {
@@ -238,19 +253,19 @@ class DevServer {
         return port;
     }
     ////////////////// Command Handlers //////////////////
-    async setup(adminPort, dependencies, backupFile, force) {
+    async setup(adminPort, dependencies, backupFile, remote, force) {
         if (force) {
-            this.log.notice(`Deleting ${this.profileDir}`);
-            await this.rimraf(this.profileDir);
+            await this.target.deleteAll();
         }
-        if (this.isSetUp()) {
-            this.log.error(`dev-server is already set up in "${this.profileDir}".`);
+        const msg = remote ? `on\n${remote}` : `in\n${this.profileDir}`;
+        if (await this.isSetUp()) {
+            this.log.error(`dev-server is already set up ${msg}`);
             this.log.debug(`Use --force to set it up from scratch (all data will be lost).`);
             return;
         }
-        await this.setupDevServer(adminPort, dependencies, backupFile);
+        await this.setupDevServer(adminPort, dependencies, backupFile, remote);
         const commands = ['run', 'watch', 'debug'];
-        this.log.box(`dev-server was sucessfully set up in\n${this.profileDir}.\n\n` +
+        this.log.box(`dev-server was successfully set up ${msg}.\n\n` +
             `You may now execute one of the following commands\n\n${commands
                 .map((command) => `dev-server ${command} ${this.profileName}`)
                 .join('\n')}\n\nto use dev-server.`);
@@ -258,17 +273,17 @@ class DevServer {
     async update() {
         await this.checkSetup();
         this.log.notice('Updating everything...');
-        this.execSync('npm update --loglevel error', this.profileDir);
-        this.uploadAdapter('admin');
+        await this.target.execBlocking('npm update --loglevel error');
+        await this.uploadAdapter('admin');
         await this.installLocalAdapter();
         if (!this.isJSController())
-            this.uploadAdapter(this.adapterName);
-        this.log.box(`dev-server was sucessfully updated.`);
+            await this.uploadAdapter(this.adapterName);
+        this.log.box(`dev-server was successfully updated.`);
     }
     async run() {
         await this.checkSetup();
         await this.startJsController();
-        await this.startServer();
+        await this.startServer(false);
     }
     async watch(startAdapter) {
         await this.checkSetup();
@@ -276,11 +291,11 @@ class DevServer {
         if (this.isJSController()) {
             // this watches actually js-controller
             await this.startAdapterWatch(startAdapter);
-            await this.startServer();
+            await this.startServer(false);
         }
         else {
             await this.startJsController();
-            await this.startServer();
+            await this.startServer(startAdapter);
             await this.startAdapterWatch(startAdapter);
         }
     }
@@ -290,11 +305,11 @@ class DevServer {
         await this.copySourcemaps();
         if (this.isJSController()) {
             await this.startJsControllerDebug(wait);
-            await this.startServer();
+            await this.startServer(false);
         }
         else {
             await this.startJsController();
-            await this.startServer();
+            await this.startServer(false);
             await this.startAdapterDebug(wait);
         }
     }
@@ -302,13 +317,13 @@ class DevServer {
         await this.checkSetup();
         await this.installLocalAdapter();
         if (!this.isJSController())
-            this.uploadAdapter(this.adapterName);
-        this.log.box(`The latest content of iobroker.${this.adapterName} was uploaded to ${this.profileDir}.`);
+            await this.uploadAdapter(this.adapterName);
+        this.log.box(`The latest content of iobroker.${this.adapterName} was uploaded to ${this.profileName}.`);
     }
     async backup(filename) {
         const fullPath = path.resolve(filename);
         this.log.notice('Creating backup');
-        this.execSync(`${IOBROKER_COMMAND} backup "${fullPath}"`, this.profileDir);
+        await this.target.execBlocking(`${IOBROKER_COMMAND} backup "${fullPath}"`);
     }
     async profile() {
         const profiles = await this.getProfiles();
@@ -349,17 +364,21 @@ class DevServer {
         return pkgs.filter((p) => !!p).reduce((old, [e, pkg]) => ({ ...old, [e]: pkg }), {});
     }
     async checkSetup() {
-        if (!this.isSetUp()) {
+        if (!(await this.isSetUp())) {
             this.log.error(`dev-server is not set up in ${this.profileDir}.\nPlease use the command "setup" first to set up dev-server.`);
             return this.exit(-1);
         }
     }
-    isSetUp() {
+    async isSetUp() {
         const jsControllerDir = path.join(this.profileDir, 'node_modules', CORE_MODULE);
-        return (0, fs_extra_1.existsSync)(jsControllerDir);
+        if ((0, fs_extra_1.existsSync)(jsControllerDir)) {
+            return true;
+        }
+        const config = await this.readDevServerConfig();
+        return !!(config === null || config === void 0 ? void 0 : config.remote);
     }
     async startJsController() {
-        const proc = this.spawn('node', ['node_modules/iobroker.js-controller/controller.js'], this.profileDir);
+        const proc = await this.target.spawn('node', ['node_modules/iobroker.js-controller/controller.js']);
         proc.on('exit', async (code) => {
             console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
             return this.exit(-1);
@@ -374,19 +393,23 @@ class DevServer {
         else {
             nodeArgs.unshift('--inspect');
         }
-        const proc = this.spawn('node', nodeArgs, this.profileDir);
+        const proc = await this.target.spawn('node', nodeArgs);
         proc.on('exit', (code) => {
             console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
             return this.exit(-1);
         });
         this.log.box(`Debugger is now ${wait ? 'waiting' : 'available'} on process id ${proc.pid}`);
     }
-    async startServer() {
-        this.log.notice(`Running inside ${this.profileDir}`);
-        const tempPkg = await (0, fs_extra_1.readJson)(path.join(this.profileDir, 'package.json'));
-        const config = tempPkg['dev-server'];
+    async startServer(useSocketEvents) {
+        const config = await this.readDevServerConfig();
         if (!config) {
-            throw new Error(`Couldn't find dev-server configuration in package.json`);
+            throw new Error(`Couldn't find dev-server configuration in ${path.join(this.profileDir, 'package.json')}`);
+        }
+        if (!!config.remote) {
+            this.log.notice(`Running on ${config.remote}`);
+        }
+        else {
+            this.log.notice(`Running in ${this.profileDir}`);
         }
         // figure out if we need parcel (React)
         if (!this.isJSController()) {
@@ -470,11 +493,13 @@ class DevServer {
                 }
             });
         };
-        connectWebSocketClient();
+        if (useSocketEvents) {
+            connectWebSocketClient();
+        }
         this.log.box(`Admin is now reachable under http://localhost:${config.adminPort}/`);
     }
     async copySourcemaps() {
-        const outDir = path.join(this.profileDir, 'node_modules', `iobroker.${this.adapterName}`);
+        const outDir = path.join('node_modules', `iobroker.${this.adapterName}`);
         this.log.notice(`Creating or patching sourcemaps in ${outDir}`);
         const sourcemaps = await this.findFiles('map', true);
         if (sourcemaps.length === 0) {
@@ -500,16 +525,22 @@ class DevServer {
     /**
      * Create an identity sourcemap to point to a different source file.
      * @param src The path to the original JavaScript file.
-     * @param dest The path to the JavaScript file which will get a sourcemap attached.
+     * @param dest The relative path to the JavaScript file which will get a sourcemap attached.
      * @param copyFromSrc Set to true to copy the JavaScript file from src to dest (not just modify dest).
      */
     async addSourcemap(src, dest, copyFromSrc) {
         try {
             const mapFile = `${dest}.map`;
             const data = await this.createIdentitySourcemap(src.replace(/\\/g, '/'));
-            await (0, fs_extra_1.writeFile)(mapFile, JSON.stringify(data));
+            await this.target.writeJson(mapFile, data);
             // append the sourcemap reference comment to the bottom of the file
-            const fileContent = await (0, fs_extra_1.readFile)(copyFromSrc ? src : dest, { encoding: 'utf-8' });
+            let fileContent;
+            if (copyFromSrc) {
+                fileContent = await (0, fs_extra_1.readFile)(src, { encoding: 'utf-8' });
+            }
+            else {
+                fileContent = await this.target.readText(dest);
+            }
             const filename = path.basename(mapFile);
             let updatedContent = fileContent.replace(/(\/\/\# sourceMappingURL=).+/, `$1${filename}`);
             if (updatedContent === fileContent) {
@@ -523,7 +554,7 @@ class DevServer {
                 }
                 updatedContent += `//# sourceMappingURL=${filename}`;
             }
-            await (0, fs_extra_1.writeFile)(dest, updatedContent);
+            await this.target.writeText(dest, updatedContent);
             this.log.debug(`Created ${mapFile} from ${src}`);
         }
         catch (error) {
@@ -542,7 +573,7 @@ class DevServer {
                 throw new Error(`Unsupported sourcemap version: ${data.version}`);
             }
             data.sourceRoot = path.dirname(src).replace(/\\/g, '/');
-            await (0, fs_extra_1.writeJson)(dest, data);
+            await this.target.writeJson(dest, data);
             this.log.debug(`Patched ${dest} from ${src}`);
         }
         catch (error) {
@@ -589,7 +620,7 @@ class DevServer {
     async startReact(scriptName = 'watch:react') {
         this.log.notice('Starting React build');
         this.log.debug('Waiting for first successful React build...');
-        await this.spawnAndAwaitOutput('npm', ['run', scriptName], this.rootDir, /(built in|done in|watching (files )?for)/i, {
+        await this.executor.spawnAndAwaitOutput('npm', ['run', scriptName], this.rootDir, /(built in|done in|watching (files )?for)/i, {
             shell: true,
         });
     }
@@ -622,7 +653,7 @@ class DevServer {
         if (wait) {
             args.push('--wait');
         }
-        const proc = this.spawn('node', args, this.profileDir);
+        const proc = await this.target.spawn('node', args);
         proc.on('exit', (code) => {
             console.error(chalk.yellow(`Adapter debugging exited with code ${code}`));
             return this.exit(-1);
@@ -636,7 +667,7 @@ class DevServer {
     async waitForNodeChildProcess(parentPid) {
         const start = new Date().getTime();
         while (start + 2000 > new Date().getTime()) {
-            const processes = await this.getChildProcesses(parentPid);
+            const processes = await this.executor.getChildProcesses(parentPid);
             const child = processes.find((p) => p.COMMAND.match(/node/i));
             if (child) {
                 return parseInt(child.PID);
@@ -644,22 +675,6 @@ class DevServer {
         }
         this.log.debug(`No node child process of ${parentPid} found, assuming parent process was reused.`);
         return parentPid;
-    }
-    getChildProcesses(parentPid) {
-        return new Promise((resolve, reject) => (0, ps_tree_1.default)(parentPid, (err, children) => {
-            if (err) {
-                reject(err);
-            }
-            else {
-                // fix for MacOS bug #11
-                children.forEach((c) => {
-                    if (c.COMM && !c.COMMAND) {
-                        c.COMMAND = c.COMM;
-                    }
-                });
-                resolve(children);
-            }
-        }));
     }
     async startAdapterWatch(startAdapter) {
         // figure out if we need to watch for TypeScript changes
@@ -670,7 +685,7 @@ class DevServer {
             await this.startTscWatch();
         }
         // start sync
-        const adapterRunDir = path.join(this.profileDir, 'node_modules', `iobroker.${this.adapterName}`);
+        const adapterRunDir = path.join('node_modules', `iobroker.${this.adapterName}`);
         await this.startFileSync(adapterRunDir);
         if (startAdapter) {
             await this.startNodemon(adapterRunDir, pkg.main);
@@ -684,7 +699,9 @@ class DevServer {
     async startTscWatch() {
         this.log.notice('Starting tsc --watch');
         this.log.debug('Waiting for first successful tsc build...');
-        await this.spawnAndAwaitOutput('npm', ['run', 'watch:ts'], this.rootDir, /watching (files )?for/i, { shell: true });
+        await this.executor.spawnAndAwaitOutput('npm', ['run', 'watch:ts'], this.rootDir, /watching (files )?for/i, {
+            shell: true,
+        });
     }
     startFileSync(destinationDir) {
         this.log.notice(`Starting file system sync from ${this.rootDir}`);
@@ -716,7 +733,7 @@ class DevServer {
                         await this.addSourcemap(src, dest, true);
                     }
                     else {
-                        await (0, fs_extra_1.copyFile)(src, dest);
+                        await this.target.uploadFile(src, dest);
                     }
                 }
                 catch (error) {
@@ -727,7 +744,7 @@ class DevServer {
                 if (ready) {
                     syncFile(filename);
                 }
-                else if (!filename.endsWith('map') && !(0, fs_extra_1.existsSync)(inDest(filename))) {
+                else if (!filename.endsWith('map') && !this.target.existsSync(inDest(filename))) {
                     // ignore files during initial sync if they don't exist in the target directory (except for sourcemaps)
                     ignoreFiles.push(filename);
                 }
@@ -740,16 +757,17 @@ class DevServer {
                     syncFile(filename);
                 }
             });
-            watcher.on('unlink', (filename) => {
-                (0, fs_extra_1.unlinkSync)(inDest(filename));
+            watcher.on('unlink', async (filename) => {
+                await this.target.unlink(inDest(filename));
                 const map = inDest(filename + '.map');
-                if ((0, fs_extra_1.existsSync)(map)) {
-                    (0, fs_extra_1.unlinkSync)(map);
+                if (this.target.existsSync(map)) {
+                    await this.target.unlink(map);
                 }
             });
         });
     }
     async startNodemon(baseDir, scriptName) {
+        baseDir = path.join(this.profileDir, baseDir);
         const script = path.resolve(baseDir, scriptName);
         this.log.notice(`Starting nodemon for ${script}`);
         let isExiting = false;
@@ -823,14 +841,11 @@ class DevServer {
         if (!match) {
             return;
         }
-        const debigPid = await this.waitForNodeChildProcess(parseInt(match[1]));
-        this.log.box(`Debugger is now available on process id ${debigPid}`);
+        const debugPid = await this.waitForNodeChildProcess(parseInt(match[1]));
+        this.log.box(`Debugger is now available on process id ${debugPid}`);
     }
-    async setupDevServer(adminPort, dependencies, backupFile) {
+    async setupDevServer(adminPort, dependencies, backupFile, remote) {
         this.log.notice(`Setting up in ${this.profileDir}`);
-        // create the data directory
-        const dataDir = path.join(this.profileDir, 'iobroker-data');
-        await (0, fs_extra_1.mkdirp)(dataDir);
         // create the configuration
         const config = {
             system: {
@@ -901,7 +916,8 @@ class DevServer {
             plugins: {},
             dataDir: '../../iobroker-data/',
         };
-        await (0, fs_extra_1.writeJson)(path.join(dataDir, 'iobroker.json'), config, { spaces: 2 });
+        const configFile = path.join('iobroker-data', 'iobroker.json');
+        await this.target.writeJson(configFile, config, { spaces: 2 });
         // create the package file
         if (this.isJSController()) {
             // if this dev-server is used to debug JS-Controller, don't install a published version
@@ -913,17 +929,25 @@ class DevServer {
             private: true,
             dependencies,
             'dev-server': {
-                adminPort: adminPort,
+                adminPort,
+                remote,
             },
         };
-        await (0, fs_extra_1.writeJson)(path.join(this.profileDir, 'package.json'), pkg, { spaces: 2 });
+        await this.target.writeJson('package.json', pkg, { spaces: 2 });
         await this.verifyIgnoreFiles();
         this.log.notice('Installing js-controller and admin...');
-        this.execSync('npm install --loglevel error --production', this.profileDir);
+        await this.target.execBlocking('npm install --loglevel error --production');
         if (backupFile) {
             const fullPath = path.resolve(backupFile);
             this.log.notice(`Restoring backup from ${fullPath}`);
-            this.execSync(`${IOBROKER_COMMAND} restore "${fullPath}"`, this.profileDir);
+            if (this.target instanceof target_1.RemoteTarget) {
+                const remoteFileName = 'backup.tgz';
+                await this.target.uploadFile(fullPath, remoteFileName);
+                await this.target.execBlocking(`${IOBROKER_COMMAND} restore "${remoteFileName}"`);
+            }
+            else {
+                await this.target.execBlocking(`${IOBROKER_COMMAND} restore "${fullPath}"`);
+            }
         }
         if (this.isJSController()) {
             await this.installLocalAdapter();
@@ -931,7 +955,7 @@ class DevServer {
         await this.uploadAndAddAdapter('admin');
         // reconfigure admin instance (only listen to local IP address)
         this.log.notice('Configure admin.0');
-        this.execSync(`${IOBROKER_COMMAND} set admin.0 --port ${this.getPort(adminPort, HIDDEN_ADMIN_PORT_OFFSET)} --bind 127.0.0.1`, this.profileDir);
+        await this.target.execBlocking(`${IOBROKER_COMMAND} set admin.0 --port ${this.getPort(adminPort, HIDDEN_ADMIN_PORT_OFFSET)} --bind 127.0.0.1`);
         if (!this.isJSController()) {
             // install local adapter
             await this.installLocalAdapter();
@@ -952,18 +976,18 @@ class DevServer {
                 }
             }
             this.log.notice(`Stop ${this.adapterName}.0`);
-            this.execSync(`${IOBROKER_COMMAND} stop ${this.adapterName} 0`, this.profileDir);
+            await this.target.execBlocking(`${IOBROKER_COMMAND} stop ${this.adapterName} 0`);
         }
         this.log.notice('Disable statistics reporting');
-        this.execSync(`${IOBROKER_COMMAND} object set system.config common.diag="none"`, this.profileDir);
+        await this.target.execBlocking(`${IOBROKER_COMMAND} object set system.config common.diag="none"`);
         this.log.notice('Disable license confirmation');
-        this.execSync(`${IOBROKER_COMMAND} object set system.config common.licenseConfirmed=true`, this.profileDir);
+        await this.target.execBlocking(`${IOBROKER_COMMAND} object set system.config common.licenseConfirmed=true`);
         this.log.notice('Disable missing info adapter warning');
-        this.execSync(`${IOBROKER_COMMAND} object set system.config common.infoAdapterInstall=true`, this.profileDir);
+        await this.target.execBlocking(`${IOBROKER_COMMAND} object set system.config common.infoAdapterInstall=true`);
         this.log.notice('Set default log level for adapters to debug');
-        this.execSync(`${IOBROKER_COMMAND} object set system.config common.defaultLogLevel="debug"`, this.profileDir);
+        await this.target.execBlocking(`${IOBROKER_COMMAND} object set system.config common.defaultLogLevel="debug"`);
         this.log.notice('Set adapter repository to beta');
-        this.execSync(`${IOBROKER_COMMAND} object set system.config common.activeRepo="beta"`, this.profileDir);
+        await this.target.execBlocking(`${IOBROKER_COMMAND} object set system.config common.activeRepo="beta"`);
     }
     async verifyIgnoreFiles() {
         this.log.notice(`Verifying .npmignore and .gitignore`);
@@ -975,12 +999,12 @@ class DevServer {
         if (!relative.endsWith('/')) {
             relative += '/';
         }
-        const tempDirRegex = new RegExp(`\\s${(0, escape_string_regexp_1.default)(relative)
+        const tempDirRegex = new RegExp(`\\s${this.escapeStringRegexp(relative)
             .replace(/[\\/]$/, '')
             .replace(/(\\\\|\/)/g, '[\\/]')}`);
         const verifyFile = async (filename, command, allowStar) => {
             try {
-                const { stdout, stderr } = await this.getExecOutput(command, this.rootDir);
+                const { stdout, stderr } = await this.executor.getExecOutput(command, this.rootDir);
                 if (stdout.match(tempDirRegex) || stderr.match(tempDirRegex)) {
                     this.log.error((0, chalk_1.bold)(`Your ${filename} doesn't exclude the temporary directory "${relative}"`));
                     const choices = [];
@@ -1037,38 +1061,47 @@ class DevServer {
     }
     async uploadAndAddAdapter(name) {
         // upload the already installed adapter
-        this.uploadAdapter(name);
+        await this.uploadAdapter(name);
         const command = `${IOBROKER_COMMAND} list instances`;
-        const { stdout } = await this.getExecOutput(command, this.profileDir);
-        if (stdout.includes(`system.adapter.${name}.0 `)) {
+        const output = await this.target.getExecOutput(command);
+        if (output.includes(`system.adapter.${name}.0 `)) {
             this.log.info(`Instance ${name}.0 already exists, not adding it again`);
             return;
         }
         // create an instance
         this.log.notice(`Add ${name}.0`);
-        this.execSync(`${IOBROKER_COMMAND} add ${name} 0`, this.profileDir);
+        await this.target.execBlocking(`${IOBROKER_COMMAND} add ${name} 0`);
     }
-    uploadAdapter(name) {
+    async uploadAdapter(name) {
         this.log.notice(`Upload iobroker.${name}`);
-        this.execSync(`${IOBROKER_COMMAND} upload ${name}`, this.profileDir);
+        await this.target.execBlocking(`${IOBROKER_COMMAND} upload ${name}`);
     }
     async installLocalAdapter() {
         var _a;
         this.log.notice(`Install local iobroker.${this.adapterName}`);
         const pkg = await this.readPackageJson();
         if ((_a = pkg.scripts) === null || _a === void 0 ? void 0 : _a.build) {
-            this.execSync('npm run build', this.rootDir);
+            this.executor.execSync('npm run build', this.rootDir);
         }
-        const { stdout } = await this.getExecOutput('npm pack', this.rootDir);
+        const { stdout } = await this.executor.getExecOutput('npm pack', this.rootDir);
         const filename = stdout.trim();
         this.log.info(`Packed to ${filename}`);
         const fullPath = path.join(this.rootDir, filename);
-        this.execSync(`npm install "${fullPath}"`, this.profileDir);
-        await this.rimraf(fullPath);
+        await this.target.execBlocking(`npm install "${fullPath}"`);
+        await (0, utils_1.rimraf)(fullPath);
     }
     async installRepoAdapter(adapterName) {
         this.log.notice(`Install iobroker.${adapterName}`);
-        this.execSync(`${IOBROKER_COMMAND} install ${adapterName}`, this.profileDir);
+        await this.target.execBlocking(`${IOBROKER_COMMAND} install ${adapterName}`);
+    }
+    async readDevServerConfig() {
+        try {
+            const tempPkg = await (0, fs_extra_1.readJson)(path.join(this.profileDir, 'package.json'));
+            return tempPkg['dev-server'];
+        }
+        catch (_a) {
+            return undefined;
+        }
     }
     /**
      * This method is largely borrowed from ioBroker.js-controller/lib/tools.js
@@ -1100,87 +1133,14 @@ class DevServer {
         }
         return adapters.filter((a) => a !== 'js-controller');
     }
-    execSync(command, cwd, options) {
-        options = { cwd: cwd, stdio: 'inherit', ...options };
-        this.log.debug(`${cwd}> ${command}`);
-        return cp.execSync(command, options);
-    }
-    getExecOutput(command, cwd) {
-        this.log.debug(`${cwd}> ${command}`);
-        return new Promise((resolve, reject) => {
-            this.childProcesses.push(cp.exec(command, { cwd, encoding: 'ascii' }, (err, stdout, stderr) => {
-                if (err) {
-                    reject(err);
-                }
-                else {
-                    resolve({ stdout, stderr });
-                }
-            }));
-        });
-    }
-    spawn(command, args, cwd, options) {
-        this.log.debug(`${cwd}> ${command} ${args.join(' ')}`);
-        const proc = cp.spawn(command, args, {
-            stdio: ['ignore', 'inherit', 'inherit'],
-            cwd: cwd,
-            ...options,
-        });
-        this.childProcesses.push(proc);
-        let alive = true;
-        proc.on('exit', () => (alive = false));
-        process.on('exit', () => alive && proc.kill());
-        return proc;
-    }
-    spawnAndAwaitOutput(command, args, cwd, awaitMsg, options) {
-        return new Promise((resolve, reject) => {
-            var _a;
-            const proc = this.spawn(command, args, cwd, { ...options, stdio: ['ignore', 'pipe', 'inherit'] });
-            (_a = proc.stdout) === null || _a === void 0 ? void 0 : _a.on('data', (data) => {
-                let str = data.toString('utf-8');
-                str = str.replace(/\x1Bc/, ''); // filter the "clear screen" ANSI code (used by tsc)
-                if (str) {
-                    str = str.trimEnd();
-                    console.log(str);
-                }
-                if (typeof awaitMsg === 'string') {
-                    if (str.includes(awaitMsg)) {
-                        resolve(proc);
-                    }
-                }
-                else {
-                    if (awaitMsg.test(str)) {
-                        resolve(proc);
-                    }
-                }
-            });
-            proc.on('exit', (code) => reject(`Exited with ${code}`));
-            process.on('SIGINT', () => {
-                proc.kill();
-                reject('SIGINT');
-            });
-        });
-    }
-    rimraf(name) {
-        return new Promise((resolve, reject) => rimraf(name, (err) => (err ? reject(err) : resolve())));
+    escapeStringRegexp(value) {
+        // Escape characters with special meaning either inside or outside character sets.
+        // Use a simple backslash escape when it’s always valid, and a `\xnn` escape when the simpler form would be disallowed by Unicode patterns’ stricter grammar.
+        return value.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&').replace(/-/g, '\\x2d');
     }
     async exit(exitCode) {
-        const childPids = this.childProcesses.map((p) => p.pid).filter((p) => !!p);
-        const tryKill = (pid) => {
-            try {
-                process.kill(pid, 'SIGKILL');
-            }
-            catch (_a) {
-                // ignore
-            }
-        };
-        try {
-            const children = await Promise.all(childPids.map((pid) => this.getChildProcesses(pid)));
-            children.forEach((ch) => ch.forEach((c) => tryKill(parseInt(c.PID))));
-        }
-        catch (error) {
-            this.log.error(`Couldn't kill grand-child processes: ${error}`);
-        }
-        childPids.forEach((pid) => tryKill(pid));
+        await this.executor.killAllChildren();
+        await this.target.killAllChildren();
         process.exit(exitCode);
     }
 }
