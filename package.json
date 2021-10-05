@@ -44,7 +44,7 @@
   "dependencies": {
     "acorn": "^8.5.0",
     "axios": "^0.21.4",
-    "boxen": "^5.0.1",
+    "boxen": "^6.1.0",
     "browser-sync": "^2.27.5",
     "bs-html-injector": "^3.0.3",
     "chalk": "^4.1.2",
