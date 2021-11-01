@@ -27,7 +27,7 @@
     "@types/nodemon": "^1.19.1",
     "@types/ps-tree": "^1.1.1",
     "@types/rimraf": "^3.0.2",
-    "@types/semver": "^7.3.8",
+    "@types/semver": "^7.3.9",
     "@types/table": "^6.3.2",
     "@types/ws": "^8.2.0",
     "@types/yargs": "^17.0.3",
