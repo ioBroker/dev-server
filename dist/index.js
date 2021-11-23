@@ -30,7 +30,6 @@ const chalk_1 = require("chalk");
 const cp = __importStar(require("child_process"));
 const chokidar_1 = __importDefault(require("chokidar"));
 const enquirer_1 = require("enquirer");
-const escape_string_regexp_1 = __importDefault(require("escape-string-regexp"));
 const express_1 = __importDefault(require("express"));
 const fast_glob_1 = __importDefault(require("fast-glob"));
 const fs_extra_1 = require("fs-extra");
@@ -553,7 +552,7 @@ class DevServer {
         const exts = typeof extensions === 'string' ? [extensions] : extensions;
         const patterns = exts.map((e) => `./**/*.${e}`);
         patterns.push('!./.*/**');
-        patterns.push('!./node_modules/**');
+        patterns.push('!./**/node_modules/**');
         patterns.push('!./test/**');
         if (excludeAdmin) {
             patterns.push('!./admin/**');
@@ -975,7 +974,7 @@ class DevServer {
         if (!relative.endsWith('/')) {
             relative += '/';
         }
-        const tempDirRegex = new RegExp(`\\s${(0, escape_string_regexp_1.default)(relative)
+        const tempDirRegex = new RegExp(`\\s${this.escapeStringRegexp(relative)
             .replace(/[\\/]$/, '')
             .replace(/(\\\\|\/)/g, '[\\/]')}`);
         const verifyFile = async (filename, command, allowStar) => {
@@ -1162,6 +1161,11 @@ class DevServer {
     }
     rimraf(name) {
         return new Promise((resolve, reject) => rimraf(name, (err) => (err ? reject(err) : resolve())));
+    }
+    escapeStringRegexp(value) {
+        // Escape characters with special meaning either inside or outside character sets.
+        // Use a simple backslash escape when it’s always valid, and a `\xnn` escape when the simpler form would be disallowed by Unicode patterns’ stricter grammar.
+        return value.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&').replace(/-/g, '\\x2d');
     }
     async exit(exitCode) {
         const childPids = this.childProcesses.map((p) => p.pid).filter((p) => !!p);
