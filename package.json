@@ -51,7 +51,7 @@
     "chokidar": "^3.5.3",
     "enquirer": "^2.3.6",
     "express": "^4.17.2",
-    "fast-glob": "^3.2.7",
+    "fast-glob": "^3.2.11",
     "fs-extra": "^10.0.0",
     "http-proxy-middleware": "^2.0.1",
     "nodemon": "^2.0.15",
