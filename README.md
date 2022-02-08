@@ -119,6 +119,8 @@ Run dev-server and start the adapter in "watch" mode.
 
 The adapter will automatically restart when its source code changes (with a 2 seconds delay).
 
+**DO NOT** start the adapter manually in ioBroker.admin.
+
 You may attach a debugger to the running adapter. Keep in mind that the debugger will be detached when you change your source code, you need to manually attach again to the new process. Watch the console output for the correct process id to attach to.
 
 If you are using TypeScript, make sure you have the `watch:ts` script defined the same way it is done by [Adapter Creator](https://github.com/ioBroker/create-adapter). There is no need to run `npm run watch:ts` separately, this is automatically done by dev-server.
