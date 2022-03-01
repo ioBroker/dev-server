@@ -29,7 +29,7 @@
     "@types/rimraf": "^3.0.2",
     "@types/semver": "^7.3.9",
     "@types/table": "^6.3.2",
-    "@types/ws": "^8.2.2",
+    "@types/ws": "^8.5.1",
     "@types/yargs": "^17.0.8",
     "@typescript-eslint/eslint-plugin": "^4.33.0",
     "@typescript-eslint/parser": "^4.33.0",
