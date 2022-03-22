@@ -43,7 +43,7 @@
   },
   "dependencies": {
     "acorn": "^8.7.0",
-    "axios": "^0.24.0",
+    "axios": "^0.26.0",
     "boxen": "^6.2.1",
     "browser-sync": "^2.27.7",
     "bs-html-injector": "^3.0.3",
