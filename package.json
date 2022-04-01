@@ -53,7 +53,7 @@
     "express": "^4.17.3",
     "fast-glob": "^3.2.11",
     "fs-extra": "^10.0.1",
-    "http-proxy-middleware": "^2.0.3",
+    "http-proxy-middleware": "^2.0.4",
     "nodemon": "^2.0.15",
     "ps-tree": "^1.2.0",
     "rimraf": "^3.0.2",
