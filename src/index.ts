@@ -1329,13 +1329,17 @@ class DevServer {
     options?: cp.SpawnOptions,
   ): Promise<cp.ChildProcess> {
     return new Promise<cp.ChildProcess>((resolve, reject) => {
-      const proc = this.spawn(command, args, cwd, { ...options, stdio: ['ignore', 'pipe', 'inherit'] });
-      proc.stdout?.on('data', (data: Buffer) => {
+      const proc = this.spawn(command, args, cwd, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
+      const handleStream = (isStderr: boolean) => (data: Buffer) => {
         let str = data.toString('utf-8');
         str = str.replace(/\x1Bc/, ''); // filter the "clear screen" ANSI code (used by tsc)
         if (str) {
           str = str.trimEnd();
-          console.log(str);
+          if (isStderr) {
+            console.error(str);
+          } else {
+            console.log(str);
+          }
         }
 
         if (typeof awaitMsg === 'string') {
@@ -1347,7 +1351,10 @@ class DevServer {
             resolve(proc);
           }
         }
-      });
+      };
+      proc.stdout?.on('data', handleStream(false));
+      proc.stderr?.on('data', handleStream(true));
+
       proc.on('exit', (code) => reject(`Exited with ${code}`));
       process.on('SIGINT', () => {
         proc.kill();
