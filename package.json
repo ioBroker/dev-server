@@ -7,6 +7,7 @@
     "dev-server": "dist/index.js",
     "iobroker-dev-server": "dist/index.js"
   },
+  "files": [ "dist/*.js" ],
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "prebuild": "rimraf ./dist",
@@ -44,7 +45,7 @@
   "dependencies": {
     "acorn": "^8.7.0",
     "axios": "^0.26.1",
-    "boxen": "^6.2.1",
+    "boxen": "^5.1.2",
     "browser-sync": "^2.27.9",
     "bs-html-injector": "^3.0.3",
     "chalk": "^4.1.2",
