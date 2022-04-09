@@ -2,7 +2,11 @@
 "use strict";
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
-    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
 }) : (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     o[k2] = m[k];
@@ -1132,14 +1136,19 @@ class DevServer {
     }
     spawnAndAwaitOutput(command, args, cwd, awaitMsg, options) {
         return new Promise((resolve, reject) => {
-            var _a;
-            const proc = this.spawn(command, args, cwd, { ...options, stdio: ['ignore', 'pipe', 'inherit'] });
-            (_a = proc.stdout) === null || _a === void 0 ? void 0 : _a.on('data', (data) => {
+            var _a, _b;
+            const proc = this.spawn(command, args, cwd, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
+            const handleStream = (isStderr) => (data) => {
                 let str = data.toString('utf-8');
                 str = str.replace(/\x1Bc/, ''); // filter the "clear screen" ANSI code (used by tsc)
                 if (str) {
                     str = str.trimEnd();
-                    console.log(str);
+                    if (isStderr) {
+                        console.error(str);
+                    }
+                    else {
+                        console.log(str);
+                    }
                 }
                 if (typeof awaitMsg === 'string') {
                     if (str.includes(awaitMsg)) {
@@ -1151,7 +1160,9 @@ class DevServer {
                         resolve(proc);
                     }
                 }
-            });
+            };
+            (_a = proc.stdout) === null || _a === void 0 ? void 0 : _a.on('data', handleStream(false));
+            (_b = proc.stderr) === null || _b === void 0 ? void 0 : _b.on('data', handleStream(true));
             proc.on('exit', (code) => reject(`Exited with ${code}`));
             process.on('SIGINT', () => {
                 proc.kill();
