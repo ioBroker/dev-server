@@ -468,7 +468,11 @@ class DevServer {
   }
 
   async startJsController(): Promise<void> {
-    const proc = this.spawn('node', ['node_modules/iobroker.js-controller/controller.js'], this.profileDir);
+    const proc = this.spawn(
+      'node',
+      ['--inspect=127.0.0.1:9228', 'node_modules/iobroker.js-controller/controller.js'],
+      this.profileDir,
+    );
     proc.on('exit', async (code) => {
       console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
       return this.exit(-1);
