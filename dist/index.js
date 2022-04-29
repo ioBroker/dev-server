@@ -58,7 +58,6 @@ const OBJECTS_DB_PORT_OFFSET = 18345;
 const DEFAULT_PROFILE_NAME = 'default';
 class DevServer {
     constructor() {
-        this.log = new logger_1.Logger();
         this.socketEvents = new EventEmitter();
         this.childProcesses = [];
         const parser = yargs(process.argv.slice(2));
@@ -117,11 +116,16 @@ class DevServer {
                 description: 'Temporary directory where the dev-server data will be located',
             },
             root: { type: 'string', alias: 'r', hidden: true, default: '.' },
+            verbose: { type: 'boolean', hidden: true, default: false },
         })
+            .middleware(async (argv) => await this.setLogger(argv))
             .middleware(async () => await this.checkVersion())
             .middleware(async (argv) => await this.setDirectories(argv))
             .wrap(Math.min(100, parser.terminalWidth()))
             .help().argv;
+    }
+    async setLogger(argv) {
+        this.log = new logger_1.Logger(argv.verbose);
     }
     async checkVersion() {
         try {
@@ -443,12 +447,12 @@ class DevServer {
                 return;
             // TODO: replace this with @iobroker/socket-client
             const client = new ws_1.default(`ws://localhost:${hiddenAdminPort}/?sid=${Date.now()}&name=admin`);
-            client.on('open', () => this.log.debug('WebSocket open'));
+            client.on('open', () => this.log.trace('WebSocket open'));
             client.on('close', () => {
-                this.log.debug('WebSocket closed');
+                this.log.trace('WebSocket closed');
                 setTimeout(connectWebSocketClient, 1000);
             });
-            client.on('error', (error) => this.log.debug(`WebSocket error: ${error}`));
+            client.on('error', (error) => this.log.trace(`WebSocket error: ${error}`));
             client.on('message', (msg) => {
                 if (typeof msg === 'string') {
                     try {

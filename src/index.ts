@@ -55,7 +55,7 @@ type CoreDependency = 'iobroker.js-controller' | 'iobroker.admin';
 type DependencyVersions = Partial<Record<CoreDependency, string>>;
 
 class DevServer {
-  private readonly log = new Logger();
+  private log!: Logger;
   private rootDir!: string;
   private adapterName!: string;
   private tempDir!: string;
@@ -171,11 +171,17 @@ class DevServer {
           description: 'Temporary directory where the dev-server data will be located',
         },
         root: { type: 'string', alias: 'r', hidden: true, default: '.' },
+        verbose: { type: 'boolean', hidden: true, default: false },
       })
+      .middleware(async (argv) => await this.setLogger(argv))
       .middleware(async () => await this.checkVersion())
       .middleware(async (argv) => await this.setDirectories(argv))
       .wrap(Math.min(100, parser.terminalWidth()))
       .help().argv;
+  }
+
+  private async setLogger(argv: { verbose: boolean }): Promise<void> {
+    this.log = new Logger(argv.verbose);
   }
 
   private async checkVersion(): Promise<void> {
@@ -557,12 +563,12 @@ class DevServer {
       if (exiting) return;
       // TODO: replace this with @iobroker/socket-client
       const client = new WebSocket(`ws://localhost:${hiddenAdminPort}/?sid=${Date.now()}&name=admin`);
-      client.on('open', () => this.log.debug('WebSocket open'));
+      client.on('open', () => this.log.trace('WebSocket open'));
       client.on('close', () => {
-        this.log.debug('WebSocket closed');
+        this.log.trace('WebSocket closed');
         setTimeout(connectWebSocketClient, 1000);
       });
-      client.on('error', (error) => this.log.debug(`WebSocket error: ${error}`));
+      client.on('error', (error) => this.log.trace(`WebSocket error: ${error}`));
       client.on('message', (msg) => {
         if (typeof msg === 'string') {
           try {

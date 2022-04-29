@@ -3,6 +3,8 @@ import { blueBright, greenBright, grey, redBright, yellow } from 'chalk';
 import { table, TableUserConfig } from 'table';
 
 export class Logger {
+  constructor(private readonly verbose: boolean) {}
+
   public error(message: string): void {
     console.log(redBright(message));
   }
@@ -21,6 +23,12 @@ export class Logger {
 
   public debug(message: string): void {
     console.log(grey(message));
+  }
+
+  public trace(message: string): void {
+    if (this.verbose) {
+      console.log(grey(message));
+    }
   }
 
   public box(message: string): void {
