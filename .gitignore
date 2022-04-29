@@ -2,3 +2,4 @@
 node_modules/
 iobroker-data/
 .devserver/
+.idea
