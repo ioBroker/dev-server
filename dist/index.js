@@ -400,26 +400,33 @@ class DevServer {
         if (!config) {
             throw new Error(`Couldn't find dev-server configuration in package.json`);
         }
-        // figure out if we need parcel (React)
+        const pathRewrite = {};
+        // figure out if we need to watch the React build
+        let hasReact = false;
         if (!this.isJSController()) {
             const pkg = await this.readPackageJson();
             const scripts = pkg.scripts;
             if (scripts) {
                 if (scripts['watch:react']) {
-                    // use React with default script name
-                    await this.startReact();
+                    await this.startReact('watch:react');
+                    hasReact = true;
+                    if ((0, fs_extra_1.existsSync)(path.resolve(this.rootDir, 'admin/.watch'))) {
+                        // rewrite the build directory to the .watch directory,
+                        // because "watch:react" no longer updates the build directory automatically
+                        pathRewrite[`^/adapter/${this.adapterName}/build/`] = '/.watch/';
+                    }
                 }
                 else if (scripts['watch:parcel']) {
                     // use React with legacy script name
                     await this.startReact('watch:parcel');
+                    hasReact = true;
                 }
             }
         }
-        this.startBrowserSync(this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET));
+        this.startBrowserSync(this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET), hasReact);
         // browser-sync proxy
         const app = (0, express_1.default)();
         const adminPattern = `/adapter/${this.adapterName}/**`;
-        const pathRewrite = {};
         pathRewrite[`^/adapter/${this.adapterName}/`] = '/';
         app.use((0, http_proxy_middleware_1.createProxyMiddleware)([adminPattern, '/browser-sync/**'], {
             target: `http://localhost:${this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET)}`,
@@ -598,14 +605,14 @@ class DevServer {
         }
         return generator.toJSON();
     }
-    async startReact(scriptName = 'watch:react') {
+    async startReact(scriptName) {
         this.log.notice('Starting React build');
         this.log.debug('Waiting for first successful React build...');
         await this.spawnAndAwaitOutput('npm', ['run', scriptName], this.rootDir, /(built in|done in|watching (files )?for)/i, {
             shell: true,
         });
     }
-    startBrowserSync(port) {
+    startBrowserSync(port, hasReact) {
         this.log.notice('Starting browser-sync');
         const bs = browser_sync_1.default.create();
         const adminPath = path.resolve(this.rootDir, 'admin/');
@@ -614,7 +621,9 @@ class DevServer {
             port: port,
             open: false,
             ui: false,
-            logLevel: 'silent',
+            logLevel: 'info',
+            reloadDelay: hasReact ? 500 : 0,
+            reloadDebounce: hasReact ? 500 : 0,
             files: [path.join(adminPath, '**')],
             plugins: [
                 {

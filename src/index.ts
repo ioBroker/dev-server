@@ -507,27 +507,36 @@ class DevServer {
       throw new Error(`Couldn't find dev-server configuration in package.json`);
     }
 
-    // figure out if we need parcel (React)
+    const pathRewrite: Record<string, string> = {};
+
+    // figure out if we need to watch the React build
+    let hasReact = false;
     if (!this.isJSController()) {
       const pkg = await this.readPackageJson();
       const scripts = pkg.scripts;
       if (scripts) {
         if (scripts['watch:react']) {
-          // use React with default script name
-          await this.startReact();
+          await this.startReact('watch:react');
+          hasReact = true;
+
+          if (existsSync(path.resolve(this.rootDir, 'admin/.watch'))) {
+            // rewrite the build directory to the .watch directory,
+            // because "watch:react" no longer updates the build directory automatically
+            pathRewrite[`^/adapter/${this.adapterName}/build/`] = '/.watch/';
+          }
         } else if (scripts['watch:parcel']) {
           // use React with legacy script name
           await this.startReact('watch:parcel');
+          hasReact = true;
         }
       }
     }
 
-    this.startBrowserSync(this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET));
+    this.startBrowserSync(this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET), hasReact);
 
     // browser-sync proxy
     const app = express();
     const adminPattern = `/adapter/${this.adapterName}/**`;
-    const pathRewrite: Record<string, string> = {};
     pathRewrite[`^/adapter/${this.adapterName}/`] = '/';
     app.use(
       createProxyMiddleware([adminPattern, '/browser-sync/**'], {
@@ -730,7 +739,7 @@ class DevServer {
     return generator.toJSON();
   }
 
-  private async startReact(scriptName = 'watch:react'): Promise<void> {
+  private async startReact(scriptName: string): Promise<void> {
     this.log.notice('Starting React build');
     this.log.debug('Waiting for first successful React build...');
     await this.spawnAndAwaitOutput(
@@ -744,7 +753,7 @@ class DevServer {
     );
   }
 
-  private startBrowserSync(port: number): void {
+  private startBrowserSync(port: number, hasReact: boolean): void {
     this.log.notice('Starting browser-sync');
     const bs = browserSync.create();
 
@@ -754,7 +763,9 @@ class DevServer {
       port: port,
       open: false,
       ui: false,
-      logLevel: 'silent',
+      logLevel: 'info',
+      reloadDelay: hasReact ? 500 : 0,
+      reloadDebounce: hasReact ? 500 : 0,
       files: [path.join(adminPath, '**')],
       plugins: [
         {
