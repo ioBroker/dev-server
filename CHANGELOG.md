@@ -4,6 +4,11 @@
 	## __WORK IN PROGRESS__
 -->
 
+## __WORK IN PROGRESS__
+
+- (UncleSamSwiss) `dev-server watch` and `debug` support `--noInstall` which won't build/install the adapter
+
+
 ## 0.4.1 (2022-04-29)
 
 - (UncleSamSwiss) Fixed warnings when debugging "old-style" React adapters like ioBroker.javascript

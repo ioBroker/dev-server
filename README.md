@@ -129,6 +129,8 @@ The following options are available:
 
 `--noStart` Do not start the adapter itself, but only watch for changes and synchronize them between the development and the temporary directory.
 
+`--noInstall` Do not build and install the adapter before starting dev-server.
+
 ### `dev-server debug`
 
 Run dev-server and start the adapter from ioBroker in "debug" mode.
@@ -138,6 +140,8 @@ You may attach a debugger to the running adapter. Watch the console output for t
 The following options are available:
 
 `--wait` Start the adapter only once the debugger is attached. This works the same way as calling `iobroker debug <adapter-name>.0 --wait` which in itself is similar to `node --inspect-brk ...`
+
+`--noInstall` Do not build and install the adapter before starting dev-server.
 
 ### `dev-server update`
 

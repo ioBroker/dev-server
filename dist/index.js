@@ -102,14 +102,24 @@ class DevServer {
                 alias: 'n',
                 description: 'Do not start the adapter itself, only watch for changes and sync them.',
             },
-        }, async (args) => await this.watch(!args.noStart))
+            noInstall: {
+                type: 'boolean',
+                alias: 'x',
+                description: 'Do not build and install the adapter before starting.',
+            },
+        }, async (args) => await this.watch(!args.noStart, !!args.noInstall))
             .command(['debug [profile]', 'd'], 'Run ioBroker dev-server and start the adapter from ioBroker in "debug" mode. You may attach a debugger to the running adapter.', {
             wait: {
                 type: 'boolean',
                 alias: 'w',
                 description: 'Start the adapter only once the debugger is attached.',
             },
-        }, async (args) => await this.debug(!!args.wait))
+            noInstall: {
+                type: 'boolean',
+                alias: 'x',
+                description: 'Do not build and install the adapter before starting.',
+            },
+        }, async (args) => await this.debug(!!args.wait, !!args.noInstall))
             .command(['upload [profile]', 'ul'], 'Upload the current version of your adapter to the ioBroker dev-server. This is only required if you changed something relevant in your io-package.json', {}, async () => await this.upload())
             .command(['backup <filename> [profile]', 'b'], 'Create an ioBroker backup to the given file.', {}, async (args) => await this.backup(args.filename))
             .command(['profile', 'p'], 'List all dev-server profiles that exist in the current directory.', {}, async () => await this.profile())
@@ -279,10 +289,12 @@ class DevServer {
         await this.startJsController();
         await this.startServer();
     }
-    async watch(startAdapter) {
+    async watch(startAdapter, noInstall) {
         await this.checkSetup();
+        if (!noInstall) {
         await this.buildLocalAdapter();
         await this.installLocalAdapter();
+        }
         if (this.isJSController()) {
             // this watches actually js-controller
             await this.startAdapterWatch(startAdapter);
@@ -294,10 +306,12 @@ class DevServer {
             await this.startAdapterWatch(startAdapter);
         }
     }
-    async debug(wait) {
+    async debug(wait, noInstall) {
         await this.checkSetup();
+        if (!noInstall) {
         await this.buildLocalAdapter();
         await this.installLocalAdapter();
+        }
         await this.copySourcemaps();
         if (this.isJSController()) {
             await this.startJsControllerDebug(wait);

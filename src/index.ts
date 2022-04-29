@@ -131,8 +131,13 @@ class DevServer {
             alias: 'n',
             description: 'Do not start the adapter itself, only watch for changes and sync them.',
           },
+          noInstall: {
+            type: 'boolean',
+            alias: 'x',
+            description: 'Do not build and install the adapter before starting.',
+          },
         },
-        async (args) => await this.watch(!args.noStart),
+        async (args) => await this.watch(!args.noStart, !!args.noInstall),
       )
       .command(
         ['debug [profile]', 'd'],
@@ -143,8 +148,13 @@ class DevServer {
             alias: 'w',
             description: 'Start the adapter only once the debugger is attached.',
           },
+          noInstall: {
+            type: 'boolean',
+            alias: 'x',
+            description: 'Do not build and install the adapter before starting.',
+          },
         },
-        async (args) => await this.debug(!!args.wait),
+        async (args) => await this.debug(!!args.wait, !!args.noInstall),
       )
       .command(
         ['upload [profile]', 'ul'],
@@ -363,10 +373,12 @@ class DevServer {
     await this.startServer();
   }
 
-  async watch(startAdapter: boolean): Promise<void> {
+  async watch(startAdapter: boolean, noInstall: boolean): Promise<void> {
     await this.checkSetup();
+    if (!noInstall) {
     await this.buildLocalAdapter();
     await this.installLocalAdapter();
+    }
     if (this.isJSController()) {
       // this watches actually js-controller
       await this.startAdapterWatch(startAdapter);
@@ -378,10 +390,12 @@ class DevServer {
     }
   }
 
-  async debug(wait: boolean): Promise<void> {
+  async debug(wait: boolean, noInstall: boolean): Promise<void> {
     await this.checkSetup();
+    if (!noInstall) {
     await this.buildLocalAdapter();
     await this.installLocalAdapter();
+    }
     await this.copySourcemaps();
     if (this.isJSController()) {
       await this.startJsControllerDebug(wait);
