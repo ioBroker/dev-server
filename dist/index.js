@@ -46,6 +46,7 @@ const ps_tree_1 = __importDefault(require("ps-tree"));
 const semver_1 = require("semver");
 const source_map_1 = require("source-map");
 const ws_1 = __importDefault(require("ws"));
+const jsonConfig_1 = require("./jsonConfig");
 const logger_1 = require("./logger");
 const chalk = require("chalk");
 const rimraf = require("rimraf");
@@ -292,8 +293,8 @@ class DevServer {
     async watch(startAdapter, noInstall) {
         await this.checkSetup();
         if (!noInstall) {
-        await this.buildLocalAdapter();
-        await this.installLocalAdapter();
+            await this.buildLocalAdapter();
+            await this.installLocalAdapter();
         }
         if (this.isJSController()) {
             // this watches actually js-controller
@@ -309,8 +310,8 @@ class DevServer {
     async debug(wait, noInstall) {
         await this.checkSetup();
         if (!noInstall) {
-        await this.buildLocalAdapter();
-        await this.installLocalAdapter();
+            await this.buildLocalAdapter();
+            await this.installLocalAdapter();
         }
         await this.copySourcemaps();
         if (this.isJSController()) {
@@ -414,6 +415,115 @@ class DevServer {
         if (!config) {
             throw new Error(`Couldn't find dev-server configuration in package.json`);
         }
+        const hiddenAdminPort = this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET);
+        const app = (0, express_1.default)();
+        if (this.isJSController()) {
+            // simply forward admin as-is
+            app.use((0, http_proxy_middleware_1.createProxyMiddleware)({
+                target: `http://localhost:${hiddenAdminPort}`,
+                ws: true,
+            }));
+        }
+        else if ((0, fs_extra_1.existsSync)(path.resolve(this.rootDir, 'admin/jsonConfig.json'))) {
+            // JSON config
+            await this.createJsonConfigProxy(app, config);
+        }
+        else {
+            // HTML or React config
+            await this.createHtmlConfigProxy(app, config);
+        }
+        // start express
+        this.log.notice(`Starting web server on port ${config.adminPort}`);
+        const server = app.listen(config.adminPort);
+        let exiting = false;
+        process.on('SIGINT', () => {
+            this.log.notice('dev-server is exiting...');
+            exiting = true;
+            server.close();
+            // do not kill this process when receiving SIGINT, but let all child processes exit first
+        });
+        await new Promise((resolve, reject) => {
+            server.on('listening', resolve);
+            server.on('error', reject);
+            server.on('close', reject);
+        });
+        if (!this.isJSController()) {
+            const connectWebSocketClient = () => {
+                if (exiting)
+                    return;
+                // TODO: replace this with @iobroker/socket-client
+                this.websocket = new ws_1.default(`ws://localhost:${hiddenAdminPort}/?sid=${Date.now()}&name=admin`);
+                this.websocket.on('open', () => this.log.silly('WebSocket open'));
+                this.websocket.on('close', () => {
+                    this.log.silly('WebSocket closed');
+                    this.websocket = undefined;
+                    setTimeout(connectWebSocketClient, 1000);
+                });
+                this.websocket.on('error', (error) => this.log.silly(`WebSocket error: ${error}`));
+                this.websocket.on('message', (msg) => {
+                    var _a;
+                    if (typeof msg === 'string') {
+                        try {
+                            const data = JSON.parse(msg);
+                            if (!Array.isArray(data) || data.length === 0)
+                                return;
+                            switch (data[0]) {
+                                case 0:
+                                    if (data.length > 3) {
+                                        this.socketEvents.emit(data[2], data[3]);
+                                    }
+                                    break;
+                                case 1:
+                                    // ping received, send pong (keep-alive)
+                                    (_a = this.websocket) === null || _a === void 0 ? void 0 : _a.send('[2]');
+                                    break;
+                            }
+                        }
+                        catch (error) {
+                            this.log.error(`Couldn't handle WebSocket message: ${error}`);
+                        }
+                    }
+                });
+            };
+            connectWebSocketClient();
+        }
+        this.log.box(`Admin is now reachable under http://localhost:${config.adminPort}/`);
+    }
+    async createJsonConfigProxy(app, config) {
+        const browserSyncPort = this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET);
+        const bs = this.startBrowserSync(browserSyncPort, false);
+        // whenever jsonConfig.json changes, we upload the new file
+        const jsonConfig = path.resolve(this.rootDir, 'admin/jsonConfig.json');
+        bs.watch(jsonConfig, undefined, async (e) => {
+            var _a;
+            if (e === 'change') {
+                const content = await (0, fs_extra_1.readFile)(jsonConfig);
+                (_a = this.websocket) === null || _a === void 0 ? void 0 : _a.send(JSON.stringify([
+                    3,
+                    46,
+                    'writeFile',
+                    [`${this.adapterName}.admin`, 'jsonConfig.json', Buffer.from(content).toString('base64')],
+                ]));
+            }
+        });
+        // "proxy" for the main page which injects our script
+        const adminUrl = `http://localhost:${this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET)}`;
+        app.get('/', async (_req, res) => {
+            const { data } = await axios_1.default.get(adminUrl);
+            res.send((0, jsonConfig_1.injectCode)(data, this.adapterName));
+        });
+        // browser-sync proxy
+        app.use((0, http_proxy_middleware_1.createProxyMiddleware)(['/browser-sync/**'], {
+            target: `http://localhost:${browserSyncPort}`,
+            //ws: true, // can't have two web-socket connections proxying to different locations
+        }));
+        // admin proxy
+        app.use((0, http_proxy_middleware_1.createProxyMiddleware)({
+            target: adminUrl,
+            ws: true,
+        }));
+    }
+    async createHtmlConfigProxy(app, config) {
         const pathRewrite = {};
         // figure out if we need to watch the React build
         let hasReact = false;
@@ -437,74 +547,21 @@ class DevServer {
                 }
             }
         }
-        this.startBrowserSync(this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET), hasReact);
+        const browserSyncPort = this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET);
+        this.startBrowserSync(browserSyncPort, hasReact);
         // browser-sync proxy
-        const app = (0, express_1.default)();
         const adminPattern = `/adapter/${this.adapterName}/**`;
         pathRewrite[`^/adapter/${this.adapterName}/`] = '/';
         app.use((0, http_proxy_middleware_1.createProxyMiddleware)([adminPattern, '/browser-sync/**'], {
-            target: `http://localhost:${this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET)}`,
+            target: `http://localhost:${browserSyncPort}`,
             //ws: true, // can't have two web-socket connections proxying to different locations
             pathRewrite,
         }));
         // admin proxy
-        const hiddenAdminPort = this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET);
         app.use((0, http_proxy_middleware_1.createProxyMiddleware)([`!${adminPattern}`, '!/browser-sync/**'], {
-            target: `http://localhost:${hiddenAdminPort}`,
+            target: `http://localhost:${this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET)}`,
             ws: true,
         }));
-        // start express
-        this.log.notice(`Starting web server on port ${config.adminPort}`);
-        const server = app.listen(config.adminPort);
-        let exiting = false;
-        process.on('SIGINT', () => {
-            this.log.notice('dev-server is exiting...');
-            exiting = true;
-            server.close();
-            // do not kill this process when receiving SIGINT, but let all child processes exit first
-        });
-        await new Promise((resolve, reject) => {
-            server.on('listening', resolve);
-            server.on('error', reject);
-            server.on('close', reject);
-        });
-        const connectWebSocketClient = () => {
-            if (exiting)
-                return;
-            // TODO: replace this with @iobroker/socket-client
-            const client = new ws_1.default(`ws://localhost:${hiddenAdminPort}/?sid=${Date.now()}&name=admin`);
-            client.on('open', () => this.log.silly('WebSocket open'));
-            client.on('close', () => {
-                this.log.silly('WebSocket closed');
-                setTimeout(connectWebSocketClient, 1000);
-            });
-            client.on('error', (error) => this.log.silly(`WebSocket error: ${error}`));
-            client.on('message', (msg) => {
-                if (typeof msg === 'string') {
-                    try {
-                        const data = JSON.parse(msg);
-                        if (!Array.isArray(data) || data.length === 0)
-                            return;
-                        switch (data[0]) {
-                            case 0:
-                                if (data.length > 3) {
-                                    this.socketEvents.emit(data[2], data[3]);
-                                }
-                                break;
-                            case 1:
-                                // ping received, send pong (keep-alive)
-                                client.send('[2]');
-                                break;
-                        }
-                    }
-                    catch (error) {
-                        this.log.error(`Couldn't handle WebSocket message: ${error}`);
-                    }
-                }
-            });
-        };
-        connectWebSocketClient();
-        this.log.box(`Admin is now reachable under http://localhost:${config.adminPort}/`);
     }
     async copySourcemaps() {
         const outDir = path.join(this.profileDir, 'node_modules', `iobroker.${this.adapterName}`);
@@ -650,6 +707,7 @@ class DevServer {
         };
         // console.log(config);
         bs.init(config);
+        return bs;
     }
     async startAdapterDebug(wait) {
         this.log.notice(`Starting ioBroker adapter debugger for ${this.adapterName}.0`);
