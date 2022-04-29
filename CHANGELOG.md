@@ -4,7 +4,7 @@
 	## __WORK IN PROGRESS__
 -->
 
-## __WORK IN PROGRESS__
+## 0.5.0 (2022-04-29)
 
 - (UncleSamSwiss) Added support for JSON config UI (#164)
 - (UncleSamSwiss) `dev-server watch` works again for the latest `@iobroker/adapter-dev`
