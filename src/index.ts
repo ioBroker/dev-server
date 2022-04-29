@@ -343,6 +343,7 @@ class DevServer {
     this.execSync('npm update --loglevel error', this.profileDir);
     this.uploadAdapter('admin');
 
+    await this.buildLocalAdapter();
     await this.installLocalAdapter();
     if (!this.isJSController()) this.uploadAdapter(this.adapterName);
 
@@ -357,6 +358,7 @@ class DevServer {
 
   async watch(startAdapter: boolean): Promise<void> {
     await this.checkSetup();
+    await this.buildLocalAdapter();
     await this.installLocalAdapter();
     if (this.isJSController()) {
       // this watches actually js-controller
@@ -371,6 +373,7 @@ class DevServer {
 
   async debug(wait: boolean): Promise<void> {
     await this.checkSetup();
+    await this.buildLocalAdapter();
     await this.installLocalAdapter();
     await this.copySourcemaps();
     if (this.isJSController()) {
@@ -385,6 +388,7 @@ class DevServer {
 
   async upload(): Promise<void> {
     await this.checkSetup();
+    await this.buildLocalAdapter();
     await this.installLocalAdapter();
     if (!this.isJSController()) this.uploadAdapter(this.adapterName);
 
@@ -982,6 +986,8 @@ class DevServer {
   }
 
   async setupDevServer(adminPort: number, dependencies: DependencyVersions, backupFile?: string): Promise<void> {
+    await this.buildLocalAdapter();
+
     this.log.notice(`Setting up in ${this.profileDir}`);
 
     // create the data directory
@@ -1235,13 +1241,16 @@ class DevServer {
     this.execSync(`${IOBROKER_COMMAND} upload ${name}`, this.profileDir);
   }
 
-  private async installLocalAdapter(): Promise<void> {
-    this.log.notice(`Install local iobroker.${this.adapterName}`);
-
+  private async buildLocalAdapter(): Promise<void> {
     const pkg = await this.readPackageJson();
     if (pkg.scripts?.build) {
+      this.log.notice(`Build iobroker.${this.adapterName}`);
       this.execSync('npm run build', this.rootDir);
     }
+  }
+
+  private async installLocalAdapter(): Promise<void> {
+    this.log.notice(`Install local iobroker.${this.adapterName}`);
 
     const { stdout } = await this.getExecOutput('npm pack', this.rootDir);
     const filename = stdout.trim();

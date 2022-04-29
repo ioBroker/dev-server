@@ -2,11 +2,7 @@
 "use strict";
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
 }) : (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     o[k2] = m[k];
@@ -263,6 +259,7 @@ class DevServer {
         this.log.notice('Updating everything...');
         this.execSync('npm update --loglevel error', this.profileDir);
         this.uploadAdapter('admin');
+        await this.buildLocalAdapter();
         await this.installLocalAdapter();
         if (!this.isJSController())
             this.uploadAdapter(this.adapterName);
@@ -275,6 +272,7 @@ class DevServer {
     }
     async watch(startAdapter) {
         await this.checkSetup();
+        await this.buildLocalAdapter();
         await this.installLocalAdapter();
         if (this.isJSController()) {
             // this watches actually js-controller
@@ -289,6 +287,7 @@ class DevServer {
     }
     async debug(wait) {
         await this.checkSetup();
+        await this.buildLocalAdapter();
         await this.installLocalAdapter();
         await this.copySourcemaps();
         if (this.isJSController()) {
@@ -303,6 +302,7 @@ class DevServer {
     }
     async upload() {
         await this.checkSetup();
+        await this.buildLocalAdapter();
         await this.installLocalAdapter();
         if (!this.isJSController())
             this.uploadAdapter(this.adapterName);
@@ -830,6 +830,7 @@ class DevServer {
         this.log.box(`Debugger is now available on process id ${debigPid}`);
     }
     async setupDevServer(adminPort, dependencies, backupFile) {
+        await this.buildLocalAdapter();
         this.log.notice(`Setting up in ${this.profileDir}`);
         // create the data directory
         const dataDir = path.join(this.profileDir, 'iobroker-data');
@@ -1055,13 +1056,16 @@ class DevServer {
         this.log.notice(`Upload iobroker.${name}`);
         this.execSync(`${IOBROKER_COMMAND} upload ${name}`, this.profileDir);
     }
-    async installLocalAdapter() {
+    async buildLocalAdapter() {
         var _a;
-        this.log.notice(`Install local iobroker.${this.adapterName}`);
         const pkg = await this.readPackageJson();
         if ((_a = pkg.scripts) === null || _a === void 0 ? void 0 : _a.build) {
+            this.log.notice(`Build iobroker.${this.adapterName}`);
             this.execSync('npm run build', this.rootDir);
         }
+    }
+    async installLocalAdapter() {
+        this.log.notice(`Install local iobroker.${this.adapterName}`);
         const { stdout } = await this.getExecOutput('npm pack', this.rootDir);
         const filename = stdout.trim();
         this.log.info(`Packed to ${filename}`);
