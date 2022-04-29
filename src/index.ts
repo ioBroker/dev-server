@@ -6,6 +6,7 @@ import browserSync from 'browser-sync';
 import { bold, gray, yellow } from 'chalk';
 import * as cp from 'child_process';
 import chokidar from 'chokidar';
+import { parse, stringify } from 'comment-json';
 import { prompt } from 'enquirer';
 import express from 'express';
 import fg from 'fast-glob';
@@ -1078,6 +1079,8 @@ class DevServer {
 
     await this.verifyIgnoreFiles();
 
+    await this.updateLaunchJson();
+
     this.log.notice('Installing js-controller and admin...');
     this.execSync('npm install --loglevel error --production', this.profileDir);
 
@@ -1212,6 +1215,69 @@ class DevServer {
     };
     await verifyFile('.npmignore', 'npm pack --dry-run', true);
     await verifyFile('.gitignore', 'git status --short --untracked-files=all', false);
+  }
+
+  private async updateLaunchJson(): Promise<void> {
+    const launchPath = path.join(this.rootDir, '.vscode', 'launch.json');
+    let content: any = {};
+    let spacing = '  ';
+    if (!existsSync(launchPath)) {
+      const response = await prompt<{ create: boolean }>({
+        name: 'create',
+        type: 'confirm',
+        message: `Would you like to create a VS Code launch.json file for debugging ${this.adapterName}?`,
+        initial: true,
+      });
+      if (!response.create) {
+        return;
+      }
+    } else {
+      const str = await readFile(launchPath, { encoding: 'utf-8' });
+      const indexOrLast = (search: string): number => {
+        const index = str.indexOf(search);
+        return index < 0 ? str.length : index;
+      };
+      const firstTab = indexOrLast('\t');
+      const firstTwo = indexOrLast('  ');
+      const firstFour = indexOrLast('    ');
+      if (firstTab < firstTwo && firstTab < firstFour) {
+        spacing = '\t';
+      } else if (firstTwo < firstFour) {
+        spacing = '  ';
+      } else {
+        spacing = '    ';
+      }
+      content = parse(str);
+    }
+
+    if (!Array.isArray(content.configurations)) {
+      content.configurations = [];
+    }
+
+    const configName = `Attach to ${this.profileName} (dev-server)`;
+    let config = content.configurations.find((c: any) => c.name === configName);
+    if (!config) {
+      config = { name: configName };
+      content.configurations.push(config);
+      this.log.notice(`Adding VS Code launch config "${configName}"`);
+    } else {
+      this.log.notice(`Updating VS Code launch config "${configName}"`);
+    }
+
+    const fullPath = path.join(this.profileDir, 'node_modules', `iobroker.${this.adapterName}`, '**', '*.js');
+    const relativePath = path.relative(this.rootDir, fullPath);
+    config.type = 'node';
+    config.protocol = 'inspector';
+    config.request = 'attach';
+    config.port = 9229;
+    config.restart = true;
+    config.smartStep = true;
+    config.skipFiles = ['<node_internals>/**'];
+    config.outFiles = [path.join('${workspaceFolder}', relativePath)];
+    config.sourceMaps = true;
+    config.trace = true;
+
+    await writeFile(launchPath, stringify(content, null, spacing));
   }
 
   private async uploadAndAddAdapter(name: string): Promise<void> {

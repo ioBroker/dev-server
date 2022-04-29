@@ -29,6 +29,7 @@ const browser_sync_1 = __importDefault(require("browser-sync"));
 const chalk_1 = require("chalk");
 const cp = __importStar(require("child_process"));
 const chokidar_1 = __importDefault(require("chokidar"));
+const comment_json_1 = require("comment-json");
 const enquirer_1 = require("enquirer");
 const express_1 = __importDefault(require("express"));
 const fast_glob_1 = __importDefault(require("fast-glob"));
@@ -917,6 +918,7 @@ class DevServer {
         };
         await (0, fs_extra_1.writeJson)(path.join(this.profileDir, 'package.json'), pkg, { spaces: 2 });
         await this.verifyIgnoreFiles();
+        await this.updateLaunchJson();
         this.log.notice('Installing js-controller and admin...');
         this.execSync('npm install --loglevel error --production', this.profileDir);
         if (backupFile) {
@@ -1033,6 +1035,68 @@ class DevServer {
         };
         await verifyFile('.npmignore', 'npm pack --dry-run', true);
         await verifyFile('.gitignore', 'git status --short --untracked-files=all', false);
+    }
+    async updateLaunchJson() {
+        const launchPath = path.join(this.rootDir, '.vscode', 'launch.json');
+        let content = {};
+        let spacing = '  ';
+        if (!(0, fs_extra_1.existsSync)(launchPath)) {
+            const response = await (0, enquirer_1.prompt)({
+                name: 'create',
+                type: 'confirm',
+                message: `Would you like to create a VS Code launch.json file for debugging ${this.adapterName}?`,
+                initial: true,
+            });
+            if (!response.create) {
+                return;
+            }
+        }
+        else {
+            const str = await (0, fs_extra_1.readFile)(launchPath, { encoding: 'utf-8' });
+            const indexOrLast = (search) => {
+                const index = str.indexOf(search);
+                return index < 0 ? str.length : index;
+            };
+            const firstTab = indexOrLast('\t');
+            const firstTwo = indexOrLast('  ');
+            const firstFour = indexOrLast('    ');
+            if (firstTab < firstTwo && firstTab < firstFour) {
+                spacing = '\t';
+            }
+            else if (firstTwo < firstFour) {
+                spacing = '  ';
+            }
+            else {
+                spacing = '    ';
+            }
+            content = (0, comment_json_1.parse)(str);
+        }
+        if (!Array.isArray(content.configurations)) {
+            content.configurations = [];
+        }
+        const configName = `Attach to ${this.profileName} (dev-server)`;
+        let config = content.configurations.find((c) => c.name === configName);
+        if (!config) {
+            config = { name: configName };
+            content.configurations.push(config);
+            this.log.notice(`Adding VS Code launch config "${configName}"`);
+        }
+        else {
+            this.log.notice(`Updating VS Code launch config "${configName}"`);
+        }
+        const fullPath = path.join(this.profileDir, 'node_modules', `iobroker.${this.adapterName}`, '**', '*.js');
+        const relativePath = path.relative(this.rootDir, fullPath);
+        config.type = 'node';
+        config.protocol = 'inspector';
+        config.request = 'attach';
+        config.port = 9229;
+        config.restart = true;
+        config.smartStep = true;
+        config.skipFiles = ['<node_internals>/**'];
+        config.outFiles = [path.join('${workspaceFolder}', relativePath)];
+        config.sourceMaps = true;
+        config.trace = true;
+        await (0, fs_extra_1.writeFile)(launchPath, (0, comment_json_1.stringify)(content, null, spacing));
     }
     async uploadAndAddAdapter(name) {
         // upload the already installed adapter
