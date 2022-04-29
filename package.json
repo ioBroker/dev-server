@@ -1,13 +1,15 @@
 {
   "name": "@iobroker/dev-server",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Single package development server for ioBroker",
   "main": "dist/index.js",
   "bin": {
     "dev-server": "dist/index.js",
     "iobroker-dev-server": "dist/index.js"
   },
-  "files": [ "dist/*.js" ],
+  "files": [
+    "dist/*.js"
+  ],
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "prebuild": "rimraf ./dist",
