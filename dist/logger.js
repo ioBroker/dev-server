@@ -8,8 +8,8 @@ const boxen_1 = __importDefault(require("boxen"));
 const chalk_1 = require("chalk");
 const table_1 = require("table");
 class Logger {
-    constructor(verbose) {
-        this.verbose = verbose;
+    constructor(level) {
+        this.level = level;
     }
     error(message) {
         console.log((0, chalk_1.redBright)(message));
@@ -26,8 +26,8 @@ class Logger {
     debug(message) {
         console.log((0, chalk_1.grey)(message));
     }
-    trace(message) {
-        if (this.verbose) {
+    silly(message) {
+        if (this.level === 'silly') {
             console.log((0, chalk_1.grey)(message));
         }
     }

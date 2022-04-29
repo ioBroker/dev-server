@@ -2,8 +2,8 @@ import boxen from 'boxen';
 import { blueBright, greenBright, grey, redBright, yellow } from 'chalk';
 import { table, TableUserConfig } from 'table';
 
-export class Logger {
-  constructor(private readonly verbose: boolean) {}
+export class Logger implements ioBroker.Logger {
+  constructor(public level: ioBroker.LogLevel) {}
 
   public error(message: string): void {
     console.log(redBright(message));
@@ -25,8 +25,8 @@ export class Logger {
     console.log(grey(message));
   }
 
-  public trace(message: string): void {
-    if (this.verbose) {
+  public silly(message: string): void {
+    if (this.level === 'silly') {
       console.log(grey(message));
     }
   }

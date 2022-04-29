@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import yargs = require('yargs/yargs');
+import { DBConnection } from '@iobroker/testing/build/tests/integration/lib/dbConnection';
 import axios from 'axios';
 import browserSync from 'browser-sync';
 import { bold, gray, yellow } from 'chalk';
@@ -181,7 +182,7 @@ class DevServer {
   }
 
   private async setLogger(argv: { verbose: boolean }): Promise<void> {
-    this.log = new Logger(argv.verbose);
+    this.log = new Logger(argv.verbose ? 'silly' : 'debug');
   }
 
   private async checkVersion(): Promise<void> {
@@ -567,12 +568,12 @@ class DevServer {
       if (exiting) return;
       // TODO: replace this with @iobroker/socket-client
       const client = new WebSocket(`ws://localhost:${hiddenAdminPort}/?sid=${Date.now()}&name=admin`);
-      client.on('open', () => this.log.trace('WebSocket open'));
+      client.on('open', () => this.log.silly('WebSocket open'));
       client.on('close', () => {
-        this.log.trace('WebSocket closed');
+        this.log.silly('WebSocket closed');
         setTimeout(connectWebSocketClient, 1000);
       });
-      client.on('error', (error) => this.log.trace(`WebSocket error: ${error}`));
+      client.on('error', (error) => this.log.silly(`WebSocket error: ${error}`));
       client.on('message', (msg) => {
         if (typeof msg === 'string') {
           try {
@@ -1111,10 +1112,11 @@ class DevServer {
 
     // reconfigure admin instance (only listen to local IP address)
     this.log.notice('Configure admin.0');
-    this.execSync(
-      `${IOBROKER_COMMAND} set admin.0 --port ${this.getPort(adminPort, HIDDEN_ADMIN_PORT_OFFSET)} --bind 127.0.0.1`,
-      this.profileDir,
-    );
+    await this.updateObject('system.adapter.admin.0', (admin) => {
+      admin.native.port = this.getPort(adminPort, HIDDEN_ADMIN_PORT_OFFSET);
+      admin.native.bind = '127.0.0.1';
+      return admin;
+    });
 
     if (!this.isJSController()) {
       // install local adapter
@@ -1137,23 +1139,20 @@ class DevServer {
       }
 
       this.log.notice(`Stop ${this.adapterName}.0`);
-      this.execSync(`${IOBROKER_COMMAND} stop ${this.adapterName} 0`, this.profileDir);
+      await this.updateObject(`system.adapter.${this.adapterName}.0`, (adapter) => {
+        adapter.common.enabled = false;
+        return adapter;
+      });
     }
 
-    this.log.notice('Disable statistics reporting');
-    this.execSync(`${IOBROKER_COMMAND} object set system.config common.diag="none"`, this.profileDir);
-
-    this.log.notice('Disable license confirmation');
-    this.execSync(`${IOBROKER_COMMAND} object set system.config common.licenseConfirmed=true`, this.profileDir);
-
-    this.log.notice('Disable missing info adapter warning');
-    this.execSync(`${IOBROKER_COMMAND} object set system.config common.infoAdapterInstall=true`, this.profileDir);
-
-    this.log.notice('Set default log level for adapters to debug');
-    this.execSync(`${IOBROKER_COMMAND} object set system.config common.defaultLogLevel="debug"`, this.profileDir);
-
-    this.log.notice('Set adapter repository to beta');
-    this.execSync(`${IOBROKER_COMMAND} object set system.config common.activeRepo="beta"`, this.profileDir);
+    this.log.notice(`Patching "system.config"`);
+    await this.updateObject('system.config', (systemConfig) => {
+      systemConfig.common.diag = 'none'; // Disable statistics reporting
+      systemConfig.common.licenseConfirmed = true; // Disable license confirmation
+      systemConfig.common.defaultLogLevel = 'debug'; // Set default log level for adapters to debug
+      systemConfig.common.activeRepo = 'beta'; // Set adapter repository to beta
+      return systemConfig;
+    });
   }
 
   private async verifyIgnoreFiles(): Promise<void> {
@@ -1234,16 +1233,20 @@ class DevServer {
     // upload the already installed adapter
     this.uploadAdapter(name);
 
-    const command = `${IOBROKER_COMMAND} list instances`;
-    const { stdout } = await this.getExecOutput(command, this.profileDir);
-    if (stdout.includes(`system.adapter.${name}.0 `)) {
-      this.log.info(`Instance ${name}.0 already exists, not adding it again`);
-      return;
+    if (
+      await this.withDb(async (db) => {
+        const instance = await db.getObject(`system.adapter.${name}.0`);
+        if (instance) {
+          this.log.info(`Instance ${name}.0 already exists, not adding it again`);
+          return false;
+        }
+        return true;
+      })
+    ) {
+      // create an instance
+      this.log.notice(`Add ${name}.0`);
+      this.execSync(`${IOBROKER_COMMAND} add ${name} 0`, this.profileDir);
     }
-
-    // create an instance
-    this.log.notice(`Add ${name}.0`);
-    this.execSync(`${IOBROKER_COMMAND} add ${name} 0`, this.profileDir);
   }
 
   private uploadAdapter(name: string): void {
@@ -1303,6 +1306,28 @@ class DevServer {
       adapters.push(...Object.keys(dependencies));
     }
     return adapters.filter((a) => a !== 'js-controller');
+  }
+
+  private async withDb<T>(method: (db: DBConnection) => Promise<T>): Promise<T> {
+    const db = new DBConnection('iobroker', this.profileDir, this.log);
+    await db.start();
+    try {
+      return await method(db);
+    } finally {
+      await db.stop();
+    }
+  }
+
+  private async updateObject<T extends string = string>(
+    id: T,
+    method: (obj: ioBroker.ObjectIdToObjectType<T>) => ioBroker.SettableObject<ioBroker.ObjectIdToObjectType<T>>,
+  ): Promise<void> {
+    await this.withDb(async (db) => {
+      const obj = await db.getObject(id);
+      if (obj) {
+        await db.setObject(id, method(obj));
+      }
+    });
   }
 
   private execSync(command: string, cwd: string, options?: cp.ExecSyncOptionsWithBufferEncoding): Buffer {

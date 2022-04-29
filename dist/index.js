@@ -2,7 +2,11 @@
 "use strict";
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
-    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
 }) : (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     o[k2] = m[k];
@@ -24,6 +28,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const yargs = require("yargs/yargs");
+const dbConnection_1 = require("@iobroker/testing/build/tests/integration/lib/dbConnection");
 const axios_1 = __importDefault(require("axios"));
 const browser_sync_1 = __importDefault(require("browser-sync"));
 const chalk_1 = require("chalk");
@@ -125,7 +130,7 @@ class DevServer {
             .help().argv;
     }
     async setLogger(argv) {
-        this.log = new logger_1.Logger(argv.verbose);
+        this.log = new logger_1.Logger(argv.verbose ? 'silly' : 'debug');
     }
     async checkVersion() {
         try {
@@ -447,12 +452,12 @@ class DevServer {
                 return;
             // TODO: replace this with @iobroker/socket-client
             const client = new ws_1.default(`ws://localhost:${hiddenAdminPort}/?sid=${Date.now()}&name=admin`);
-            client.on('open', () => this.log.trace('WebSocket open'));
+            client.on('open', () => this.log.silly('WebSocket open'));
             client.on('close', () => {
-                this.log.trace('WebSocket closed');
+                this.log.silly('WebSocket closed');
                 setTimeout(connectWebSocketClient, 1000);
             });
-            client.on('error', (error) => this.log.trace(`WebSocket error: ${error}`));
+            client.on('error', (error) => this.log.silly(`WebSocket error: ${error}`));
             client.on('message', (msg) => {
                 if (typeof msg === 'string') {
                     try {
@@ -939,7 +944,11 @@ class DevServer {
         await this.uploadAndAddAdapter('admin');
         // reconfigure admin instance (only listen to local IP address)
         this.log.notice('Configure admin.0');
-        this.execSync(`${IOBROKER_COMMAND} set admin.0 --port ${this.getPort(adminPort, HIDDEN_ADMIN_PORT_OFFSET)} --bind 127.0.0.1`, this.profileDir);
+        await this.updateObject('system.adapter.admin.0', (admin) => {
+            admin.native.port = this.getPort(adminPort, HIDDEN_ADMIN_PORT_OFFSET);
+            admin.native.bind = '127.0.0.1';
+            return admin;
+        });
         if (!this.isJSController()) {
             // install local adapter
             await this.installLocalAdapter();
@@ -960,18 +969,19 @@ class DevServer {
                 }
             }
             this.log.notice(`Stop ${this.adapterName}.0`);
-            this.execSync(`${IOBROKER_COMMAND} stop ${this.adapterName} 0`, this.profileDir);
+            await this.updateObject(`system.adapter.${this.adapterName}.0`, (adapter) => {
+                adapter.common.enabled = false;
+                return adapter;
+            });
         }
-        this.log.notice('Disable statistics reporting');
-        this.execSync(`${IOBROKER_COMMAND} object set system.config common.diag="none"`, this.profileDir);
-        this.log.notice('Disable license confirmation');
-        this.execSync(`${IOBROKER_COMMAND} object set system.config common.licenseConfirmed=true`, this.profileDir);
-        this.log.notice('Disable missing info adapter warning');
-        this.execSync(`${IOBROKER_COMMAND} object set system.config common.infoAdapterInstall=true`, this.profileDir);
-        this.log.notice('Set default log level for adapters to debug');
-        this.execSync(`${IOBROKER_COMMAND} object set system.config common.defaultLogLevel="debug"`, this.profileDir);
-        this.log.notice('Set adapter repository to beta');
-        this.execSync(`${IOBROKER_COMMAND} object set system.config common.activeRepo="beta"`, this.profileDir);
+        this.log.notice(`Patching "system.config"`);
+        await this.updateObject('system.config', (systemConfig) => {
+            systemConfig.common.diag = 'none'; // Disable statistics reporting
+            systemConfig.common.licenseConfirmed = true; // Disable license confirmation
+            systemConfig.common.defaultLogLevel = 'debug'; // Set default log level for adapters to debug
+            systemConfig.common.activeRepo = 'beta'; // Set adapter repository to beta
+            return systemConfig;
+        });
     }
     async verifyIgnoreFiles() {
         this.log.notice(`Verifying .npmignore and .gitignore`);
@@ -1046,15 +1056,18 @@ class DevServer {
     async uploadAndAddAdapter(name) {
         // upload the already installed adapter
         this.uploadAdapter(name);
-        const command = `${IOBROKER_COMMAND} list instances`;
-        const { stdout } = await this.getExecOutput(command, this.profileDir);
-        if (stdout.includes(`system.adapter.${name}.0 `)) {
-            this.log.info(`Instance ${name}.0 already exists, not adding it again`);
-            return;
+        if (await this.withDb(async (db) => {
+            const instance = await db.getObject(`system.adapter.${name}.0`);
+            if (instance) {
+                this.log.info(`Instance ${name}.0 already exists, not adding it again`);
+                return false;
+            }
+            return true;
+        })) {
+            // create an instance
+            this.log.notice(`Add ${name}.0`);
+            this.execSync(`${IOBROKER_COMMAND} add ${name} 0`, this.profileDir);
         }
-        // create an instance
-        this.log.notice(`Add ${name}.0`);
-        this.execSync(`${IOBROKER_COMMAND} add ${name} 0`, this.profileDir);
     }
     uploadAdapter(name) {
         this.log.notice(`Upload iobroker.${name}`);
@@ -1110,6 +1123,24 @@ class DevServer {
             adapters.push(...Object.keys(dependencies));
         }
         return adapters.filter((a) => a !== 'js-controller');
+    }
+    async withDb(method) {
+        const db = new dbConnection_1.DBConnection('iobroker', this.profileDir, this.log);
+        await db.start();
+        try {
+            return await method(db);
+        }
+        finally {
+            await db.stop();
+        }
+    }
+    async updateObject(id, method) {
+        await this.withDb(async (db) => {
+            const obj = await db.getObject(id);
+            if (obj) {
+                await db.setObject(id, method(obj));
+            }
+        });
     }
     execSync(command, cwd, options) {
         options = { cwd: cwd, stdio: 'inherit', ...options };
