@@ -10,8 +10,7 @@
 - (UncleSamSwiss) `dev-server watch` works again for the latest `@iobroker/adapter-dev`
 - (UncleSamSwiss) `dev-server watch` and `debug` support `--noInstall` which won't build/install the adapter
 - (UncleSamSwiss) js-controller is now always started with inspector on port 9228 (#150)
-- (UncleSamSwiss) Before `dev-server setup` creates anything, it builds the adapter (#114)
-- (UncleSamSwiss) Improvements during `dev-server setup` (#201)
+- (UncleSamSwiss) Improvements during `dev-server setup` (#114, #201)
 
 
 ## 0.4.1 (2022-04-29)
