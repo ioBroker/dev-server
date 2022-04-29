@@ -7,6 +7,7 @@
 ## __WORK IN PROGRESS__
 
 - (UncleSamSwiss) Fixed warnings when debugging "old-style" React adapters like ioBroker.javascript
+- (AlCalzone) Fixed `dev-server watch` not continuing when using `@iobroker/adapter-dev` to compile React
 
 ## 0.4.0 (2021-07-06)
 
