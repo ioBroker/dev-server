@@ -860,7 +860,7 @@ class DevServer {
                 useSystemNpm: true,
             },
             objects: {
-                type: 'file',
+                type: 'jsonl',
                 host: '127.0.0.1',
                 port: this.getPort(adminPort, OBJECTS_DB_PORT_OFFSET),
                 noFileCache: false,
@@ -877,7 +877,7 @@ class DevServer {
                 },
             },
             states: {
-                type: 'file',
+                type: 'jsonl',
                 host: '127.0.0.1',
                 port: this.getPort(adminPort, STATES_DB_PORT_OFFSET),
                 connectTimeout: 2000,
