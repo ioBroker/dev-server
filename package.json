@@ -59,7 +59,7 @@
     "fast-glob": "^3.2.11",
     "fs-extra": "^10.0.1",
     "http-proxy-middleware": "^2.0.4",
-    "nodemon": "^2.0.15",
+    "nodemon": "^2.0.16",
     "ps-tree": "^1.2.0",
     "rimraf": "^3.0.2",
     "semver": "^7.3.6",
