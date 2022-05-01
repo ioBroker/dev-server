@@ -47,7 +47,7 @@
   },
   "dependencies": {
     "@iobroker/testing": "^2.6.0",
-    "acorn": "^8.7.0",
+    "acorn": "^8.7.1",
     "axios": "^0.26.1",
     "boxen": "^5.1.2",
     "browser-sync": "^2.27.9",
