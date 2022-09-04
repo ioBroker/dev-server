@@ -28,7 +28,7 @@
     "@types/fs-extra": "^9.0.13",
     "@types/iobroker": "^4.0.4",
     "@types/node": "^18.6.3",
-    "@types/nodemon": "^1.19.1",
+    "@types/nodemon": "^1.19.2",
     "@types/ps-tree": "^1.1.2",
     "@types/rimraf": "^3.0.2",
     "@types/semver": "^7.3.12",
