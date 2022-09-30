@@ -24,6 +24,7 @@ import {
   writeJson,
 } from 'fs-extra';
 import { createProxyMiddleware } from 'http-proxy-middleware';
+import { Socket } from 'net';
 import nodemon from 'nodemon';
 import { EOL, hostname } from 'os';
 import * as path from 'path';
@@ -433,7 +434,7 @@ class DevServer {
       const dependencies = pkg.dependencies;
       return [
         name,
-        `http://localhost:${infos.adminPort}`,
+        `http://127.0.0.1:${infos.adminPort}`,
         dependencies['iobroker.js-controller'],
         dependencies['iobroker.admin'],
       ];
@@ -485,16 +486,71 @@ class DevServer {
     return existsSync(jsControllerDir);
   }
 
+  checkPort(port: number, host = '127.0.0.1', timeout = 1000): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const socket = new Socket();
+
+      const onError = () => {
+        socket.destroy();
+        reject();
+      };
+
+      socket.setTimeout(timeout);
+      socket.once('error', onError);
+      socket.once('timeout', onError);
+
+      socket.connect(port, host, () => {
+        socket.end();
+        resolve();
+      });
+    });
+  }
+
+  async waitForPort(port: number, offset = 0): Promise<boolean> {
+    port = this.getPort(port, offset);
+    this.log.debug(`Waiting for port ${port} to be available...`);
+    let tries = 0;
+    while (true) {
+      try {
+        await this.checkPort(port);
+        this.log.debug(`Port ${port} is available...`);
+        return true;
+      } catch {
+        if (tries++ > 30) {
+          this.log.error(`Port ${port} is not available after 30 seconds.`);
+          return false;
+        }
+        await this.delay(1000);
+      }
+    }
+  }
+
+  async waitForJsController(): Promise<void> {
+    const tempPkg = await readJson(path.join(this.profileDir, 'package.json'));
+    const config = tempPkg['dev-server'] as DevServerConfig;
+    if (!config) {
+      throw new Error(`Couldn't find dev-server configuration in package.json`);
+    }
+    if (
+      !(await this.waitForPort(config.adminPort, OBJECTS_DB_PORT_OFFSET)) ||
+      !(await this.waitForPort(config.adminPort, STATES_DB_PORT_OFFSET))
+    ) {
+      throw new Error(`Couldn't start js-controller`);
+    }
+  }
+
   async startJsController(): Promise<void> {
-    const proc = this.spawn(
+    const proc = await this.spawn(
       'node',
       ['--inspect=127.0.0.1:9228', 'node_modules/iobroker.js-controller/controller.js'],
       this.profileDir,
     );
     proc.on('exit', async (code) => {
       console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
-      return this.exit(-1);
+      return this.exit(-1, 'SIGKILL');
     });
+    this.log.notice('Waiting for js-controller to start...');
+    await this.waitForJsController();
   }
 
   private async startJsControllerDebug(wait: boolean): Promise<void> {
@@ -506,13 +562,18 @@ class DevServer {
     } else {
       nodeArgs.unshift('--inspect');
     }
-    const proc = this.spawn('node', nodeArgs, this.profileDir);
+    const proc = await this.spawn('node', nodeArgs, this.profileDir);
     proc.on('exit', (code) => {
       console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
       return this.exit(-1);
     });
+    await this.waitForJsController();
 
     this.log.box(`Debugger is now ${wait ? 'waiting' : 'available'} on process id ${proc.pid}`);
+  }
+
+  async delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   async startServer(): Promise<void> {
@@ -526,12 +587,14 @@ class DevServer {
 
     const hiddenAdminPort = this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET);
 
+    await this.waitForPort(hiddenAdminPort);
+
     const app = express();
     if (this.isJSController()) {
       // simply forward admin as-is
       app.use(
         createProxyMiddleware({
-          target: `http://localhost:${hiddenAdminPort}`,
+          target: `http://127.0.0.1:${hiddenAdminPort}`,
           ws: true,
         }),
       );
@@ -548,7 +611,7 @@ class DevServer {
     const server = app.listen(config.adminPort);
 
     let exiting = false;
-    process.on('SIGINT', () => {
+    process.on('SIGINT', async () => {
       this.log.notice('dev-server is exiting...');
       exiting = true;
       server.close();
@@ -565,7 +628,7 @@ class DevServer {
       const connectWebSocketClient = (): void => {
         if (exiting) return;
         // TODO: replace this with @iobroker/socket-client
-        this.websocket = new WebSocket(`ws://localhost:${hiddenAdminPort}/?sid=${Date.now()}&name=admin`);
+        this.websocket = new WebSocket(`ws://127.0.0.1:${hiddenAdminPort}/?sid=${Date.now()}&name=admin`);
         this.websocket.on('open', () => this.log.silly('WebSocket open'));
         this.websocket.on('close', () => {
           this.log.silly('WebSocket closed');
@@ -574,9 +637,10 @@ class DevServer {
         });
         this.websocket.on('error', (error) => this.log.silly(`WebSocket error: ${error}`));
         this.websocket.on('message', (msg) => {
-          if (typeof msg === 'string') {
+          const msgString = msg && typeof msg !== 'string' ? msg.toString() : null;
+          if (typeof msgString === 'string') {
             try {
-              const data = JSON.parse(msg);
+              const data = JSON.parse(msgString);
               if (!Array.isArray(data) || data.length === 0) return;
               switch (data[0]) {
                 case 0:
@@ -599,7 +663,7 @@ class DevServer {
       connectWebSocketClient();
     }
 
-    this.log.box(`Admin is now reachable under http://localhost:${config.adminPort}/`);
+    this.log.box(`Admin is now reachable under http://127.0.0.1:${config.adminPort}/`);
   }
 
   private async createJsonConfigProxy(app: Application, config: DevServerConfig): Promise<void> {
@@ -623,7 +687,7 @@ class DevServer {
     });
 
     // "proxy" for the main page which injects our script
-    const adminUrl = `http://localhost:${this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET)}`;
+    const adminUrl = `http://127.0.0.1:${this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET)}`;
     app.get('/', async (_req, res) => {
       const { data } = await axios.get<string>(adminUrl);
       res.send(injectCode(data, this.adapterName));
@@ -632,7 +696,7 @@ class DevServer {
     // browser-sync proxy
     app.use(
       createProxyMiddleware(['/browser-sync/**'], {
-        target: `http://localhost:${browserSyncPort}`,
+        target: `http://127.0.0.1:${browserSyncPort}`,
         //ws: true, // can't have two web-socket connections proxying to different locations
       }),
     );
@@ -680,7 +744,7 @@ class DevServer {
     pathRewrite[`^/adapter/${this.adapterName}/`] = '/';
     app.use(
       createProxyMiddleware([adminPattern, '/browser-sync/**'], {
-        target: `http://localhost:${browserSyncPort}`,
+        target: `http://127.0.0.1:${browserSyncPort}`,
         //ws: true, // can't have two web-socket connections proxying to different locations
         pathRewrite,
       }),
@@ -689,7 +753,7 @@ class DevServer {
     // admin proxy
     app.use(
       createProxyMiddleware([`!${adminPattern}`, '!/browser-sync/**'], {
-        target: `http://localhost:${this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET)}`,
+        target: `http://127.0.0.1:${this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET)}`,
         ws: true,
       }),
     );
@@ -721,7 +785,7 @@ class DevServer {
       sourcemaps.map(async (sourcemap) => {
         const src = path.join(this.rootDir, sourcemap);
         const dest = path.join(outDir, sourcemap);
-        this.patchSourcemap(src, dest);
+        await this.patchSourcemap(src, dest);
       }),
     );
   }
@@ -741,7 +805,7 @@ class DevServer {
       // append the sourcemap reference comment to the bottom of the file
       const fileContent = await readFile(copyFromSrc ? src : dest, { encoding: 'utf-8' });
       const filename = path.basename(mapFile);
-      let updatedContent = fileContent.replace(/(\/\/\# sourceMappingURL=).+/, `$1${filename}`);
+      let updatedContent = fileContent.replace(/(\/\/# sourceMappingURL=).+/, `$1${filename}`);
       if (updatedContent === fileContent) {
         // no existing source mapping URL was found in the file
         if (!fileContent.endsWith('\n')) {
@@ -871,7 +935,7 @@ class DevServer {
     if (wait) {
       args.push('--wait');
     }
-    const proc = this.spawn('node', args, this.profileDir);
+    const proc = await this.spawn('node', args, this.profileDir);
     proc.on('exit', (code) => {
       console.error(chalk.yellow(`Adapter debugging exited with code ${code}`));
       return this.exit(-1);
@@ -931,6 +995,7 @@ class DevServer {
     await this.startFileSync(adapterRunDir);
 
     if (startAdapter) {
+      await this.delay(3000);
       await this.startNodemon(adapterRunDir, pkg.main);
     } else {
       this.log.box(
@@ -956,9 +1021,12 @@ class DevServer {
       const ignoreFiles = [] as string[];
       const watcher = chokidar.watch(patterns, { cwd: this.rootDir });
       let ready = false;
+      let initialEventPromises: Promise<void>[] = [];
       watcher.on('error', reject);
-      watcher.on('ready', () => {
+      watcher.on('ready', async () => {
         ready = true;
+        await Promise.all(initialEventPromises);
+        initialEventPromises = [];
         resolve();
       });
       /*watcher.on('all', (event, path) => {
@@ -988,12 +1056,15 @@ class DevServer {
           // ignore files during initial sync if they don't exist in the target directory (except for sourcemaps)
           ignoreFiles.push(filename);
         } else {
-          syncFile(filename);
+          initialEventPromises.push(syncFile(filename));
         }
       });
       watcher.on('change', (filename: string) => {
         if (!ignoreFiles.includes(filename)) {
-          syncFile(filename);
+          const resPromise = syncFile(filename);
+          if (!ready) {
+            initialEventPromises.push(resPromise);
+          }
         }
       });
       watcher.on('unlink', (filename: string) => {
@@ -1447,18 +1518,35 @@ class DevServer {
     });
   }
 
-  private spawn(command: string, args: ReadonlyArray<string>, cwd: string, options?: cp.SpawnOptions): cp.ChildProcess {
-    this.log.debug(`${cwd}> ${command} ${args.join(' ')}`);
-    const proc = cp.spawn(command, args, {
-      stdio: ['ignore', 'inherit', 'inherit'],
-      cwd: cwd,
-      ...options,
+  private spawn(
+    command: string,
+    args: ReadonlyArray<string>,
+    cwd: string,
+    options?: cp.SpawnOptions,
+  ): Promise<cp.ChildProcess> {
+    return new Promise((resolve, reject) => {
+      let processSpawned = false;
+      this.log.debug(`${cwd}> ${command} ${args.join(' ')}`);
+      const proc = cp.spawn(command, args, {
+        stdio: ['ignore', 'inherit', 'inherit'],
+        cwd: cwd,
+        ...options,
+      });
+      this.childProcesses.push(proc);
+      let alive = true;
+      proc.on('spawn', () => {
+        processSpawned = true;
+        resolve(proc);
+      });
+      proc.on('error', (err) => {
+        this.log.error(`Could not spawn ${command}: ${err}`);
+        if (!processSpawned) {
+          reject(err);
+        }
+      });
+      proc.on('exit', () => (alive = false));
+      process.on('exit', () => alive && proc.kill('SIGINT'));
     });
-    this.childProcesses.push(proc);
-    let alive = true;
-    proc.on('exit', () => (alive = false));
-    process.on('exit', () => alive && proc.kill());
-    return proc;
   }
 
   private spawnAndAwaitOutput(
@@ -1469,36 +1557,37 @@ class DevServer {
     options?: cp.SpawnOptions,
   ): Promise<cp.ChildProcess> {
     return new Promise<cp.ChildProcess>((resolve, reject) => {
-      const proc = this.spawn(command, args, cwd, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
-      const handleStream = (isStderr: boolean) => (data: Buffer) => {
-        let str = data.toString('utf-8');
-        str = str.replace(/\x1Bc/, ''); // filter the "clear screen" ANSI code (used by tsc)
-        if (str) {
-          str = str.trimEnd();
-          if (isStderr) {
-            console.error(str);
+      this.spawn(command, args, cwd, { ...options, stdio: ['ignore', 'pipe', 'pipe'] }).then((proc) => {
+        const handleStream = (isStderr: boolean) => (data: Buffer) => {
+          let str = data.toString('utf-8');
+          str = str.replace(/\x1Bc/, ''); // filter the "clear screen" ANSI code (used by tsc)
+          if (str) {
+            str = str.trimEnd();
+            if (isStderr) {
+              console.error(str);
+            } else {
+              console.log(str);
+            }
+          }
+
+          if (typeof awaitMsg === 'string') {
+            if (str.includes(awaitMsg)) {
+              resolve(proc);
+            }
           } else {
-            console.log(str);
+            if (awaitMsg.test(str)) {
+              resolve(proc);
+            }
           }
-        }
+        };
+        proc.stdout?.on('data', handleStream(false));
+        proc.stderr?.on('data', handleStream(true));
 
-        if (typeof awaitMsg === 'string') {
-          if (str.includes(awaitMsg)) {
-            resolve(proc);
-          }
-        } else {
-          if (awaitMsg.test(str)) {
-            resolve(proc);
-          }
-        }
-      };
-      proc.stdout?.on('data', handleStream(false));
-      proc.stderr?.on('data', handleStream(true));
-
-      proc.on('exit', (code) => reject(`Exited with ${code}`));
-      process.on('SIGINT', () => {
-        proc.kill();
-        reject('SIGINT');
+        proc.on('exit', (code) => reject(`Exited with ${code}`));
+        process.on('SIGINT', () => {
+          proc.kill('SIGINT');
+          reject('SIGINT');
+        });
       });
     });
   }
@@ -1513,22 +1602,29 @@ class DevServer {
     return value.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&').replace(/-/g, '\\x2d');
   }
 
-  private async exit(exitCode: number): Promise<never> {
+  private async exit(exitCode: number, signal = 'SIGINT'): Promise<never> {
     const childPids = this.childProcesses.map((p) => p.pid).filter((p) => !!p) as number[];
-    const tryKill = (pid: number): void => {
+    const tryKill = (pid: number, signal: string): void => {
       try {
-        process.kill(pid, 'SIGKILL');
+        process.kill(pid, signal);
       } catch {
         // ignore
       }
     };
     try {
       const children = await Promise.all(childPids.map((pid) => this.getChildProcesses(pid)));
-      children.forEach((ch) => ch.forEach((c) => tryKill(parseInt(c.PID))));
+      children.forEach((ch) => ch.forEach((c) => tryKill(parseInt(c.PID), signal)));
     } catch (error) {
       this.log.error(`Couldn't kill grand-child processes: ${error}`);
     }
-    childPids.forEach((pid) => tryKill(pid));
+    if (childPids.length) {
+      childPids.forEach((pid) => tryKill(pid, signal));
+      if (signal !== 'SIGKILL') {
+        // first try SIGINT and give it 5s to exit itself before killing the processes left
+        await this.delay(5000);
+        return this.exit(exitCode, 'SIGKILL');
+      }
+    }
     process.exit(exitCode);
   }
 }
