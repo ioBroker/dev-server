@@ -140,8 +140,14 @@ class DevServer {
             alias: 'x',
             description: 'Do not build and install the adapter before starting.',
           },
+          doNotWatch: {
+            type: 'string',
+            alias: 'w',
+            description:
+              'Do not watch the given files or directories for changes (provide paths relative to the adapter base directory.',
+          },
         },
-        async (args) => await this.watch(!args.noStart, !!args.noInstall),
+        async (args) => await this.watch(!args.noStart, !!args.noInstall, args.doNotWatch),
       )
       .command(
         ['debug [profile]', 'd'],
@@ -377,7 +383,9 @@ class DevServer {
     await this.startServer();
   }
 
-  async watch(startAdapter: boolean, noInstall: boolean): Promise<void> {
+  async watch(startAdapter: boolean, noInstall: boolean, doNotWatch: string | string[] | undefined): Promise<void> {
+    const doNotWatchArr = typeof doNotWatch === 'string' ? [doNotWatch] : doNotWatch || [];
+
     await this.checkSetup();
     if (!noInstall) {
       await this.buildLocalAdapter();
@@ -385,12 +393,12 @@ class DevServer {
     }
     if (this.isJSController()) {
       // this watches actually js-controller
-      await this.startAdapterWatch(startAdapter);
+      await this.startAdapterWatch(startAdapter, doNotWatchArr);
       await this.startServer();
     } else {
       await this.startJsController();
       await this.startServer();
-      await this.startAdapterWatch(startAdapter);
+      await this.startAdapterWatch(startAdapter, doNotWatchArr);
     }
   }
 
@@ -981,7 +989,7 @@ class DevServer {
     );
   }
 
-  private async startAdapterWatch(startAdapter: boolean): Promise<void> {
+  private async startAdapterWatch(startAdapter: boolean, doNotWatch: string[]): Promise<void> {
     // figure out if we need to watch for TypeScript changes
     const pkg = await this.readPackageJson();
     const scripts = pkg.scripts;
@@ -996,7 +1004,7 @@ class DevServer {
 
     if (startAdapter) {
       await this.delay(3000);
-      await this.startNodemon(adapterRunDir, pkg.main);
+      await this.startNodemon(adapterRunDir, pkg.main, doNotWatch);
     } else {
       this.log.box(
         `You can now start the adapter manually by running\n    ` +
@@ -1077,7 +1085,7 @@ class DevServer {
     });
   }
 
-  private async startNodemon(baseDir: string, scriptName: string): Promise<void> {
+  private async startNodemon(baseDir: string, scriptName: string, doNotWatch: string[]): Promise<void> {
     const script = path.resolve(baseDir, scriptName);
     this.log.notice(`Starting nodemon for ${script}`);
 
@@ -1088,6 +1096,11 @@ class DevServer {
 
     const args = this.isJSController() ? [] : ['--debug', '0'];
 
+    const ignoreList = [path.join(baseDir, 'admin')];
+    if (doNotWatch.length > 0) {
+      doNotWatch.forEach((entry) => ignoreList.push(path.join(baseDir, entry)));
+    }
+
     nodemon({
       script: script,
       stdin: false,
@@ -1095,7 +1108,7 @@ class DevServer {
       // dump: true, // this will output the entire config and not do anything
       colours: false,
       watch: [baseDir],
-      ignore: [path.join(baseDir, 'admin')],
+      ignore: ignoreList,
       ignoreRoot: [],
       delay: 2000,
       execMap: { js: 'node --inspect' },

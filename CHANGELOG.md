@@ -5,6 +5,7 @@
 -->
 
 ### __WORK IN PROGRESS__
+- (Apollon77) Add option --doNotWatch for "watch" mode to ignore changes on defined files or locations
 - (Apollon77) Only send SIGINT on exit first and then SIGKILL after 5 seconds if not yet exited to allow clean shutdown of all components
 - (Apollon77) Make sure initial file sync is finished before starting adapter (incl. a short static delay to make sure all is persisted before start watching)
 - (Apollon77) Wait that js-controller DB ports are available before starting adapter

@@ -147,6 +147,8 @@ The following options are available:
 
 `--noInstall` Do not build and install the adapter before starting dev-server.
 
+`--doNotWatch <filepattern>` Provide files and locations relative to adapter base directory that should not be watched for changes. This option can be provided multiple times to ignore several locations.
+
 ### `dev-server debug`
 
 Run dev-server and start the adapter from ioBroker in "debug" mode.
