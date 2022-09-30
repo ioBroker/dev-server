@@ -12,6 +12,7 @@ npm install --global @iobroker/dev-server
 dev-server setup
 dev-server watch
 ```
+(a local installation as dev-dependency is also possible)
 
 ## Features
 
@@ -42,6 +43,21 @@ You can either install this tool as a global tool or install it as a dev-depende
 ```bash
 npm install --global @iobroker/dev-server
 ```
+
+Alternatively, especially when a global installation is problematic because of permission issues (e.g. on macOS), you can add the dev-server to your adapter's `devDependencies` and add it e.g. as a script to your package.json.
+
+```json
+{
+  "devDependencies": {
+    "@iobroker/dev-server": "^x.x.x"
+  },
+  "scripts": {
+    "dev-server": "dev-server"
+  }
+}
+```
+
+then you can run it via `npm run dev-server`.
 
 ### Setup local dev-server
 
@@ -119,7 +135,7 @@ Run dev-server and start the adapter in "watch" mode.
 
 The adapter will automatically restart when its source code changes (with a 2 seconds delay).
 
-**DO NOT** start the adapter manually in ioBroker.admin.
+**DO NOT** start the adapter manually in ioBroker.admin! If you see errors like ADAPTER_ALREADY_RUNNING then most likely you ignored this info :-)
 
 You may attach a debugger to the running adapter. Keep in mind that the debugger will be detached when you change your source code, you need to manually attach again to the new process. Watch the console output for the correct process id to attach to.
 
