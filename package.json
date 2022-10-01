@@ -35,7 +35,7 @@
     "@types/table": "^6.3.2",
     "@types/ws": "^8.5.3",
     "@types/yargs": "^17.0.12",
-    "@typescript-eslint/eslint-plugin": "^5.36.1",
+    "@typescript-eslint/eslint-plugin": "^5.38.1",
     "@typescript-eslint/parser": "^5.36.1",
     "eslint": "^8.23.0",
     "eslint-config-prettier": "^8.5.0",
