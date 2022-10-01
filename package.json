@@ -34,7 +34,7 @@
     "@types/semver": "^7.3.12",
     "@types/table": "^6.3.2",
     "@types/ws": "^8.5.3",
-    "@types/yargs": "^17.0.12",
+    "@types/yargs": "^17.0.13",
     "@typescript-eslint/eslint-plugin": "^5.36.1",
     "@typescript-eslint/parser": "^5.36.1",
     "eslint": "^8.23.0",
@@ -66,6 +66,6 @@
     "source-map": "^0.7.4",
     "table": "^6.8.0",
     "ws": "^8.8.1",
-    "yargs": "^17.5.1"
+    "yargs": "^17.6.0"
   }
 }
