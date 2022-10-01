@@ -1331,6 +1331,14 @@ class DevServer {
       systemConfig.common.licenseConfirmed = true; // Disable license confirmation
       systemConfig.common.defaultLogLevel = 'debug'; // Set default log level for adapters to debug
       systemConfig.common.activeRepo = 'beta'; // Set adapter repository to beta
+      // Set other details to dummy values that they are not empty like in a normal installation
+      systemConfig.common.city = 'Berlin';
+      systemConfig.common.country = 'Germany';
+      systemConfig.common.longitude = 13.28;
+      systemConfig.common.latitude = 52.5;
+      systemConfig.common.language = 'en';
+      systemConfig.common.tempUnit = '°C';
+      systemConfig.common.currency = '€';
       return systemConfig;
     });
   }
