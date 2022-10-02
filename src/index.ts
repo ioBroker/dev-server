@@ -384,7 +384,12 @@ class DevServer {
   }
 
   async watch(startAdapter: boolean, noInstall: boolean, doNotWatch: string | string[] | undefined): Promise<void> {
-    const doNotWatchArr = typeof doNotWatch === 'string' ? [doNotWatch] : doNotWatch || [];
+    let doNotWatchArr: string[] = [];
+    if (typeof doNotWatch === 'string') {
+      doNotWatchArr.push(doNotWatch);
+    } else if (Array.isArray(doNotWatch)) {
+      doNotWatchArr = doNotWatch;
+    }
 
     await this.checkSetup();
     if (!noInstall) {
@@ -498,7 +503,7 @@ class DevServer {
     return new Promise((resolve, reject) => {
       const socket = new Socket();
 
-      const onError = () => {
+      const onError = (): void => {
         socket.destroy();
         reject();
       };
