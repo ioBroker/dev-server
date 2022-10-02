@@ -1352,40 +1352,39 @@ class DevServer {
             process.on('exit', () => alive && proc.kill('SIGINT'));
         });
     }
-    spawnAndAwaitOutput(command, args, cwd, awaitMsg, options) {
+    async spawnAndAwaitOutput(command, args, cwd, awaitMsg, options) {
+        const proc = await this.spawn(command, args, cwd, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
         return new Promise((resolve, reject) => {
-            this.spawn(command, args, cwd, { ...options, stdio: ['ignore', 'pipe', 'pipe'] }).then((proc) => {
-                var _a, _b;
-                const handleStream = (isStderr) => (data) => {
-                    let str = data.toString('utf-8');
-                    str = str.replace(/\x1Bc/, ''); // filter the "clear screen" ANSI code (used by tsc)
-                    if (str) {
-                        str = str.trimEnd();
-                        if (isStderr) {
-                            console.error(str);
-                        }
-                        else {
-                            console.log(str);
-                        }
-                    }
-                    if (typeof awaitMsg === 'string') {
-                        if (str.includes(awaitMsg)) {
-                            resolve(proc);
-                        }
+            var _a, _b;
+            const handleStream = (isStderr) => (data) => {
+                let str = data.toString('utf-8');
+                str = str.replace(/\x1Bc/, ''); // filter the "clear screen" ANSI code (used by tsc)
+                if (str) {
+                    str = str.trimEnd();
+                    if (isStderr) {
+                        console.error(str);
                     }
                     else {
-                        if (awaitMsg.test(str)) {
-                            resolve(proc);
-                        }
+                        console.log(str);
                     }
-                };
-                (_a = proc.stdout) === null || _a === void 0 ? void 0 : _a.on('data', handleStream(false));
-                (_b = proc.stderr) === null || _b === void 0 ? void 0 : _b.on('data', handleStream(true));
-                proc.on('exit', (code) => reject(`Exited with ${code}`));
-                process.on('SIGINT', () => {
-                    proc.kill('SIGINT');
-                    reject('SIGINT');
-                });
+                }
+                if (typeof awaitMsg === 'string') {
+                    if (str.includes(awaitMsg)) {
+                        resolve(proc);
+                    }
+                }
+                else {
+                    if (awaitMsg.test(str)) {
+                        resolve(proc);
+                    }
+                }
+            };
+            (_a = proc.stdout) === null || _a === void 0 ? void 0 : _a.on('data', handleStream(false));
+            (_b = proc.stderr) === null || _b === void 0 ? void 0 : _b.on('data', handleStream(true));
+            proc.on('exit', (code) => reject(`Exited with ${code}`));
+            process.on('SIGINT', () => {
+                proc.kill('SIGINT');
+                reject('SIGINT');
             });
         });
     }

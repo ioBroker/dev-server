@@ -1575,45 +1575,44 @@ class DevServer {
     });
   }
 
-  private spawnAndAwaitOutput(
+  private async spawnAndAwaitOutput(
     command: string,
     args: ReadonlyArray<string>,
     cwd: string,
     awaitMsg: string | RegExp,
     options?: cp.SpawnOptions,
   ): Promise<cp.ChildProcess> {
+    const proc = await this.spawn(command, args, cwd, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
     return new Promise<cp.ChildProcess>((resolve, reject) => {
-      this.spawn(command, args, cwd, { ...options, stdio: ['ignore', 'pipe', 'pipe'] }).then((proc) => {
-        const handleStream = (isStderr: boolean) => (data: Buffer) => {
-          let str = data.toString('utf-8');
-          str = str.replace(/\x1Bc/, ''); // filter the "clear screen" ANSI code (used by tsc)
-          if (str) {
-            str = str.trimEnd();
-            if (isStderr) {
-              console.error(str);
-            } else {
-              console.log(str);
-            }
-          }
-
-          if (typeof awaitMsg === 'string') {
-            if (str.includes(awaitMsg)) {
-              resolve(proc);
-            }
+      const handleStream = (isStderr: boolean) => (data: Buffer) => {
+        let str = data.toString('utf-8');
+        str = str.replace(/\x1Bc/, ''); // filter the "clear screen" ANSI code (used by tsc)
+        if (str) {
+          str = str.trimEnd();
+          if (isStderr) {
+            console.error(str);
           } else {
-            if (awaitMsg.test(str)) {
-              resolve(proc);
-            }
+            console.log(str);
           }
-        };
-        proc.stdout?.on('data', handleStream(false));
-        proc.stderr?.on('data', handleStream(true));
+        }
 
-        proc.on('exit', (code) => reject(`Exited with ${code}`));
-        process.on('SIGINT', () => {
-          proc.kill('SIGINT');
-          reject('SIGINT');
-        });
+        if (typeof awaitMsg === 'string') {
+          if (str.includes(awaitMsg)) {
+            resolve(proc);
+          }
+        } else {
+          if (awaitMsg.test(str)) {
+            resolve(proc);
+          }
+        }
+      };
+      proc.stdout?.on('data', handleStream(false));
+      proc.stderr?.on('data', handleStream(true));
+
+      proc.on('exit', (code) => reject(`Exited with ${code}`));
+      process.on('SIGINT', () => {
+        proc.kill('SIGINT');
+        reject('SIGINT');
       });
     });
   }
