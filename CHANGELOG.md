@@ -4,7 +4,7 @@
 	## __WORK IN PROGRESS__
 -->
 
-### __WORK IN PROGRESS__
+## __WORK IN PROGRESS__
 - (Apollon77) Add option --doNotWatch for "watch" mode to ignore changes on defined files or locations
 - (Apollon77/kleinOr) Set several other system settings on "setup" call like the location, currency, language and temperature unit that they are not empty
 - (Apollon77) Only send SIGINT on exit first and then SIGKILL after 5 seconds if not yet exited to allow clean shutdown of all components
