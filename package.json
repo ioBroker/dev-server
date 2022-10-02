@@ -22,7 +22,8 @@
   "author": "UncleSamSwiss",
   "license": "MIT",
   "devDependencies": {
-    "@alcalzone/release-script": "^2.2.2",
+    "@alcalzone/release-script": "^3.5.9",
+    "@alcalzone/release-script-plugin-license": "^3.5.9",
     "@types/browser-sync": "^2.26.3",
     "@types/express": "^4.17.14",
     "@types/fs-extra": "^9.0.13",
@@ -66,6 +67,6 @@
     "source-map": "^0.7.4",
     "table": "^6.8.0",
     "ws": "^8.9.0",
-    "yargs": "^17.5.1"
+    "yargs": "^17.6.0"
   }
 }
