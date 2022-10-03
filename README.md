@@ -38,13 +38,30 @@ You need to install the `dev-server` package as well as set it up it in the adap
 
 ### Install package
 
-You can either install this tool as a global tool or install it as a dev-dependency of your adapter. We suggest to install it globally:
+<span style="color:red">*Before installing please check the following what is the best way or recommended:*</span>
+
+
+:one: Linux
+
+:small_blue_diamond: install it as a dev-dependency of your adapter (recommended)
+:small_blue_diamond: install this tool as a global tool
+
+Under Linux it is sometimes useful to install this tool as global BUT best practice for developing an own adapter it is better to install it as dev-dependency
+
+:two: MacOS
+
+:small_blue_diamond: Under MacOS be careful with installation as global. This is not recommended so better to install it as dev-depency
+
+:three: Windows
+
+:small_blue_diamond: Under Windows a global install is no problem.
+
 
 ```bash
 npm install --global @iobroker/dev-server
 ```
 
-Alternatively, especially when a global installation is problematic because of permission issues (e.g. on macOS), you can add the dev-server to your adapter's `devDependencies` and add it e.g. as a script to your package.json.
+Some more explanation, especially when a **global installation** is problematic **because of permission** issues (e.g. on **MacOS**), you can add the dev-server to your adapter's `devDependencies` and add it e.g. as a script to your package.json.
 
 ```json
 {
