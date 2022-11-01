@@ -28,7 +28,7 @@
     "@types/express": "^4.17.14",
     "@types/fs-extra": "^9.0.13",
     "@types/iobroker": "^4.0.4",
-    "@types/node": "^18.7.23",
+    "@types/node": "^18.11.8",
     "@types/nodemon": "^1.19.2",
     "@types/ps-tree": "^1.1.2",
     "@types/rimraf": "^3.0.2",
