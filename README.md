@@ -39,16 +39,31 @@ It is possible to run `dev-server` in the root directory of your local copy of [
 You need to install the `dev-server` package as well as set it up it in the adapter directory.
 
 ### Install package
+<span style="color:red">*Before installing please check the following what is the best way or recommended:*</span>
+
+
+1. Linux
+* install it as a dev-dependency of your adapter (recommended)
+* install this tool as a global tool
+
+Under Linux it is sometimes useful to install this tool as global BUT best practice for developing an own adapter it is better to install it as dev-dependency
+
+2. MacOS
+* Under MacOS be careful with installation as global. This is not recommended so better to install it as dev-depency
+
+3. Windows
+
+* Under Windows a global install is no problem.
 
 **Note:** dev-server requires at least Node.js 14.
 
-You can either install this tool as a global tool or install it as a dev-dependency of your adapter. We suggest to install it globally:
+how to nstall it globally:
 
 ```bash
 npm install --global @iobroker/dev-server
 ```
 
-Alternatively, especially when a global installation is problematic because of permission issues (e.g. on macOS), you can add the dev-server to your adapter's `devDependencies` and add it e.g. as a script to your package.json.
+Some more explanation, especially when a **global installation** is problematic **because of permission** issues (e.g. on **MacOS**), you can add the dev-server to your adapter's `devDependencies` and add it e.g. as a script to your package.json.
 
 ```json
 {
