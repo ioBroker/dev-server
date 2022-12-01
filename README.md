@@ -39,7 +39,7 @@ It is possible to run `dev-server` in the root directory of your local copy of [
 You need to install the `dev-server` package as well as set it up it in the adapter directory.
 
 ### Install package
-<span style="color:red">*Before installing please check the following what is the best way or recommended:*</span>
+*Before installing please check the following what is the best way or recommended:*
 
 
 1. Linux
