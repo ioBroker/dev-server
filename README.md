@@ -42,24 +42,22 @@ You need to install the `dev-server` package as well as set it up it in the adap
 <span style="color:red">*Before installing please check the following what is the best way or recommended:*</span>
 
 
-:one: Linux
-
-:small_blue_diamond: install it as a dev-dependency of your adapter (recommended)
-:small_blue_diamond: install this tool as a global tool
+1. Linux
+* install it as a dev-dependency of your adapter (recommended)
+* install this tool as a global tool
 
 Under Linux it is sometimes useful to install this tool as global BUT best practice for developing an own adapter it is better to install it as dev-dependency
 
-:two: MacOS
+2. MacOS
+* Under MacOS be careful with installation as global. This is not recommended so better to install it as dev-depency
 
-:small_blue_diamond: Under MacOS be careful with installation as global. This is not recommended so better to install it as dev-depency
+3. Windows
 
-:three: Windows
-
-:small_blue_diamond: Under Windows a global install is no problem.
+* Under Windows a global install is no problem.
 
 **Note:** dev-server requires at least Node.js 14.
 
-You can either install this tool as a global tool or install it as a dev-dependency of your adapter. We suggest to install it globally:
+how to nstall it globally:
 
 ```bash
 npm install --global @iobroker/dev-server
