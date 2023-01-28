@@ -33,7 +33,6 @@ const axios_1 = __importDefault(require("axios"));
 const browser_sync_1 = __importDefault(require("browser-sync"));
 const chalk_1 = require("chalk");
 const cp = __importStar(require("child_process"));
-const chokidar_1 = __importDefault(require("chokidar"));
 const enquirer_1 = require("enquirer");
 const express_1 = __importDefault(require("express"));
 const fast_glob_1 = __importDefault(require("fast-glob"));
@@ -307,7 +306,7 @@ class DevServer {
         await this.checkSetup();
         if (!noInstall) {
             await this.buildLocalAdapter();
-            await this.installLocalAdapter();
+            // await this.installLocalAdapter();
         }
         if (this.isJSController()) {
             // this watches actually js-controller
@@ -445,7 +444,7 @@ class DevServer {
         }
     }
     async startJsController() {
-        const proc = await this.spawn('node', ['--inspect=127.0.0.1:9228', 'node_modules/iobroker.js-controller/controller.js'], this.profileDir);
+        const proc = await this.spawn('node', ['--inspect=127.0.0.1:9228', '--preserve-symlinks', 'node_modules/iobroker.js-controller/controller.js'], this.profileDir);
         proc.on('exit', async (code) => {
             console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
             return this.exit(-1, 'SIGKILL');
@@ -829,9 +828,9 @@ class DevServer {
             // use TSC
             await this.startTscWatch();
         }
-        // start sync
+        // // start sync
         const adapterRunDir = path.join(this.profileDir, 'node_modules', `iobroker.${this.adapterName}`);
-        await this.startFileSync(adapterRunDir);
+        // await this.startFileSync(adapterRunDir);
         if (startAdapter) {
             await this.delay(3000);
             await this.startNodemon(adapterRunDir, pkg.main, doNotWatch);
@@ -847,75 +846,70 @@ class DevServer {
         this.log.debug('Waiting for first successful tsc build...');
         await this.spawnAndAwaitOutput('npm', ['run', 'watch:ts'], this.rootDir, /watching (files )?for/i, { shell: true });
     }
-    startFileSync(destinationDir) {
-        this.log.notice(`Starting file system sync from ${this.rootDir}`);
-        const inSrc = (filename) => path.join(this.rootDir, filename);
-        const inDest = (filename) => path.join(destinationDir, filename);
-        return new Promise((resolve, reject) => {
-            const patterns = this.getFilePatterns(['js', 'map'], true);
-            const ignoreFiles = [];
-            const watcher = chokidar_1.default.watch(patterns, { cwd: this.rootDir });
-            let ready = false;
-            let initialEventPromises = [];
-            watcher.on('error', reject);
-            watcher.on('ready', async () => {
-                ready = true;
-                await Promise.all(initialEventPromises);
-                initialEventPromises = [];
-                resolve();
-            });
-            /*watcher.on('all', (event, path) => {
-              console.log(event, path);
-            });*/
-            const syncFile = async (filename) => {
-                try {
-                    this.log.debug(`Synchronizing ${filename}`);
-                    const src = inSrc(filename);
-                    const dest = inDest(filename);
-                    if (filename.endsWith('.map')) {
-                        await this.patchSourcemap(src, dest);
-                    }
-                    else if (!(0, fs_extra_1.existsSync)(inSrc(`${filename}.map`))) {
-                        // copy file and add sourcemap
-                        await this.addSourcemap(src, dest, true);
-                    }
-                    else {
-                        await (0, fs_extra_1.copyFile)(src, dest);
-                    }
-                }
-                catch (error) {
-                    this.log.warn(`Couldn't sync ${filename}`);
-                }
-            };
-            watcher.on('add', (filename) => {
-                if (ready) {
-                    syncFile(filename);
-                }
-                else if (!filename.endsWith('map') && !(0, fs_extra_1.existsSync)(inDest(filename))) {
-                    // ignore files during initial sync if they don't exist in the target directory (except for sourcemaps)
-                    ignoreFiles.push(filename);
-                }
-                else {
-                    initialEventPromises.push(syncFile(filename));
-                }
-            });
-            watcher.on('change', (filename) => {
-                if (!ignoreFiles.includes(filename)) {
-                    const resPromise = syncFile(filename);
-                    if (!ready) {
-                        initialEventPromises.push(resPromise);
-                    }
-                }
-            });
-            watcher.on('unlink', (filename) => {
-                (0, fs_extra_1.unlinkSync)(inDest(filename));
-                const map = inDest(filename + '.map');
-                if ((0, fs_extra_1.existsSync)(map)) {
-                    (0, fs_extra_1.unlinkSync)(map);
-                }
-            });
-        });
-    }
+    // private startFileSync(destinationDir: string): Promise<void> {
+    //   this.log.notice(`Starting file system sync from ${this.rootDir}`);
+    //   const inSrc = (filename: string): string => path.join(this.rootDir, filename);
+    //   const inDest = (filename: string): string => path.join(destinationDir, filename);
+    //   return new Promise<void>((resolve, reject) => {
+    //     const patterns = this.getFilePatterns(['js', 'map'], true);
+    //     const ignoreFiles = [] as string[];
+    //     const watcher = chokidar.watch(patterns, { cwd: this.rootDir });
+    //     let ready = false;
+    //     let initialEventPromises: Promise<void>[] = [];
+    //     watcher.on('error', reject);
+    //     watcher.on('ready', async () => {
+    //       ready = true;
+    //       await Promise.all(initialEventPromises);
+    //       initialEventPromises = [];
+    //       resolve();
+    //     });
+    //     /*watcher.on('all', (event, path) => {
+    //       console.log(event, path);
+    //     });*/
+    //     const syncFile = async (filename: string): Promise<void> => {
+    //       try {
+    //         this.log.debug(`Synchronizing ${filename}`);
+    //         const src = inSrc(filename);
+    //         const dest = inDest(filename);
+    //         if (filename.endsWith('.map')) {
+    //           await this.patchSourcemap(src, dest);
+    //         } else if (!existsSync(inSrc(`${filename}.map`))) {
+    //           // copy file and add sourcemap
+    //           await this.addSourcemap(src, dest, true);
+    //         } else {
+    //           await copyFile(src, dest);
+    //         }
+    //       } catch (error) {
+    //         this.log.warn(`Couldn't sync ${filename}`);
+    //       }
+    //     };
+    //     watcher.on('add', (filename: string) => {
+    //       if (ready) {
+    //         syncFile(filename);
+    //       } else if (!filename.endsWith('map') && !existsSync(inDest(filename))) {
+    //         // ignore files during initial sync if they don't exist in the target directory (except for sourcemaps)
+    //         ignoreFiles.push(filename);
+    //       } else {
+    //         initialEventPromises.push(syncFile(filename));
+    //       }
+    //     });
+    //     watcher.on('change', (filename: string) => {
+    //       if (!ignoreFiles.includes(filename)) {
+    //         const resPromise = syncFile(filename);
+    //         if (!ready) {
+    //           initialEventPromises.push(resPromise);
+    //         }
+    //       }
+    //     });
+    //     watcher.on('unlink', (filename: string) => {
+    //       unlinkSync(inDest(filename));
+    //       const map = inDest(filename + '.map');
+    //       if (existsSync(map)) {
+    //         unlinkSync(map);
+    //       }
+    //     });
+    //   });
+    // }
     async startNodemon(baseDir, scriptName, doNotWatch) {
         const script = path.resolve(baseDir, scriptName);
         this.log.notice(`Starting nodemon for ${script}`);
@@ -924,7 +918,11 @@ class DevServer {
             isExiting = true;
         });
         const args = this.isJSController() ? [] : ['--debug', '0'];
-        const ignoreList = [path.join(baseDir, 'admin')];
+        const ignoreList = [
+            path.join(baseDir, 'admin'),
+            // avoid recursively following symlinks
+            path.join(baseDir, '.dev-server'),
+        ];
         if (doNotWatch.length > 0) {
             doNotWatch.forEach((entry) => ignoreList.push(path.join(baseDir, entry)));
         }
@@ -938,7 +936,7 @@ class DevServer {
             ignore: ignoreList,
             ignoreRoot: [],
             delay: 2000,
-            execMap: { js: 'node --inspect' },
+            execMap: { js: 'node --inspect --preserve-symlinks --preserve-symlinks-main' },
             signal: 'SIGINT',
             args,
         });
@@ -1089,6 +1087,8 @@ class DevServer {
             },
         };
         await (0, fs_extra_1.writeJson)(path.join(this.profileDir, 'package.json'), pkg, { spaces: 2 });
+        // Tell npm to link the local adapter folder instead of creating a copy
+        await (0, fs_extra_1.writeFile)(path.join(this.profileDir, '.npmrc'), 'install-links=false', 'utf8');
         await this.verifyIgnoreFiles();
         this.log.notice('Installing js-controller and admin...');
         this.execSync('npm install --loglevel error --production', this.profileDir);
@@ -1250,12 +1250,8 @@ class DevServer {
     }
     async installLocalAdapter() {
         this.log.notice(`Install local iobroker.${this.adapterName}`);
-        const { stdout } = await this.getExecOutput('npm pack', this.rootDir);
-        const filename = stdout.trim();
-        this.log.info(`Packed to ${filename}`);
-        const fullPath = path.join(this.rootDir, filename);
-        this.execSync(`npm install "${fullPath}"`, this.profileDir);
-        await this.rimraf(fullPath);
+        const relativePath = path.relative(this.profileDir, this.rootDir);
+        this.execSync(`npm install "${relativePath}"`, this.profileDir);
     }
     async installRepoAdapter(adapterName) {
         this.log.notice(`Install iobroker.${adapterName}`);
