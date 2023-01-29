@@ -112,7 +112,7 @@ class DevServer {
             alias: 'l',
             default: false,
             description:
-              'Use symlinks instead of packing and installing the current adapter. Requires JS-Controller 5+ and npm 7+.',
+              'Use symlinks instead of packing and installing the current adapter for a smoother dev experience. Requires JS-Controller 5+.',
           },
         },
         async (args) =>
