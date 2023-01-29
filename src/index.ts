@@ -6,10 +6,23 @@ import axios from 'axios';
 import browserSync from 'browser-sync';
 import { bold, gray, yellow } from 'chalk';
 import * as cp from 'child_process';
+import chokidar from 'chokidar';
 import { prompt } from 'enquirer';
 import express, { Application } from 'express';
 import fg from 'fast-glob';
-import { existsSync, mkdir, mkdirp, readdir, readFile, readJson, rename, writeFile, writeJson } from 'fs-extra';
+import {
+  copyFile,
+  existsSync,
+  mkdir,
+  mkdirp,
+  readdir,
+  readFile,
+  readJson,
+  rename,
+  unlinkSync,
+  writeFile,
+  writeJson,
+} from 'fs-extra';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { Socket } from 'net';
 import nodemon from 'nodemon';
@@ -39,6 +52,7 @@ const DEFAULT_PROFILE_NAME = 'default';
 
 interface DevServerConfig {
   adminPort: number;
+  useSymlinks: boolean;
 }
 
 type CoreDependency = 'iobroker.js-controller' | 'iobroker.admin';
@@ -51,6 +65,7 @@ class DevServer {
   private tempDir!: string;
   private profileName!: string;
   private profileDir!: string;
+  private config?: DevServerConfig;
 
   private readonly socketEvents = new EventEmitter();
 
@@ -92,6 +107,13 @@ class DevServer {
             description: 'Provide an ioBroker backup file to restore in this dev-server',
           },
           force: { type: 'boolean', hidden: true },
+          symlinks: {
+            type: 'boolean',
+            alias: 'l',
+            default: false,
+            description:
+              'Use symlinks instead of packing and installing the current adapter. Requires JS-Controller 5+ and npm 7+.',
+          },
         },
         async (args) =>
           await this.setup(
@@ -99,6 +121,7 @@ class DevServer {
             { ['iobroker.js-controller']: args.jsController, ['iobroker.admin']: args.admin },
             args.backupFile,
             !!args.force,
+            args.symlinks,
           ),
       )
       .command(
@@ -184,6 +207,7 @@ class DevServer {
       .middleware(async (argv) => await this.setLogger(argv))
       .middleware(async () => await this.checkVersion())
       .middleware(async (argv) => await this.setDirectories(argv))
+      .middleware(async () => await this.parseConfig())
       .wrap(Math.min(100, parser.terminalWidth()))
       .help().argv;
   }
@@ -291,6 +315,18 @@ class DevServer {
     this.adapterName = await this.findAdapterName();
   }
 
+  private async parseConfig(): Promise<void> {
+    let pkg: Record<string, any>;
+    try {
+      pkg = await readJson(path.join(this.profileDir, 'package.json'));
+    } catch {
+      // not all commands need the config
+      return;
+    }
+
+    this.config = pkg['dev-server'];
+  }
+
   private async findAdapterName(): Promise<string> {
     try {
       const ioPackage = await readJson(path.join(this.rootDir, 'io-package.json'));
@@ -327,6 +363,7 @@ class DevServer {
     dependencies: DependencyVersions,
     backupFile?: string,
     force?: boolean,
+    useSymlinks = false,
   ): Promise<void> {
     if (force) {
       this.log.notice(`Deleting ${this.profileDir}`);
@@ -339,7 +376,7 @@ class DevServer {
       return;
     }
 
-    await this.setupDevServer(adminPort, dependencies, backupFile);
+    await this.setupDevServer(adminPort, dependencies, backupFile, useSymlinks);
 
     const commands = ['run', 'watch', 'debug'];
     this.log.box(
@@ -381,7 +418,7 @@ class DevServer {
     await this.checkSetup();
     if (!noInstall) {
       await this.buildLocalAdapter();
-      // await this.installLocalAdapter();
+      await this.installLocalAdapter();
     }
     if (this.isJSController()) {
       // this watches actually js-controller
@@ -526,14 +563,12 @@ class DevServer {
   }
 
   async waitForJsController(): Promise<void> {
-    const tempPkg = await readJson(path.join(this.profileDir, 'package.json'));
-    const config = tempPkg['dev-server'] as DevServerConfig;
-    if (!config) {
+    if (!this.config) {
       throw new Error(`Couldn't find dev-server configuration in package.json`);
     }
     if (
-      !(await this.waitForPort(config.adminPort, OBJECTS_DB_PORT_OFFSET)) ||
-      !(await this.waitForPort(config.adminPort, STATES_DB_PORT_OFFSET))
+      !(await this.waitForPort(this.config.adminPort, OBJECTS_DB_PORT_OFFSET)) ||
+      !(await this.waitForPort(this.config.adminPort, STATES_DB_PORT_OFFSET))
     ) {
       throw new Error(`Couldn't start js-controller`);
     }
@@ -588,13 +623,11 @@ class DevServer {
   async startServer(): Promise<void> {
     this.log.notice(`Running inside ${this.profileDir}`);
 
-    const tempPkg = await readJson(path.join(this.profileDir, 'package.json'));
-    const config = tempPkg['dev-server'] as DevServerConfig;
-    if (!config) {
+    if (!this.config) {
       throw new Error(`Couldn't find dev-server configuration in package.json`);
     }
 
-    const hiddenAdminPort = this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET);
+    const hiddenAdminPort = this.getPort(this.config.adminPort, HIDDEN_ADMIN_PORT_OFFSET);
 
     await this.waitForPort(hiddenAdminPort);
 
@@ -609,15 +642,15 @@ class DevServer {
       );
     } else if (existsSync(path.resolve(this.rootDir, 'admin/jsonConfig.json'))) {
       // JSON config
-      await this.createJsonConfigProxy(app, config);
+      await this.createJsonConfigProxy(app, this.config);
     } else {
       // HTML or React config
-      await this.createHtmlConfigProxy(app, config);
+      await this.createHtmlConfigProxy(app, this.config);
     }
 
     // start express
-    this.log.notice(`Starting web server on port ${config.adminPort}`);
-    const server = app.listen(config.adminPort);
+    this.log.notice(`Starting web server on port ${this.config.adminPort}`);
+    const server = app.listen(this.config.adminPort);
 
     let exiting = false;
     process.on('SIGINT', async () => {
@@ -672,7 +705,7 @@ class DevServer {
       connectWebSocketClient();
     }
 
-    this.log.box(`Admin is now reachable under http://127.0.0.1:${config.adminPort}/`);
+    this.log.box(`Admin is now reachable under http://127.0.0.1:${this.config.adminPort}/`);
   }
 
   private async createJsonConfigProxy(app: Application, config: DevServerConfig): Promise<void> {
@@ -999,9 +1032,12 @@ class DevServer {
       await this.startTscWatch();
     }
 
-    // // start sync
+    // start sync
     const adapterRunDir = path.join(this.profileDir, 'node_modules', `iobroker.${this.adapterName}`);
-    // await this.startFileSync(adapterRunDir);
+    if (!this.config?.useSymlinks) {
+      // This is not necessary when using symlinks
+      await this.startFileSync(adapterRunDir);
+    }
 
     if (startAdapter) {
       await this.delay(3000);
@@ -1021,70 +1057,70 @@ class DevServer {
     await this.spawnAndAwaitOutput('npm', ['run', 'watch:ts'], this.rootDir, /watching (files )?for/i, { shell: true });
   }
 
-  // private startFileSync(destinationDir: string): Promise<void> {
-  //   this.log.notice(`Starting file system sync from ${this.rootDir}`);
-  //   const inSrc = (filename: string): string => path.join(this.rootDir, filename);
-  //   const inDest = (filename: string): string => path.join(destinationDir, filename);
-  //   return new Promise<void>((resolve, reject) => {
-  //     const patterns = this.getFilePatterns(['js', 'map'], true);
-  //     const ignoreFiles = [] as string[];
-  //     const watcher = chokidar.watch(patterns, { cwd: this.rootDir });
-  //     let ready = false;
-  //     let initialEventPromises: Promise<void>[] = [];
-  //     watcher.on('error', reject);
-  //     watcher.on('ready', async () => {
-  //       ready = true;
-  //       await Promise.all(initialEventPromises);
-  //       initialEventPromises = [];
-  //       resolve();
-  //     });
-  //     /*watcher.on('all', (event, path) => {
-  //       console.log(event, path);
-  //     });*/
-  //     const syncFile = async (filename: string): Promise<void> => {
-  //       try {
-  //         this.log.debug(`Synchronizing ${filename}`);
-  //         const src = inSrc(filename);
-  //         const dest = inDest(filename);
-  //         if (filename.endsWith('.map')) {
-  //           await this.patchSourcemap(src, dest);
-  //         } else if (!existsSync(inSrc(`${filename}.map`))) {
-  //           // copy file and add sourcemap
-  //           await this.addSourcemap(src, dest, true);
-  //         } else {
-  //           await copyFile(src, dest);
-  //         }
-  //       } catch (error) {
-  //         this.log.warn(`Couldn't sync ${filename}`);
-  //       }
-  //     };
-  //     watcher.on('add', (filename: string) => {
-  //       if (ready) {
-  //         syncFile(filename);
-  //       } else if (!filename.endsWith('map') && !existsSync(inDest(filename))) {
-  //         // ignore files during initial sync if they don't exist in the target directory (except for sourcemaps)
-  //         ignoreFiles.push(filename);
-  //       } else {
-  //         initialEventPromises.push(syncFile(filename));
-  //       }
-  //     });
-  //     watcher.on('change', (filename: string) => {
-  //       if (!ignoreFiles.includes(filename)) {
-  //         const resPromise = syncFile(filename);
-  //         if (!ready) {
-  //           initialEventPromises.push(resPromise);
-  //         }
-  //       }
-  //     });
-  //     watcher.on('unlink', (filename: string) => {
-  //       unlinkSync(inDest(filename));
-  //       const map = inDest(filename + '.map');
-  //       if (existsSync(map)) {
-  //         unlinkSync(map);
-  //       }
-  //     });
-  //   });
-  // }
+  private startFileSync(destinationDir: string): Promise<void> {
+    this.log.notice(`Starting file system sync from ${this.rootDir}`);
+    const inSrc = (filename: string): string => path.join(this.rootDir, filename);
+    const inDest = (filename: string): string => path.join(destinationDir, filename);
+    return new Promise<void>((resolve, reject) => {
+      const patterns = this.getFilePatterns(['js', 'map'], true);
+      const ignoreFiles = [] as string[];
+      const watcher = chokidar.watch(patterns, { cwd: this.rootDir });
+      let ready = false;
+      let initialEventPromises: Promise<void>[] = [];
+      watcher.on('error', reject);
+      watcher.on('ready', async () => {
+        ready = true;
+        await Promise.all(initialEventPromises);
+        initialEventPromises = [];
+        resolve();
+      });
+      /*watcher.on('all', (event, path) => {
+        console.log(event, path);
+      });*/
+      const syncFile = async (filename: string): Promise<void> => {
+        try {
+          this.log.debug(`Synchronizing ${filename}`);
+          const src = inSrc(filename);
+          const dest = inDest(filename);
+          if (filename.endsWith('.map')) {
+            await this.patchSourcemap(src, dest);
+          } else if (!existsSync(inSrc(`${filename}.map`))) {
+            // copy file and add sourcemap
+            await this.addSourcemap(src, dest, true);
+          } else {
+            await copyFile(src, dest);
+          }
+        } catch (error) {
+          this.log.warn(`Couldn't sync ${filename}`);
+        }
+      };
+      watcher.on('add', (filename: string) => {
+        if (ready) {
+          syncFile(filename);
+        } else if (!filename.endsWith('map') && !existsSync(inDest(filename))) {
+          // ignore files during initial sync if they don't exist in the target directory (except for sourcemaps)
+          ignoreFiles.push(filename);
+        } else {
+          initialEventPromises.push(syncFile(filename));
+        }
+      });
+      watcher.on('change', (filename: string) => {
+        if (!ignoreFiles.includes(filename)) {
+          const resPromise = syncFile(filename);
+          if (!ready) {
+            initialEventPromises.push(resPromise);
+          }
+        }
+      });
+      watcher.on('unlink', (filename: string) => {
+        unlinkSync(inDest(filename));
+        const map = inDest(filename + '.map');
+        if (existsSync(map)) {
+          unlinkSync(map);
+        }
+      });
+    });
+  }
 
   private async startNodemon(baseDir: string, scriptName: string, doNotWatch: string[]): Promise<void> {
     const script = path.resolve(baseDir, scriptName);
@@ -1181,10 +1217,19 @@ class DevServer {
     this.log.box(`Debugger is now available on process id ${debigPid}`);
   }
 
-  async setupDevServer(adminPort: number, dependencies: DependencyVersions, backupFile?: string): Promise<void> {
+  async setupDevServer(
+    adminPort: number,
+    dependencies: DependencyVersions,
+    backupFile: string | undefined,
+    useSymlinks: boolean,
+  ): Promise<void> {
     await this.buildLocalAdapter();
 
     this.log.notice(`Setting up in ${this.profileDir}`);
+    this.config = {
+      adminPort,
+      useSymlinks,
+    };
 
     // create the data directory
     const dataDir = path.join(this.profileDir, 'iobroker-data');
@@ -1273,13 +1318,16 @@ class DevServer {
       private: true,
       dependencies,
       'dev-server': {
-        adminPort: adminPort,
+        adminPort,
+        useSymlinks,
       },
     };
     await writeJson(path.join(this.profileDir, 'package.json'), pkg, { spaces: 2 });
 
     // Tell npm to link the local adapter folder instead of creating a copy
-    await writeFile(path.join(this.profileDir, '.npmrc'), 'install-links=false', 'utf8');
+    if (useSymlinks) {
+      await writeFile(path.join(this.profileDir, '.npmrc'), 'install-links=false', 'utf8');
+    }
 
     await this.verifyIgnoreFiles();
 
@@ -1461,8 +1509,24 @@ class DevServer {
   private async installLocalAdapter(): Promise<void> {
     this.log.notice(`Install local iobroker.${this.adapterName}`);
 
-    const relativePath = path.relative(this.profileDir, this.rootDir);
-    this.execSync(`npm install "${relativePath}"`, this.profileDir);
+    if (this.config?.useSymlinks) {
+      // This is the expected relative path
+      const relativePath = path.relative(this.profileDir, this.rootDir);
+      // Check if it is already used in package.json
+      const tempPkg = await readJson(path.join(this.profileDir, 'package.json'));
+      const depPath = tempPkg.dependencies?.[`iobroker.${this.adapterName}`];
+      // If not, install it
+      if (depPath !== relativePath) {
+        this.execSync(`npm install "${relativePath}"`, this.profileDir);
+      }
+    } else {
+      const { stdout } = await this.getExecOutput('npm pack', this.rootDir);
+      const filename = stdout.trim();
+      this.log.info(`Packed to ${filename}`);
+      const fullPath = path.join(this.rootDir, filename);
+      this.execSync(`npm install "${fullPath}"`, this.profileDir);
+      await this.rimraf(fullPath);
+    }
   }
 
   private async installRepoAdapter(adapterName: string): Promise<void> {
