@@ -542,7 +542,12 @@ class DevServer {
   async startJsController(): Promise<void> {
     const proc = await this.spawn(
       'node',
-      ['--inspect=127.0.0.1:9228', '--preserve-symlinks', 'node_modules/iobroker.js-controller/controller.js'],
+      [
+        '--inspect=127.0.0.1:9228',
+        '--preserve-symlinks',
+        '--preserve-symlinks-main',
+        'node_modules/iobroker.js-controller/controller.js',
+      ],
       this.profileDir,
     );
     proc.on('exit', async (code) => {
@@ -556,7 +561,11 @@ class DevServer {
   private async startJsControllerDebug(wait: boolean): Promise<void> {
     this.log.notice(`Starting debugger for ${this.adapterName}`);
 
-    const nodeArgs = ['node_modules/iobroker.js-controller/controller.js'];
+    const nodeArgs = [
+      '--preserve-symlinks',
+      '--preserve-symlinks-main',
+      'node_modules/iobroker.js-controller/controller.js',
+    ];
     if (wait) {
       nodeArgs.unshift('--inspect-brk');
     } else {
@@ -931,7 +940,7 @@ class DevServer {
 
   private async startAdapterDebug(wait: boolean): Promise<void> {
     this.log.notice(`Starting ioBroker adapter debugger for ${this.adapterName}.0`);
-    const args = [IOBROKER_CLI, 'debug', `${this.adapterName}.0`];
+    const args = ['--preserve-symlinks', '--preserve-symlinks-main', IOBROKER_CLI, 'debug', `${this.adapterName}.0`];
     if (wait) {
       args.push('--wait');
     }
