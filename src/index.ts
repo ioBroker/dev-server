@@ -52,6 +52,7 @@ const DEFAULT_PROFILE_NAME = 'default';
 
 interface DevServerConfig {
   adminPort: number;
+  useSymlinks: boolean;
 }
 
 type CoreDependency = 'iobroker.js-controller' | 'iobroker.admin';
@@ -64,6 +65,7 @@ class DevServer {
   private tempDir!: string;
   private profileName!: string;
   private profileDir!: string;
+  private config?: DevServerConfig;
 
   private readonly socketEvents = new EventEmitter();
 
@@ -105,6 +107,13 @@ class DevServer {
             description: 'Provide an ioBroker backup file to restore in this dev-server',
           },
           force: { type: 'boolean', hidden: true },
+          symlinks: {
+            type: 'boolean',
+            alias: 'l',
+            default: false,
+            description:
+              'Use symlinks instead of packing and installing the current adapter for a smoother dev experience. Requires JS-Controller 5+.',
+          },
         },
         async (args) =>
           await this.setup(
@@ -112,6 +121,7 @@ class DevServer {
             { ['iobroker.js-controller']: args.jsController, ['iobroker.admin']: args.admin },
             args.backupFile,
             !!args.force,
+            args.symlinks,
           ),
       )
       .command(
@@ -197,6 +207,7 @@ class DevServer {
       .middleware(async (argv) => await this.setLogger(argv))
       .middleware(async () => await this.checkVersion())
       .middleware(async (argv) => await this.setDirectories(argv))
+      .middleware(async () => await this.parseConfig())
       .wrap(Math.min(100, parser.terminalWidth()))
       .help().argv;
   }
@@ -304,6 +315,18 @@ class DevServer {
     this.adapterName = await this.findAdapterName();
   }
 
+  private async parseConfig(): Promise<void> {
+    let pkg: Record<string, any>;
+    try {
+      pkg = await readJson(path.join(this.profileDir, 'package.json'));
+    } catch {
+      // not all commands need the config
+      return;
+    }
+
+    this.config = pkg['dev-server'];
+  }
+
   private async findAdapterName(): Promise<string> {
     try {
       const ioPackage = await readJson(path.join(this.rootDir, 'io-package.json'));
@@ -340,6 +363,7 @@ class DevServer {
     dependencies: DependencyVersions,
     backupFile?: string,
     force?: boolean,
+    useSymlinks = false,
   ): Promise<void> {
     if (force) {
       this.log.notice(`Deleting ${this.profileDir}`);
@@ -352,7 +376,7 @@ class DevServer {
       return;
     }
 
-    await this.setupDevServer(adminPort, dependencies, backupFile);
+    await this.setupDevServer(adminPort, dependencies, backupFile, useSymlinks);
 
     const commands = ['run', 'watch', 'debug'];
     this.log.box(
@@ -539,14 +563,12 @@ class DevServer {
   }
 
   async waitForJsController(): Promise<void> {
-    const tempPkg = await readJson(path.join(this.profileDir, 'package.json'));
-    const config = tempPkg['dev-server'] as DevServerConfig;
-    if (!config) {
+    if (!this.config) {
       throw new Error(`Couldn't find dev-server configuration in package.json`);
     }
     if (
-      !(await this.waitForPort(config.adminPort, OBJECTS_DB_PORT_OFFSET)) ||
-      !(await this.waitForPort(config.adminPort, STATES_DB_PORT_OFFSET))
+      !(await this.waitForPort(this.config.adminPort, OBJECTS_DB_PORT_OFFSET)) ||
+      !(await this.waitForPort(this.config.adminPort, STATES_DB_PORT_OFFSET))
     ) {
       throw new Error(`Couldn't start js-controller`);
     }
@@ -555,7 +577,12 @@ class DevServer {
   async startJsController(): Promise<void> {
     const proc = await this.spawn(
       'node',
-      ['--inspect=127.0.0.1:9228', 'node_modules/iobroker.js-controller/controller.js'],
+      [
+        '--inspect=127.0.0.1:9228',
+        '--preserve-symlinks',
+        '--preserve-symlinks-main',
+        'node_modules/iobroker.js-controller/controller.js',
+      ],
       this.profileDir,
     );
     proc.on('exit', async (code) => {
@@ -569,7 +596,11 @@ class DevServer {
   private async startJsControllerDebug(wait: boolean): Promise<void> {
     this.log.notice(`Starting debugger for ${this.adapterName}`);
 
-    const nodeArgs = ['node_modules/iobroker.js-controller/controller.js'];
+    const nodeArgs = [
+      '--preserve-symlinks',
+      '--preserve-symlinks-main',
+      'node_modules/iobroker.js-controller/controller.js',
+    ];
     if (wait) {
       nodeArgs.unshift('--inspect-brk');
     } else {
@@ -592,13 +623,11 @@ class DevServer {
   async startServer(): Promise<void> {
     this.log.notice(`Running inside ${this.profileDir}`);
 
-    const tempPkg = await readJson(path.join(this.profileDir, 'package.json'));
-    const config = tempPkg['dev-server'] as DevServerConfig;
-    if (!config) {
+    if (!this.config) {
       throw new Error(`Couldn't find dev-server configuration in package.json`);
     }
 
-    const hiddenAdminPort = this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET);
+    const hiddenAdminPort = this.getPort(this.config.adminPort, HIDDEN_ADMIN_PORT_OFFSET);
 
     await this.waitForPort(hiddenAdminPort);
 
@@ -613,15 +642,15 @@ class DevServer {
       );
     } else if (existsSync(path.resolve(this.rootDir, 'admin/jsonConfig.json'))) {
       // JSON config
-      await this.createJsonConfigProxy(app, config);
+      await this.createJsonConfigProxy(app, this.config);
     } else {
       // HTML or React config
-      await this.createHtmlConfigProxy(app, config);
+      await this.createHtmlConfigProxy(app, this.config);
     }
 
     // start express
-    this.log.notice(`Starting web server on port ${config.adminPort}`);
-    const server = app.listen(config.adminPort);
+    this.log.notice(`Starting web server on port ${this.config.adminPort}`);
+    const server = app.listen(this.config.adminPort);
 
     let exiting = false;
     process.on('SIGINT', async () => {
@@ -676,7 +705,7 @@ class DevServer {
       connectWebSocketClient();
     }
 
-    this.log.box(`Admin is now reachable under http://127.0.0.1:${config.adminPort}/`);
+    this.log.box(`Admin is now reachable under http://127.0.0.1:${this.config.adminPort}/`);
   }
 
   private async createJsonConfigProxy(app: Application, config: DevServerConfig): Promise<void> {
@@ -944,7 +973,7 @@ class DevServer {
 
   private async startAdapterDebug(wait: boolean): Promise<void> {
     this.log.notice(`Starting ioBroker adapter debugger for ${this.adapterName}.0`);
-    const args = [IOBROKER_CLI, 'debug', `${this.adapterName}.0`];
+    const args = ['--preserve-symlinks', '--preserve-symlinks-main', IOBROKER_CLI, 'debug', `${this.adapterName}.0`];
     if (wait) {
       args.push('--wait');
     }
@@ -1005,7 +1034,10 @@ class DevServer {
 
     // start sync
     const adapterRunDir = path.join(this.profileDir, 'node_modules', `iobroker.${this.adapterName}`);
-    await this.startFileSync(adapterRunDir);
+    if (!this.config?.useSymlinks) {
+      // This is not necessary when using symlinks
+      await this.startFileSync(adapterRunDir);
+    }
 
     if (startAdapter) {
       await this.delay(3000);
@@ -1101,7 +1133,11 @@ class DevServer {
 
     const args = this.isJSController() ? [] : ['--debug', '0'];
 
-    const ignoreList = [path.join(baseDir, 'admin')];
+    const ignoreList = [
+      path.join(baseDir, 'admin'),
+      // avoid recursively following symlinks
+      path.join(baseDir, '.dev-server'),
+    ];
     if (doNotWatch.length > 0) {
       doNotWatch.forEach((entry) => ignoreList.push(path.join(baseDir, entry)));
     }
@@ -1116,7 +1152,7 @@ class DevServer {
       ignore: ignoreList,
       ignoreRoot: [],
       delay: 2000,
-      execMap: { js: 'node --inspect' },
+      execMap: { js: 'node --inspect --preserve-symlinks --preserve-symlinks-main' },
       signal: 'SIGINT' as any, // wrong type definition: signal is of type "string?"
       args,
     });
@@ -1181,10 +1217,19 @@ class DevServer {
     this.log.box(`Debugger is now available on process id ${debigPid}`);
   }
 
-  async setupDevServer(adminPort: number, dependencies: DependencyVersions, backupFile?: string): Promise<void> {
+  async setupDevServer(
+    adminPort: number,
+    dependencies: DependencyVersions,
+    backupFile: string | undefined,
+    useSymlinks: boolean,
+  ): Promise<void> {
     await this.buildLocalAdapter();
 
     this.log.notice(`Setting up in ${this.profileDir}`);
+    this.config = {
+      adminPort,
+      useSymlinks,
+    };
 
     // create the data directory
     const dataDir = path.join(this.profileDir, 'iobroker-data');
@@ -1273,10 +1318,16 @@ class DevServer {
       private: true,
       dependencies,
       'dev-server': {
-        adminPort: adminPort,
+        adminPort,
+        useSymlinks,
       },
     };
     await writeJson(path.join(this.profileDir, 'package.json'), pkg, { spaces: 2 });
+
+    // Tell npm to link the local adapter folder instead of creating a copy
+    if (useSymlinks) {
+      await writeFile(path.join(this.profileDir, '.npmrc'), 'install-links=false', 'utf8');
+    }
 
     await this.verifyIgnoreFiles();
 
@@ -1458,14 +1509,24 @@ class DevServer {
   private async installLocalAdapter(): Promise<void> {
     this.log.notice(`Install local iobroker.${this.adapterName}`);
 
-    const { stdout } = await this.getExecOutput('npm pack', this.rootDir);
-    const filename = stdout.trim();
-    this.log.info(`Packed to ${filename}`);
-
-    const fullPath = path.join(this.rootDir, filename);
-    this.execSync(`npm install "${fullPath}"`, this.profileDir);
-
-    await this.rimraf(fullPath);
+    if (this.config?.useSymlinks) {
+      // This is the expected relative path
+      const relativePath = path.relative(this.profileDir, this.rootDir);
+      // Check if it is already used in package.json
+      const tempPkg = await readJson(path.join(this.profileDir, 'package.json'));
+      const depPath = tempPkg.dependencies?.[`iobroker.${this.adapterName}`];
+      // If not, install it
+      if (depPath !== relativePath) {
+        this.execSync(`npm install "${relativePath}"`, this.profileDir);
+      }
+    } else {
+      const { stdout } = await this.getExecOutput('npm pack', this.rootDir);
+      const filename = stdout.trim();
+      this.log.info(`Packed to ${filename}`);
+      const fullPath = path.join(this.rootDir, filename);
+      this.execSync(`npm install "${fullPath}"`, this.profileDir);
+      await this.rimraf(fullPath);
+    }
   }
 
   private async installRepoAdapter(adapterName: string): Promise<void> {
