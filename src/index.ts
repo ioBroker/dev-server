@@ -42,7 +42,7 @@ import EventEmitter = require('events');
 const DEFAULT_TEMP_DIR_NAME = '.dev-server';
 const CORE_MODULE = 'iobroker.js-controller';
 const IOBROKER_CLI = 'node_modules/iobroker.js-controller/iobroker.js';
-const IOBROKER_COMMAND = `node ${IOBROKER_CLI}`;
+const IOBROKER_COMMAND = `node --preserve-symlinks-main --preserve-symlinks ${IOBROKER_CLI}`;
 const DEFAULT_ADMIN_PORT = 8081;
 const HIDDEN_ADMIN_PORT_OFFSET = 12345;
 const HIDDEN_BROWSER_SYNC_PORT_OFFSET = 14345;
@@ -605,6 +605,11 @@ class DevServer {
   }
 
   async startJsController(): Promise<void> {
+    // Store the current Node.js version, so JS-Controller doesn't try to `sudo setcap`
+    await this.withDb(async (db) => {
+      await db.setState(`system.host.${hostname()}.nodeVersion`, process.versions.node);
+    });
+
     const proc = await this.spawn(
       'node',
       [
