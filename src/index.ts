@@ -53,6 +53,8 @@ const DEFAULT_PROFILE_NAME = 'default';
 interface DevServerConfig {
   adminPort: number;
   useSymlinks: boolean;
+  /** The directory relative to the rootDir where the adapter/controller is located. Useful for monorepos. */
+  entrypoint: string;
 }
 
 type CoreDependency = 'iobroker.js-controller' | 'iobroker.admin';
@@ -61,6 +63,7 @@ type DependencyVersions = Partial<Record<CoreDependency, string>>;
 class DevServer {
   private log!: Logger;
   private rootDir!: string;
+  private entrypoint!: string;
   private adapterName!: string;
   private tempDir!: string;
   private profileName!: string;
@@ -101,6 +104,13 @@ class DevServer {
             default: 'latest',
             description: 'Define which version of admin to be used',
           },
+          entrypoint: {
+            type: 'string',
+            alias: 'e',
+            default: '.',
+            description:
+              'For monorepos only - Defines the path relative to the current directory, where the adapter is located.',
+          },
           backupFile: {
             type: 'string',
             alias: 'b',
@@ -119,6 +129,7 @@ class DevServer {
           await this.setup(
             args.adminPort,
             { ['iobroker.js-controller']: args.jsController, ['iobroker.admin']: args.admin },
+            args.entrypoint,
             args.backupFile,
             !!args.force,
             args.symlinks,
@@ -207,7 +218,7 @@ class DevServer {
       .middleware(async (argv) => await this.setLogger(argv))
       .middleware(async () => await this.checkVersion())
       .middleware(async (argv) => await this.setDirectories(argv))
-      .middleware(async () => await this.parseConfig())
+      .middleware(async (argv) => await this.parseConfig(argv as any))
       .wrap(Math.min(100, parser.terminalWidth()))
       .help().argv;
   }
@@ -306,30 +317,48 @@ class DevServer {
     }
 
     if (!profileName.match(/^[a-z0-9_-]+$/i)) {
-      throw new Error(`Invaid profile name: "${profileName}", it may only contain a-z, 0-9, _ and -.`);
+      throw new Error(`Invalid profile name: "${profileName}", it may only contain a-z, 0-9, _ and -.`);
     }
 
     this.profileName = profileName;
     this.log.debug(`Using profile name "${this.profileName}"`);
     this.profileDir = path.join(this.tempDir, profileName);
-    this.adapterName = await this.findAdapterName();
   }
 
-  private async parseConfig(): Promise<void> {
+  private async parseConfig(argv: { entrypoint?: string }): Promise<void> {
     let pkg: Record<string, any>;
     try {
       pkg = await readJson(path.join(this.profileDir, 'package.json'));
+      this.config = pkg['dev-server'];
     } catch {
       // not all commands need the config
-      return;
     }
 
-    this.config = pkg['dev-server'];
+    this.adapterName = await this.findAdapterName(argv.entrypoint);
   }
 
-  private async findAdapterName(): Promise<string> {
+  private async isMonorepo(): Promise<boolean> {
     try {
-      const ioPackage = await readJson(path.join(this.rootDir, 'io-package.json'));
+      const pkg = await readJson(path.join(this.rootDir, 'package.json'));
+      return pkg.private === true && Array.isArray(pkg.workspaces) && pkg.workspaces.length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  private async findAdapterName(entrypoint?: string): Promise<string> {
+    this.entrypoint = path.join(this.rootDir, entrypoint ?? this.config?.entrypoint ?? '.');
+    if (await this.isMonorepo()) {
+      if (this.entrypoint === this.rootDir) {
+        this.log.error(
+          'The current directory is a monorepo. You must specify where the adapter is located using the "--entrypoint" option during setup.',
+        );
+        return this.exit(-1);
+      }
+    }
+
+    try {
+      const ioPackage = await readJson(path.join(this.entrypoint, 'io-package.json'));
       const adapterName = ioPackage.common.name;
       this.log.debug(`Using adapter name "${adapterName}"`);
       return adapterName;
@@ -345,7 +374,7 @@ class DevServer {
   }
 
   private readPackageJson(): Promise<any> {
-    return readJson(path.join(this.rootDir, 'package.json'));
+    return readJson(path.join(this.entrypoint, 'package.json'));
   }
 
   private getPort(adminPort: number, offset: number): number {
@@ -361,6 +390,7 @@ class DevServer {
   async setup(
     adminPort: number,
     dependencies: DependencyVersions,
+    entrypoint: string,
     backupFile?: string,
     force?: boolean,
     useSymlinks = false,
@@ -376,7 +406,7 @@ class DevServer {
       return;
     }
 
-    await this.setupDevServer(adminPort, dependencies, backupFile, useSymlinks);
+    await this.setupDevServer(adminPort, dependencies, entrypoint, backupFile, useSymlinks);
 
     const commands = ['run', 'watch', 'debug'];
     this.log.box(
@@ -640,7 +670,7 @@ class DevServer {
           ws: true,
         }),
       );
-    } else if (existsSync(path.resolve(this.rootDir, 'admin/jsonConfig.json'))) {
+    } else if (existsSync(path.resolve(this.entrypoint, 'admin/jsonConfig.json'))) {
       // JSON config
       await this.createJsonConfigProxy(app, this.config);
     } else {
@@ -713,7 +743,7 @@ class DevServer {
     const bs = this.startBrowserSync(browserSyncPort, false);
 
     // whenever jsonConfig.json changes, we upload the new file
-    const jsonConfig = path.resolve(this.rootDir, 'admin/jsonConfig.json');
+    const jsonConfig = path.resolve(this.entrypoint, 'admin/jsonConfig.json');
     bs.watch(jsonConfig, undefined, async (e) => {
       if (e === 'change') {
         const content = await readFile(jsonConfig);
@@ -765,7 +795,7 @@ class DevServer {
           await this.startReact('watch:react');
           hasReact = true;
 
-          if (existsSync(path.resolve(this.rootDir, 'admin/.watch'))) {
+          if (existsSync(path.resolve(this.entrypoint, 'admin/.watch'))) {
             // rewrite the build directory to the .watch directory,
             // because "watch:react" no longer updates the build directory automatically
             pathRewrite[`^/adapter/${this.adapterName}/build/`] = '/.watch/';
@@ -806,14 +836,14 @@ class DevServer {
     this.log.notice(`Creating or patching sourcemaps in ${outDir}`);
     const sourcemaps = await this.findFiles('map', true);
     if (sourcemaps.length === 0) {
-      this.log.debug(`Couldn't find any sourcemaps in ${this.rootDir},\nwill try to reverse map .js files`);
+      this.log.debug(`Couldn't find any sourcemaps in ${this.entrypoint},\nwill try to reverse map .js files`);
 
       // search all .js files that exist in the node module in the temp directory as well as in the root directory and
       // create sourcemap files for each of them
       const jsFiles = await this.findFiles('js', true);
       await Promise.all(
         jsFiles.map(async (js) => {
-          const src = path.join(this.rootDir, js);
+          const src = path.join(this.entrypoint, js);
           const dest = path.join(outDir, js);
           await this.addSourcemap(src, dest, false);
         }),
@@ -825,7 +855,7 @@ class DevServer {
     // change their sourceRoot so they can be found in the development directory
     await Promise.all(
       sourcemaps.map(async (sourcemap) => {
-        const src = path.join(this.rootDir, sourcemap);
+        const src = path.join(this.entrypoint, sourcemap);
         const dest = path.join(outDir, sourcemap);
         await this.patchSourcemap(src, dest);
       }),
@@ -899,6 +929,7 @@ class DevServer {
   }
 
   private async findFiles(extension: string, excludeAdmin: boolean): Promise<string[]> {
+    // TODO: Maybe we need to set cwd to this.entrypoint?
     return await fg(this.getFilePatterns(extension, excludeAdmin), { cwd: this.rootDir });
   }
 
@@ -935,7 +966,7 @@ class DevServer {
     await this.spawnAndAwaitOutput(
       'npm',
       ['run', scriptName],
-      this.rootDir,
+      this.entrypoint,
       /(built in|done in|watching (files )?for)/i,
       {
         shell: true,
@@ -947,7 +978,7 @@ class DevServer {
     this.log.notice('Starting browser-sync');
     const bs = browserSync.create();
 
-    const adminPath = path.resolve(this.rootDir, 'admin/');
+    const adminPath = path.resolve(this.entrypoint, 'admin/');
     const config: browserSync.Options = {
       server: { baseDir: adminPath, directory: true },
       port: port,
@@ -1054,17 +1085,19 @@ class DevServer {
   private async startTscWatch(): Promise<void> {
     this.log.notice('Starting tsc --watch');
     this.log.debug('Waiting for first successful tsc build...');
-    await this.spawnAndAwaitOutput('npm', ['run', 'watch:ts'], this.rootDir, /watching (files )?for/i, { shell: true });
+    await this.spawnAndAwaitOutput('npm', ['run', 'watch:ts'], this.entrypoint, /watching (files )?for/i, {
+      shell: true,
+    });
   }
 
   private startFileSync(destinationDir: string): Promise<void> {
-    this.log.notice(`Starting file system sync from ${this.rootDir}`);
-    const inSrc = (filename: string): string => path.join(this.rootDir, filename);
+    this.log.notice(`Starting file system sync from ${this.entrypoint}`);
+    const inSrc = (filename: string): string => path.join(this.entrypoint, filename);
     const inDest = (filename: string): string => path.join(destinationDir, filename);
     return new Promise<void>((resolve, reject) => {
       const patterns = this.getFilePatterns(['js', 'map'], true);
       const ignoreFiles = [] as string[];
-      const watcher = chokidar.watch(patterns, { cwd: this.rootDir });
+      const watcher = chokidar.watch(patterns, { cwd: this.entrypoint });
       let ready = false;
       let initialEventPromises: Promise<void>[] = [];
       watcher.on('error', reject);
@@ -1220,15 +1253,17 @@ class DevServer {
   async setupDevServer(
     adminPort: number,
     dependencies: DependencyVersions,
+    entrypoint: string,
     backupFile: string | undefined,
     useSymlinks: boolean,
   ): Promise<void> {
-    await this.buildLocalAdapter();
+    // await this.buildLocalAdapter();
 
     this.log.notice(`Setting up in ${this.profileDir}`);
     this.config = {
       adminPort,
       useSymlinks,
+      entrypoint,
     };
 
     // create the data directory
@@ -1320,8 +1355,11 @@ class DevServer {
       'dev-server': {
         adminPort,
         useSymlinks,
-      },
+      } as Record<string, string | number | boolean>,
     };
+    if (entrypoint !== '.') {
+      pkg['dev-server'].entrypoint = entrypoint;
+    }
     await writeJson(path.join(this.profileDir, 'package.json'), pkg, { spaces: 2 });
 
     // Tell npm to link the local adapter folder instead of creating a copy
@@ -1502,6 +1540,7 @@ class DevServer {
     const pkg = await this.readPackageJson();
     if (pkg.scripts?.build) {
       this.log.notice(`Build iobroker.${this.adapterName}`);
+      // TODO: Figure out if we need to build in the root or the entrypoint directory
       this.execSync('npm run build', this.rootDir);
     }
   }
@@ -1511,7 +1550,7 @@ class DevServer {
 
     if (this.config?.useSymlinks) {
       // This is the expected relative path
-      const relativePath = path.relative(this.profileDir, this.rootDir);
+      const relativePath = path.relative(this.profileDir, this.entrypoint);
       // Check if it is already used in package.json
       const tempPkg = await readJson(path.join(this.profileDir, 'package.json'));
       const depPath = tempPkg.dependencies?.[`iobroker.${this.adapterName}`];
@@ -1520,10 +1559,10 @@ class DevServer {
         this.execSync(`npm install "${relativePath}"`, this.profileDir);
       }
     } else {
-      const { stdout } = await this.getExecOutput('npm pack', this.rootDir);
+      const { stdout } = await this.getExecOutput('npm pack', this.entrypoint);
       const filename = stdout.trim();
       this.log.info(`Packed to ${filename}`);
-      const fullPath = path.join(this.rootDir, filename);
+      const fullPath = path.join(this.entrypoint, filename);
       this.execSync(`npm install "${fullPath}"`, this.profileDir);
       await this.rimraf(fullPath);
     }
