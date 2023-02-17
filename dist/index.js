@@ -116,29 +116,48 @@ class DevServer {
                 alias: 'n',
                 description: 'Do not start the adapter itself, only watch for changes and sync them.',
             },
+            noBuild: {
+                type: 'boolean',
+                alias: 'b',
+                description: 'Do not build the adapter before starting.',
+            },
             noInstall: {
                 type: 'boolean',
                 alias: 'x',
-                description: 'Do not build and install the adapter before starting.',
+                description: 'Do not install the adapter before starting. Implies --noBuild.',
             },
             doNotWatch: {
                 type: 'string',
                 alias: 'w',
                 description: 'Do not watch the given files or directories for changes (provide paths relative to the adapter base directory).',
             },
-        }, async (args) => await this.watch(!args.noStart, !!args.noInstall, args.doNotWatch))
+        }, async (args) => await this.watch({
+            start: !args.noStart,
+            install: !args.noInstall,
+            build: !args.noBuild,
+            ignore: args.doNotWatch,
+        }))
             .command(['debug [profile]', 'd'], 'Run ioBroker dev-server and start the adapter from ioBroker in "debug" mode. You may attach a debugger to the running adapter.', {
             wait: {
                 type: 'boolean',
                 alias: 'w',
                 description: 'Start the adapter only once the debugger is attached.',
             },
+            noBuild: {
+                type: 'boolean',
+                alias: 'b',
+                description: 'Do not build the adapter before starting.',
+            },
             noInstall: {
                 type: 'boolean',
                 alias: 'x',
-                description: 'Do not build and install the adapter before starting.',
+                description: 'Do not build and install the adapter before starting. Implies --noBuild.',
             },
-        }, async (args) => await this.debug(!!args.wait, !!args.noInstall))
+        }, async (args) => await this.debug({
+            wait: !!args.wait,
+            install: !args.noInstall,
+            build: !args.noBuild,
+        }))
             .command(['upload [profile]', 'ul'], 'Upload the current version of your adapter to the ioBroker dev-server. This is only required if you changed something relevant in your io-package.json', {}, async () => await this.upload())
             .command(['backup <filename> [profile]', 'b'], 'Create an ioBroker backup to the given file.', {}, async (args) => await this.backup(args.filename))
             .command(['profile', 'p'], 'List all dev-server profiles that exist in the current directory.', {}, async () => await this.profile())
@@ -331,12 +350,15 @@ class DevServer {
                 .join('\n')}\n\nto use dev-server.`);
     }
     async update() {
+        var _a;
         await this.checkSetup();
         this.log.notice('Updating everything...');
         this.execSync('npm update --loglevel error', this.profileDir);
         this.uploadAdapter('admin');
-        await this.buildLocalAdapter();
-        await this.installLocalAdapter();
+        if (!((_a = this.config) === null || _a === void 0 ? void 0 : _a.useSymlinks)) {
+            await this.buildLocalAdapter();
+            await this.installLocalAdapter();
+        }
         if (!this.isJSController())
             this.uploadAdapter(this.adapterName);
         this.log.box(`dev-server was sucessfully updated.`);
@@ -346,37 +368,48 @@ class DevServer {
         await this.startJsController();
         await this.startServer();
     }
-    async watch(startAdapter, noInstall, doNotWatch) {
-        let doNotWatchArr = [];
-        if (typeof doNotWatch === 'string') {
-            doNotWatchArr.push(doNotWatch);
+    async watch(options) {
+        const { start, install, build, ignore } = options;
+        let ignorePaths = [];
+        if (typeof ignore === 'string') {
+            ignorePaths.push(ignore);
         }
-        else if (Array.isArray(doNotWatch)) {
-            doNotWatchArr = doNotWatch;
+        else if (Array.isArray(ignore)) {
+            ignorePaths = ignore;
         }
         await this.checkSetup();
-        if (!noInstall) {
-            await this.buildLocalAdapter();
+        if (install) {
+            if (build) {
+                await this.buildLocalAdapter();
+            }
             await this.installLocalAdapter();
         }
         if (this.isJSController()) {
             // this watches actually js-controller
-            await this.startAdapterWatch(startAdapter, doNotWatchArr);
+            await this.startAdapterWatch(start, ignorePaths);
             await this.startServer();
         }
         else {
             await this.startJsController();
             await this.startServer();
-            await this.startAdapterWatch(startAdapter, doNotWatchArr);
+            await this.startAdapterWatch(start, ignorePaths);
         }
     }
-    async debug(wait, noInstall) {
+    async debug(options) {
+        var _a;
+        const { wait, install, build } = options;
         await this.checkSetup();
-        if (!noInstall) {
-            await this.buildLocalAdapter();
+        if (install) {
+            if (build) {
+                await this.buildLocalAdapter();
+            }
             await this.installLocalAdapter();
         }
-        await this.copySourcemaps();
+        // When using symlinks, copying the sourcemaps is not necessary
+        // TODO: Setup launch config instead?
+        if (!((_a = this.config) === null || _a === void 0 ? void 0 : _a.useSymlinks)) {
+            await this.copySourcemaps();
+        }
         if (this.isJSController()) {
             await this.startJsControllerDebug(wait);
             await this.startServer();
