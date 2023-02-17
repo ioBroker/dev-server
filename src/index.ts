@@ -64,6 +64,7 @@ class DevServer {
   private log!: Logger;
   private rootDir!: string;
   private entrypoint!: string;
+  private workspaces: string[] | undefined;
   private adapterName!: string;
   private tempDir!: string;
   private profileName!: string;
@@ -165,7 +166,7 @@ class DevServer {
             type: 'string',
             alias: 'w',
             description:
-              'Do not watch the given files or directories for changes (provide paths relative to the adapter base directory.',
+              'Do not watch the given files or directories for changes (provide paths relative to the adapter base directory).',
           },
         },
         async (args) => await this.watch(!args.noStart, !!args.noInstall, args.doNotWatch),
@@ -337,7 +338,7 @@ class DevServer {
     this.adapterName = await this.findAdapterName(argv.entrypoint);
   }
 
-  private async isMonorepo(): Promise<boolean> {
+  private async checkMonorepo(): Promise<boolean> {
     try {
       const pkg = await readJson(path.join(this.rootDir, 'package.json'));
       return pkg.private === true && Array.isArray(pkg.workspaces) && pkg.workspaces.length > 0;
@@ -348,7 +349,18 @@ class DevServer {
 
   private async findAdapterName(entrypoint?: string): Promise<string> {
     this.entrypoint = path.join(this.rootDir, entrypoint ?? this.config?.entrypoint ?? '.');
-    if (await this.isMonorepo()) {
+
+    // check if we are in a monorepo
+    try {
+      const pkg = await readJson(path.join(this.rootDir, 'package.json'));
+      if (pkg.private === true && Array.isArray(pkg.workspaces) && pkg.workspaces.length > 0) {
+        this.workspaces = pkg.workspaces;
+      }
+    } catch {
+      // ignore
+    }
+
+    if (this.workspaces) {
       if (this.entrypoint === this.rootDir) {
         this.log.error(
           'The current directory is a monorepo. You must specify where the adapter is located using the "--entrypoint" option during setup.',
@@ -1075,9 +1087,19 @@ class DevServer {
       await this.startFileSync(adapterRunDir);
     }
 
+    // In monorepos make sure to watch all packages
+    const additionalWatchDirs = [];
+    if (this.workspaces) {
+      const directories = await fg(this.workspaces, { onlyDirectories: true, cwd: this.rootDir, absolute: true });
+      // TODO: Check if we need to account for backslashes on Windows
+      additionalWatchDirs.push(
+        ...directories.map((d) => (d.endsWith(path.sep) ? d : d + path.sep)).filter((d) => d !== this.entrypoint),
+      );
+    }
+
     if (startAdapter) {
       await this.delay(3000);
-      await this.startNodemon(adapterRunDir, pkg.main, doNotWatch);
+      await this.startNodemon(adapterRunDir, pkg.main, doNotWatch, additionalWatchDirs);
     } else {
       this.log.box(
         `You can now start the adapter manually by running\n    ` +
@@ -1160,7 +1182,12 @@ class DevServer {
     });
   }
 
-  private async startNodemon(baseDir: string, scriptName: string, doNotWatch: string[]): Promise<void> {
+  private async startNodemon(
+    baseDir: string,
+    scriptName: string,
+    doNotWatch: string[],
+    additionalWatchDirs: string[] = [],
+  ): Promise<void> {
     const script = path.resolve(baseDir, scriptName);
     this.log.notice(`Starting nodemon for ${script}`);
 
@@ -1175,6 +1202,9 @@ class DevServer {
       path.join(baseDir, 'admin'),
       // avoid recursively following symlinks
       path.join(baseDir, '.dev-server'),
+      // Do not watch some files that JS-Controller typically writes to:
+      'iobroker.js-controller/pids.txt',
+      'iobroker.js-controller/data/**',
     ];
     if (doNotWatch.length > 0) {
       doNotWatch.forEach((entry) => ignoreList.push(path.join(baseDir, entry)));
@@ -1186,7 +1216,7 @@ class DevServer {
       verbose: true,
       // dump: true, // this will output the entire config and not do anything
       colours: false,
-      watch: [baseDir],
+      watch: [baseDir, ...additionalWatchDirs],
       ignore: ignoreList,
       ignoreRoot: [],
       delay: 2000,

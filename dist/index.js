@@ -124,7 +124,7 @@ class DevServer {
             doNotWatch: {
                 type: 'string',
                 alias: 'w',
-                description: 'Do not watch the given files or directories for changes (provide paths relative to the adapter base directory.',
+                description: 'Do not watch the given files or directories for changes (provide paths relative to the adapter base directory).',
             },
         }, async (args) => await this.watch(!args.noStart, !!args.noInstall, args.doNotWatch))
             .command(['debug [profile]', 'd'], 'Run ioBroker dev-server and start the adapter from ioBroker in "debug" mode. You may attach a debugger to the running adapter.', {
@@ -259,7 +259,7 @@ class DevServer {
         }
         this.adapterName = await this.findAdapterName(argv.entrypoint);
     }
-    async isMonorepo() {
+    async checkMonorepo() {
         try {
             const pkg = await (0, fs_extra_1.readJson)(path.join(this.rootDir, 'package.json'));
             return pkg.private === true && Array.isArray(pkg.workspaces) && pkg.workspaces.length > 0;
@@ -271,7 +271,17 @@ class DevServer {
     async findAdapterName(entrypoint) {
         var _a, _b;
         this.entrypoint = path.join(this.rootDir, (_b = entrypoint !== null && entrypoint !== void 0 ? entrypoint : (_a = this.config) === null || _a === void 0 ? void 0 : _a.entrypoint) !== null && _b !== void 0 ? _b : '.');
-        if (await this.isMonorepo()) {
+        // check if we are in a monorepo
+        try {
+            const pkg = await (0, fs_extra_1.readJson)(path.join(this.rootDir, 'package.json'));
+            if (pkg.private === true && Array.isArray(pkg.workspaces) && pkg.workspaces.length > 0) {
+                this.workspaces = pkg.workspaces;
+            }
+        }
+        catch (_c) {
+            // ignore
+        }
+        if (this.workspaces) {
             if (this.entrypoint === this.rootDir) {
                 this.log.error('The current directory is a monorepo. You must specify where the adapter is located using the "--entrypoint" option during setup.');
                 return this.exit(-1);
@@ -886,9 +896,16 @@ class DevServer {
             // This is not necessary when using symlinks
             await this.startFileSync(adapterRunDir);
         }
+        // In monorepos make sure to watch all packages
+        const additionalWatchDirs = [];
+        if (this.workspaces) {
+            const directories = await (0, fast_glob_1.default)(this.workspaces, { onlyDirectories: true, cwd: this.rootDir, absolute: true });
+            // TODO: Check if we need to account for backslashes on Windows
+            additionalWatchDirs.push(...directories.map((d) => (d.endsWith(path.sep) ? d : d + path.sep)).filter((d) => d !== this.entrypoint));
+        }
         if (startAdapter) {
             await this.delay(3000);
-            await this.startNodemon(adapterRunDir, pkg.main, doNotWatch);
+            await this.startNodemon(adapterRunDir, pkg.main, doNotWatch, additionalWatchDirs);
         }
         else {
             this.log.box(`You can now start the adapter manually by running\n    ` +
@@ -972,7 +989,7 @@ class DevServer {
             });
         });
     }
-    async startNodemon(baseDir, scriptName, doNotWatch) {
+    async startNodemon(baseDir, scriptName, doNotWatch, additionalWatchDirs = []) {
         const script = path.resolve(baseDir, scriptName);
         this.log.notice(`Starting nodemon for ${script}`);
         let isExiting = false;
@@ -984,6 +1001,9 @@ class DevServer {
             path.join(baseDir, 'admin'),
             // avoid recursively following symlinks
             path.join(baseDir, '.dev-server'),
+            // Do not watch some files that JS-Controller typically writes to:
+            'iobroker.js-controller/pids.txt',
+            'iobroker.js-controller/data/**',
         ];
         if (doNotWatch.length > 0) {
             doNotWatch.forEach((entry) => ignoreList.push(path.join(baseDir, entry)));
@@ -994,7 +1014,7 @@ class DevServer {
             verbose: true,
             // dump: true, // this will output the entire config and not do anything
             colours: false,
-            watch: [baseDir],
+            watch: [baseDir, ...additionalWatchDirs],
             ignore: ignoreList,
             ignoreRoot: [],
             delay: 2000,
