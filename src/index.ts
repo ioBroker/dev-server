@@ -359,15 +359,6 @@ class DevServer {
     this.adapterName = await this.findAdapterName(argv.entrypoint);
   }
 
-  private async checkMonorepo(): Promise<boolean> {
-    try {
-      const pkg = await readJson(path.join(this.rootDir, 'package.json'));
-      return pkg.private === true && Array.isArray(pkg.workspaces) && pkg.workspaces.length > 0;
-    } catch {
-      return false;
-    }
-  }
-
   private async findAdapterName(entrypoint?: string): Promise<string> {
     this.entrypoint = path.join(this.rootDir, entrypoint ?? this.config?.entrypoint ?? '.');
 
@@ -1138,7 +1129,7 @@ class DevServer {
       const directories = await fg(this.workspaces, { onlyDirectories: true, cwd: this.rootDir, absolute: true });
       // TODO: Check if we need to account for backslashes on Windows
       additionalWatchDirs.push(
-        ...directories.map((d) => (d.endsWith(path.sep) ? d : d + path.sep)).filter((d) => d !== this.entrypoint),
+        ...directories.map((d) => d.replace(/[\\/]$/, '')).filter((d) => d !== this.entrypoint.replace(/[\\/]$/, '')),
       );
     }
 

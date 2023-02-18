@@ -278,15 +278,6 @@ class DevServer {
         }
         this.adapterName = await this.findAdapterName(argv.entrypoint);
     }
-    async checkMonorepo() {
-        try {
-            const pkg = await (0, fs_extra_1.readJson)(path.join(this.rootDir, 'package.json'));
-            return pkg.private === true && Array.isArray(pkg.workspaces) && pkg.workspaces.length > 0;
-        }
-        catch (_a) {
-            return false;
-        }
-    }
     async findAdapterName(entrypoint) {
         var _a, _b;
         this.entrypoint = path.join(this.rootDir, (_b = entrypoint !== null && entrypoint !== void 0 ? entrypoint : (_a = this.config) === null || _a === void 0 ? void 0 : _a.entrypoint) !== null && _b !== void 0 ? _b : '.');
@@ -934,7 +925,7 @@ class DevServer {
         if (this.workspaces) {
             const directories = await (0, fast_glob_1.default)(this.workspaces, { onlyDirectories: true, cwd: this.rootDir, absolute: true });
             // TODO: Check if we need to account for backslashes on Windows
-            additionalWatchDirs.push(...directories.map((d) => (d.endsWith(path.sep) ? d : d + path.sep)).filter((d) => d !== this.entrypoint));
+            additionalWatchDirs.push(...directories.map((d) => d.replace(/[\\/]$/, '')).filter((d) => d !== this.entrypoint.replace(/[\\/]$/, '')));
         }
         if (startAdapter) {
             await this.delay(3000);
