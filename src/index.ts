@@ -345,6 +345,8 @@ class DevServer {
     this.profileName = profileName;
     this.log.debug(`Using profile name "${this.profileName}"`);
     this.profileDir = path.join(this.tempDir, profileName);
+    // This will be passed to js-controller, so there is no confusion where the DB is located
+    process.env.IOBROKER_DATA_DIR = path.join(this.profileDir, 'iobroker-data');
   }
 
   private async parseConfig(argv: { entrypoint?: string }): Promise<void> {
@@ -983,6 +985,7 @@ class DevServer {
 
   private async findFiles(extension: string, excludeAdmin: boolean): Promise<string[]> {
     // TODO: Maybe we need to set cwd to this.entrypoint?
+    // We should encourage people to use symlinks instead though, so this would become unnecessary anyways.
     return await fg(this.getFilePatterns(extension, excludeAdmin), { cwd: this.rootDir });
   }
 
@@ -1316,9 +1319,9 @@ class DevServer {
       return;
     }
 
-    const debigPid = await this.waitForNodeChildProcess(parseInt(match[1]));
+    const debugPid = await this.waitForNodeChildProcess(parseInt(match[1]));
 
-    this.log.box(`Debugger is now available on process id ${debigPid}`);
+    this.log.box(`Debugger is now available on process id ${debugPid}`);
   }
 
   async setupDevServer(
@@ -1438,7 +1441,10 @@ class DevServer {
       await writeFile(path.join(this.profileDir, '.npmrc'), 'install-links=false', 'utf8');
     }
 
-    await this.verifyIgnoreFiles();
+    // Don't verify ignore files in monorepos, we're too likely to give wrong info there
+    if (!this.workspaces) {
+      await this.verifyIgnoreFiles();
+    }
 
     this.log.notice('Installing js-controller and admin...');
     this.execSync('npm install --loglevel error --production', this.profileDir);
