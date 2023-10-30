@@ -391,10 +391,14 @@ class DevServer {
     await this.checkSetup();
     this.log.notice('Updating everything...');
 
+    if (!this.config?.useSymlinks) {
+      this.log.notice('Building local adapter.');
+      await this.buildLocalAdapter();
+      await this.installLocalAdapter(false); //do not install, keep .tgz file.
+    }
     this.execSync('npm update --loglevel error', this.profileDir);
     this.uploadAdapter('admin');
 
-    await this.buildLocalAdapter();
     await this.installLocalAdapter();
     if (!this.isJSController()) this.uploadAdapter(this.adapterName);
 
@@ -1506,7 +1510,7 @@ class DevServer {
     }
   }
 
-  private async installLocalAdapter(): Promise<void> {
+  private async installLocalAdapter(doInstall = true): Promise<void> {
     this.log.notice(`Install local iobroker.${this.adapterName}`);
 
     if (this.config?.useSymlinks) {
@@ -1523,9 +1527,11 @@ class DevServer {
       const { stdout } = await this.getExecOutput('npm pack', this.rootDir);
       const filename = stdout.trim();
       this.log.info(`Packed to ${filename}`);
-      const fullPath = path.join(this.rootDir, filename);
-      this.execSync(`npm install "${fullPath}"`, this.profileDir);
-      await this.rimraf(fullPath);
+      if (doInstall) {
+        const fullPath = path.join(this.rootDir, filename);
+        this.execSync(`npm install "${fullPath}"`, this.profileDir);
+        await this.rimraf(fullPath);
+      }
     }
   }
 
