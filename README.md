@@ -142,6 +142,8 @@ The following options are available:
 
 `--backupFile <filename>` Provide an ioBroker backup file to restore in this dev-server. Use this option to populate the dev-server with data (and possibly other adapters).
 
+`--symlinks` Use symlinks instead of packing and installing the current adapter for a smoother dev experience. Requires JS-Controller 5+.
+
 ### `dev-server run`
 
 Run dev-server, the adapter will not run, but you may test the Admin UI with hot-reload.
