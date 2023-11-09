@@ -3,8 +3,7 @@
 	Placeholder for the next version (at the beginning of the line):
 	## __WORK IN PROGRESS__
 -->
-
-## __WORK IN PROGRESS__
+## 0.7.0 (2023-11-09)
 * (AlCalzone/Garfonso) symlink the local adapter instead of pack/install on each change
 * (Apollon77) Update dependencies
 
