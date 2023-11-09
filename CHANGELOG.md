@@ -3,6 +3,11 @@
 	Placeholder for the next version (at the beginning of the line):
 	## __WORK IN PROGRESS__
 -->
+
+## __WORK IN PROGRESS__
+* (AlCalzone/Garfonso) symlink the local adapter instead of pack/install on each change
+* (Apollon77) Update dependencies
+
 ## 0.6.0 (2022-10-02)
 - (Apollon77) Add option --doNotWatch for "watch" mode to ignore changes on defined files or locations
 - (Apollon77/kleinOr) Set several other system settings on "setup" call like the location, currency, language and temperature unit that they are not empty

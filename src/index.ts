@@ -35,7 +35,7 @@ import WebSocket from 'ws';
 import { injectCode } from './jsonConfig';
 import { Logger } from './logger';
 import chalk = require('chalk');
-import rimraf = require('rimraf');
+import { rimraf } from 'rimraf';
 import acorn = require('acorn');
 import EventEmitter = require('events');
 
@@ -367,7 +367,7 @@ class DevServer {
   ): Promise<void> {
     if (force) {
       this.log.notice(`Deleting ${this.profileDir}`);
-      await this.rimraf(this.profileDir);
+      await rimraf(this.profileDir);
     }
 
     if (this.isSetUp()) {
@@ -1530,7 +1530,7 @@ class DevServer {
       if (doInstall) {
         const fullPath = path.join(this.rootDir, filename);
         this.execSync(`npm install "${fullPath}"`, this.profileDir);
-        await this.rimraf(fullPath);
+        await rimraf(fullPath);
       }
     }
   }
@@ -1682,10 +1682,6 @@ class DevServer {
         reject('SIGINT');
       });
     });
-  }
-
-  private rimraf(name: string): Promise<void> {
-    return new Promise<void>((resolve, reject) => rimraf(name, (err) => (err ? reject(err) : resolve())));
   }
 
   private escapeStringRegexp(value: string): string {

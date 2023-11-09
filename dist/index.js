@@ -50,7 +50,7 @@ const ws_1 = __importDefault(require("ws"));
 const jsonConfig_1 = require("./jsonConfig");
 const logger_1 = require("./logger");
 const chalk = require("chalk");
-const rimraf = require("rimraf");
+const rimraf_1 = require("rimraf");
 const acorn = require("acorn");
 const EventEmitter = require("events");
 const DEFAULT_TEMP_DIR_NAME = '.dev-server';
@@ -284,7 +284,7 @@ class DevServer {
     async setup(adminPort, dependencies, backupFile, force, useSymlinks = false) {
         if (force) {
             this.log.notice(`Deleting ${this.profileDir}`);
-            await this.rimraf(this.profileDir);
+            await (0, rimraf_1.rimraf)(this.profileDir);
         }
         if (this.isSetUp()) {
             this.log.error(`dev-server is already set up in "${this.profileDir}".`);
@@ -1314,7 +1314,7 @@ class DevServer {
             if (doInstall) {
                 const fullPath = path.join(this.rootDir, filename);
                 this.execSync(`npm install "${fullPath}"`, this.profileDir);
-                await this.rimraf(fullPath);
+                await (0, rimraf_1.rimraf)(fullPath);
             }
         }
     }
@@ -1448,9 +1448,6 @@ class DevServer {
                 reject('SIGINT');
             });
         });
-    }
-    rimraf(name) {
-        return new Promise((resolve, reject) => rimraf(name, (err) => (err ? reject(err) : resolve())));
     }
     escapeStringRegexp(value) {
         // Escape characters with special meaning either inside or outside character sets.
