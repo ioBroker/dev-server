@@ -46,14 +46,17 @@ You need to install the `dev-server` package as well as set it up it in the adap
 * install it as a dev-dependency of your adapter (recommended)
 * install this tool as a global tool
 
-Under Linux it is sometimes useful to install this tool as global BUT best practice for developing an own adapter it is better to install it as dev-dependency
+> [!NOTE]
+> Under Linux it is sometimes useful to install this tool as global BUT best practice for developing an own adapter it is better to install it as dev-dependency
 
 2. MacOS
-* Under MacOS be careful with installation as global. This is not recommended so better to install it as dev-depency
+> [!WARNING]
+> Under MacOS be careful with installation as global. This is not recommended so better to install it as dev-depency
 
 3. Windows
 
-* Under Windows a global install is no problem.
+> [!NOTE]
+> Under Windows a global install is no problem.
 
 > [!IMPORTANT]
 > dev-server requires at least Node.js 16.
@@ -64,7 +67,8 @@ how to nstall it globally:
 npm install --global @iobroker/dev-server
 ```
 
-Some more explanation, especially when a **global installation** is problematic **because of permission** issues (e.g. on **MacOS**), you can add the dev-server to your adapter's `devDependencies` and add it e.g. as a script to your package.json.
+> [!NOTE]
+> Some more explanation, especially when a **global installation** is problematic **because of permission** issues (e.g. on **MacOS**), you can add the dev-server to your adapter's `devDependencies` and add it e.g. as a script to your package.json.
 
 ```json
 {
@@ -95,7 +99,8 @@ _Note:_ the executable can either be called with the short name `dev-server` or 
 
 By default dev-server creates a temporary directory called `.dev-server` in your adapter directory where all data is stored. This directory must be excluded from NPM and Git.
 
-Your `.gitignore` file must be extended with a single additional line:
+> [!IMPORTANT]
+> Your `.gitignore` file must be extended with a single additional line:
 
 ```text
 .dev-server/
@@ -149,7 +154,8 @@ The following options are available:
 
 Run dev-server, the adapter will not run, but you may test the Admin UI with hot-reload.
 
-If you start the adapter from Admin, be aware that it will use the code uploaded during setup (or when `dev-server upload` was called explicitly).
+> [!NOTE]
+> If you start the adapter from Admin, be aware that it will use the code uploaded during setup (or when `dev-server upload` was called explicitly).
 
 ### `dev-server watch`
 
@@ -157,11 +163,13 @@ Run dev-server and start the adapter in "watch" mode.
 
 The adapter will automatically restart when its source code changes (with a 2 seconds delay).
 
-**DO NOT** start the adapter manually in ioBroker.admin! If you see errors like ADAPTER_ALREADY_RUNNING then most likely you ignored this info :-)
+> [!IMPORTANT]
+> **DO NOT** start the adapter manually in ioBroker.admin! If you see errors like ADAPTER_ALREADY_RUNNING then most likely you ignored this info :-)
 
 You may attach a debugger to the running adapter. Keep in mind that the debugger will be detached when you change your source code, you need to manually attach again to the new process. Watch the console output for the correct process id to attach to.
 
-If you are using TypeScript, make sure you have the `watch:ts` script defined the same way it is done by [Adapter Creator](https://github.com/ioBroker/create-adapter). There is no need to run `npm run watch:ts` separately, this is automatically done by dev-server.
+> [!IMPORTANT]
+> If you are using TypeScript, make sure you have the `watch:ts` script defined the same way it is done by [Adapter Creator](https://github.com/ioBroker/create-adapter). There is no need to run `npm run watch:ts` separately, this is automatically done by dev-server.
 
 The following options are available:
 
@@ -195,7 +203,8 @@ Upload the current version of your adapter to the dev-server.
 
 This is only required if you changed something relevant in your io-package.json.
 
-You should only do this when dev-server is not running.
+> [!WARNING]
+> You should only do this when dev-server is not running.
 
 This is a shortcut for `npm pack` and `npm install <package>.tgz`.
 
@@ -352,7 +361,7 @@ Take note of the paths and set up a launch configuration like in the screenshot 
 ![Run or debug adapter](docs/images/webstorm-debug.jpg)
 
 > [!WARNING]
-If the option "symlinks" has been used during dev-server setup, you must add following "Node parameters"
+> If the option "symlinks" has been used during dev-server setup, you must add the following "Node parameters"
 
 ```
 --preserve-symlinks --preserve-symlinks-main
