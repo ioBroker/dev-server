@@ -55,7 +55,8 @@ Under Linux it is sometimes useful to install this tool as global BUT best pract
 
 * Under Windows a global install is no problem.
 
-**Note:** dev-server requires at least Node.js 14.
+> [!IMPORTANT]
+> dev-server requires at least Node.js 16.
 
 how to nstall it globally:
 
