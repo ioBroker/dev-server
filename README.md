@@ -346,8 +346,21 @@ When dev-server is ready, you will see a message like the following:
 ╰──────────────────────────────────────────────────────────────────────────╯
 ```
 
-Take note of the paths and setup a launch configuration like in the screenshot below:
+Take note of the paths and set up a launch configuration like in the screenshot below:
 
 ![Run or debug adapter](docs/images/webstorm-debug.jpg)
 
-Now you can run / debug and restart the process from Webstorm and changes will automatically be synced.
+> [!WARNING]
+If the option "symlinks" has been used during dev-server setup, you must add following "Node parameters"
+
+```
+--preserve-symlinks --preserve-symlinks-main
+```
+
+> [!NOTE]
+> If your adapter has been created with adapter creator >= 2.5.1  
+> this configuration is created automatically and stored in ".idea/workspace.xml"
+
+Now you can run / debug and restart the process from Webstorm, and changes will automatically be synced. 
+
+![Start adapter process](docs/images/webstorm-debugger-selection.png)
