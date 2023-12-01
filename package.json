@@ -33,7 +33,7 @@
     "@types/iobroker": "^4.0.5",
     "@types/node": "^20.9.0",
     "@types/nodemon": "^1.19.5",
-    "@types/ps-tree": "^1.1.5",
+    "@types/ps-tree": "^1.1.6",
     "@types/rimraf": "^4.0.5",
     "@types/semver": "^7.5.5",
     "@types/table": "^6.3.2",
