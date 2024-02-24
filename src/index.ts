@@ -15,9 +15,9 @@ import {
   existsSync,
   mkdir,
   mkdirp,
-  readdir,
   readFile,
   readJson,
+  readdir,
   rename,
   unlinkSync,
   writeFile,
@@ -29,13 +29,13 @@ import nodemon from 'nodemon';
 import { EOL, hostname } from 'os';
 import * as path from 'path';
 import psTree from 'ps-tree';
+import { rimraf } from 'rimraf';
 import { gt } from 'semver';
 import { RawSourceMap, SourceMapGenerator } from 'source-map';
 import WebSocket from 'ws';
 import { injectCode } from './jsonConfig';
 import { Logger } from './logger';
 import chalk = require('chalk');
-import { rimraf } from 'rimraf';
 import acorn = require('acorn');
 import EventEmitter = require('events');
 
@@ -356,6 +356,17 @@ class DevServer {
     return port;
   }
 
+  private getJsonConfigPath(): string {
+    const jsonConfigPath = path.resolve(this.rootDir, 'admin/jsonConfig.json');
+    if (existsSync(jsonConfigPath)) {
+      return jsonConfigPath;
+    } else if (existsSync(jsonConfigPath + '5')) {
+      return jsonConfigPath + '5';
+    } else {
+      return '';
+    }
+  }
+
   ////////////////// Command Handlers //////////////////
 
   async setup(
@@ -644,7 +655,7 @@ class DevServer {
           ws: true,
         }),
       );
-    } else if (existsSync(path.resolve(this.rootDir, 'admin/jsonConfig.json'))) {
+    } else if (this.getJsonConfigPath()) {
       // JSON config
       await this.createJsonConfigProxy(app, this.config);
     } else {
@@ -716,17 +727,17 @@ class DevServer {
     const browserSyncPort = this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET);
     const bs = this.startBrowserSync(browserSyncPort, false);
 
-    // whenever jsonConfig.json changes, we upload the new file
-    const jsonConfig = path.resolve(this.rootDir, 'admin/jsonConfig.json');
-    bs.watch(jsonConfig, undefined, async (e) => {
+    // whenever jsonConfig.json[5] changes, we upload the new file
+    const jsonConfigFile = this.getJsonConfigPath();
+    bs.watch(jsonConfigFile, undefined, async (e) => {
       if (e === 'change') {
-        const content = await readFile(jsonConfig);
+        const content = await readFile(jsonConfigFile);
         this.websocket?.send(
           JSON.stringify([
             3,
             46,
             'writeFile',
-            [`${this.adapterName}.admin`, 'jsonConfig.json', Buffer.from(content).toString('base64')],
+            [`${this.adapterName}.admin`, path.basename(jsonConfigFile), Buffer.from(content).toString('base64')],
           ]),
         );
       }
@@ -736,7 +747,7 @@ class DevServer {
     const adminUrl = `http://127.0.0.1:${this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET)}`;
     app.get('/', async (_req, res) => {
       const { data } = await axios.get<string>(adminUrl);
-      res.send(injectCode(data, this.adapterName));
+      res.send(injectCode(data, this.adapterName, path.basename(jsonConfigFile)));
     });
 
     // browser-sync proxy

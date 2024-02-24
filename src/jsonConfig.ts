@@ -1,4 +1,4 @@
-export function injectCode(html: string, adapterName: string): string {
+export function injectCode(html: string, adapterName: string, jsonConfigFileName: string): string {
   return html.replace(
     '</head>',
     `
@@ -31,7 +31,7 @@ socket.on("browser:reload", async () => {
 
 async function readJsonConfig() {
   return new Promise((resolve, reject) => {
-    window.io.emit("readFile", "${adapterName}.admin", "jsonConfig.json", (err, data, type) => {
+    window.io.emit("readFile", "${adapterName}.admin", "${jsonConfigFileName}", (err, data, type) => {
       if (err) reject(err);
       else resolve(data);
     });
