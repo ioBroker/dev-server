@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.injectCode = void 0;
-function injectCode(html, adapterName) {
+function injectCode(html, adapterName, jsonConfigFileName) {
     return html.replace('</head>', `
 <script type="module">
 import { io } from "https://cdn.socket.io/4.4.1/socket.io.esm.min.js";
@@ -32,7 +32,7 @@ socket.on("browser:reload", async () => {
 
 async function readJsonConfig() {
   return new Promise((resolve, reject) => {
-    window.io.emit("readFile", "${adapterName}.admin", "jsonConfig.json", (err, data, type) => {
+    window.io.emit("readFile", "${adapterName}.admin", "${jsonConfigFileName}", (err, data, type) => {
       if (err) reject(err);
       else resolve(data);
     });
