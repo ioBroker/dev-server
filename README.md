@@ -17,8 +17,7 @@ dev-server watch
 (a local installation as dev-dependency is also possible)
 
 **Note for windows users:**  
-If dev-server command is not found, check that the npm directory (typically ;C:\Users\%username%\AppData\Roaming\npm) is included into the PATH
- variable
+If dev-server command is not found, check that the npm directory (typically ;C:\Users\%username%\AppData\Roaming\npm) is included into the PATH variable
 
 ## Features
 
