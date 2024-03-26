@@ -3,6 +3,9 @@
 	Placeholder for the next version (at the beginning of the line):
 	## __WORK IN PROGRESS__
 -->
+## __WORK IN PROGRESS__
+* (stevenengland) Add support for jsonconfig json5 files hot reload
+
 ## 0.7.1 (2023-11-09)
 * (Apollon77) downgrade boxen again to fix problems with it
 

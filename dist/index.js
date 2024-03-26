@@ -987,7 +987,7 @@ class DevServer {
             ignoreRoot: [],
             delay: 2000,
             execMap: { js: 'node --inspect --preserve-symlinks --preserve-symlinks-main' },
-            signal: 'SIGINT',
+            signal: 'SIGINT', // wrong type definition: signal is of type "string?"
             args,
         });
         nodemon_1.default
