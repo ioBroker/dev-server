@@ -3,6 +3,9 @@
 	Placeholder for the next version (at the beginning of the line):
 	## __WORK IN PROGRESS__
 -->
+## __WORK IN PROGRESS__
+* (foxriver76) set `activeRepo` as an array as it is intended
+
 ## 0.7.2 (2024-03-26)
 * (stevenengland) Add support for jsonconfig json5 files hot reload
 
