@@ -7,7 +7,7 @@ ioBroker dev-server is a simple command line tool running on Windows, Linux and 
 
 **Note:** dev-server requires at least Node.js 14.
 
-## TL;DR
+## Installation
 
 ```bash
 npm install --global @iobroker/dev-server
