@@ -7,6 +7,9 @@ ioBroker dev-server is a simple command line tool running on Windows, Linux and 
 
 **Note:** dev-server requires at least Node.js 14.
 
+Instead of manually editing the package.json file, users should simply run ```npm install``` to automatically install the dependencies listed in the package.json
+running this command saves time and reduces errors compared to adding dependencies manually.
+
 ## Installation
 
 ```bash
@@ -18,6 +21,7 @@ dev-server watch
 
 **Note for windows users:**  
 If dev-server command is not found, check that the npm directory (typically ;C:\Users\%username%\AppData\Roaming\npm) is included into the PATH variable
+Users should run ```npm run dev-server``` rather than just ```dev-server```, as the latter may not work directly on Linux systems without additional setup (such as adding it to the PATH).
 
 ## Features
 
