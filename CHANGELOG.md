@@ -1,13 +1,16 @@
 # Changelog
 <!--
 	Placeholder for the next version (at the beginning of the line):
-	## __WORK IN PROGRESS__
+	## **WORK IN PROGRESS**
 -->
+## **WORK IN PROGRESS**
+* (@GermanBluefox) Packages were updated
+
 ## 0.7.3 (2024-05-02)
 * (foxriver76) set `activeRepo` as an array as it is intended
 
 ## 0.7.2 (2024-03-26)
-* (stevenengland) Add support for jsonconfig json5 files hot reload
+* (stevenengland) Add support for jsonConfig json5 files hot reload
 
 ## 0.7.1 (2023-11-09)
 * (Apollon77) downgrade boxen again to fix problems with it
