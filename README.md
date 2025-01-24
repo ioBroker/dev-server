@@ -5,7 +5,8 @@
 
 ioBroker dev-server is a simple command line tool running on Windows, Linux and macOS that allows you to quickly develop and test ioBroker adapters and their admin interface.
 
-**Note:** dev-server requires at least Node.js 14.
+> [!NOTE]
+> dev-server requires at least Node.js 14.
 
 ## Installation
 
@@ -16,8 +17,8 @@ dev-server watch
 ```
 (a local installation as dev-dependency is also possible)
 
-**Note for Windows users:**  
-If dev-server command is not found, check that the npm directory (typically `C:\Users\%username%\AppData\Roaming\npm`) is included in the `PATH` variable.
+> [!TIP]
+> If the `dev-server` command is not found **under Windows**, check that the npm directory (typically `C:\Users\%username%\AppData\Roaming\npm`) is included in the `PATH` variable.
 
 ## Features
 
@@ -45,26 +46,29 @@ You need to install the `dev-server` package as well as set it up it in the adap
 *Before installing, please check the following what is the best way or recommended:*
 
 
-1. Linux
+#### Linux
 * install it as a dev-dependency of your adapter (recommended)
 * install this tool as a global tool
 
 Under Linux, it is sometimes useful to install this tool as global, BUT best practice for developing an own adapter it is better to install it as dev-dependency
 
-2. MacOS
+#### MacOS
 * Under macOS, be careful with installation as global. This is not recommended so better to install it as a dev-dependency
 
-3. Windows
+#### Windows
 
 * Under Windows, a global installation is no problem.
 
-**Note:** dev-server requires at least Node.js 14.
+> [!NOTE]
+> dev-server requires at least Node.js 14.
 
 How to install it globally:
 
 ```bash
 npm install --global @iobroker/dev-server
 ```
+
+#### Installation as a development dependency
 
 Some more explanation, especially when a **global installation** is problematic **because of permission** issues (e.g., on **macOS**), you can add the dev-server to your adapter's `devDependencies` and add it e.g., as a script to your package.json.
 
@@ -91,7 +95,8 @@ dev-server setup
 
 For additional command line arguments, see below.
 
-_Note:_ the executable can either be called with the short name `dev-server` or its full name `iobroker-dev-server`. We will use the first way in this document.
+> [!NOTE]
+> The executable can either be called with the short name `dev-server` or its full name `iobroker-dev-server`. We will use the first way in this document.
 
 ### Exclude temporary folder
 
@@ -159,7 +164,8 @@ Run dev-server and start the adapter in "watch" mode.
 
 The adapter will automatically restart when its source code changes (with a 2-seconds delay).
 
-**DO NOT** start the adapter manually in `ioBroker.admin`! If you see errors like `ADAPTER_ALREADY_RUNNING` then most likely you ignored this info :-)
+> [!IMPORTANT] 
+> **DO NOT** start the adapter manually in `ioBroker.admin`! If you see errors like `ADAPTER_ALREADY_RUNNING` then most likely you ignored this info :-)
 
 You may attach a debugger to the running adapter. Keep in mind that the debugger will be detached when you change your source code, you need to manually attach again to the new process. Watch the console output for the correct process id to attach to.
 
