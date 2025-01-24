@@ -1,71 +1,71 @@
 {
-    "name": "@iobroker/dev-server",
-    "version": "0.7.3",
-    "description": "Single package development server for ioBroker",
-    "main": "dist/index.js",
-    "bin": {
-        "dev-server": "dist/index.js",
-        "iobroker-dev-server": "dist/index.js"
-    },
-    "files": [
-        "dist/*.js",
-        "LICENSE"
-    ],
-    "engines": {
-        "node": ">=16.0.0"
-    },
-    "scripts": {
-        "test": "echo \"Error: no test specified\" && exit 1",
-        "prebuild": "rimraf ./dist",
-        "build": "tsc -p tsconfig.build.json",
-        "watch": "tsc -p tsconfig.build.json --watch",
-        "check": "tsc --noEmit",
-        "lint": "eslint -c eslint.config.mjs",
-        "release": "release-script",
-        "npm": "npm i -f",
-        "update-packages": "npx -y npm-check-updates --upgrade"
-    },
-    "author": "UncleSamSwiss",
-    "license": "MIT",
-    "devDependencies": {
-        "@alcalzone/release-script": "^3.8.0",
-        "@alcalzone/release-script-plugin-license": "^3.7.0",
-        "@iobroker/eslint-config": "^1.0.0",
-        "@iobroker/types": "^7.0.6",
-        "@types/browser-sync": "^2.29.0",
-        "@types/express": "^4.17.21",
-        "@types/fs-extra": "^11.0.4",
-        "@types/node": "^22.10.7",
-        "@types/ps-tree": "^1.1.6",
-        "@types/semver": "^7.5.8",
-        "@types/table": "^6.3.2",
-        "@types/ws": "^8.5.13",
-        "@types/yargs": "^17.0.33",
-        "source-map-support": "^0.5.21",
-        "ts-node": "^10.9.2",
-        "typescript": "^5.7.3"
-    },
-    "dependencies": {
-        "@iobroker/testing": "^5.0.2",
-        "acorn": "^8.14.0",
-        "axios": "^1.7.9",
-        "boxen": "^8.0.1",
-        "browser-sync": "^3.0.3",
-        "bs-html-injector": "^3.0.3",
-        "chalk": "^5.4.1",
-        "chokidar": "^4.0.3",
-        "enquirer": "^2.4.1",
-        "express": "^4.21.2",
-        "fast-glob": "^3.3.3",
-        "fs-extra": "^11.3.0",
-        "http-proxy-middleware": "^3.0.3",
-        "nodemon": "^3.1.9",
-        "ps-tree": "^1.2.0",
-        "rimraf": "^6.0.1",
-        "semver": "^7.6.3",
-        "source-map": "^0.7.4",
-        "table": "^6.9.0",
-        "ws": "^8.18.0",
-        "yargs": "^17.7.2"
-    }
+  "name": "@iobroker/dev-server",
+  "version": "0.7.4",
+  "description": "Single package development server for ioBroker",
+  "main": "dist/index.js",
+  "bin": {
+    "dev-server": "dist/index.js",
+    "iobroker-dev-server": "dist/index.js"
+  },
+  "files": [
+    "dist/*.js",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prebuild": "rimraf ./dist",
+    "build": "tsc -p tsconfig.build.json",
+    "watch": "tsc -p tsconfig.build.json --watch",
+    "check": "tsc --noEmit",
+    "lint": "eslint -c eslint.config.mjs",
+    "release": "release-script",
+    "npm": "npm i -f",
+    "update-packages": "npx -y npm-check-updates --upgrade"
+  },
+  "author": "UncleSamSwiss",
+  "license": "MIT",
+  "devDependencies": {
+    "@alcalzone/release-script": "^3.8.0",
+    "@alcalzone/release-script-plugin-license": "^3.7.0",
+    "@iobroker/eslint-config": "^1.0.0",
+    "@iobroker/types": "^7.0.6",
+    "@types/browser-sync": "^2.29.0",
+    "@types/express": "^4.17.21",
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^22.10.7",
+    "@types/ps-tree": "^1.1.6",
+    "@types/semver": "^7.5.8",
+    "@types/table": "^6.3.2",
+    "@types/ws": "^8.5.13",
+    "@types/yargs": "^17.0.33",
+    "source-map-support": "^0.5.21",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
+  },
+  "dependencies": {
+    "@iobroker/testing": "^5.0.2",
+    "acorn": "^8.14.0",
+    "axios": "^1.7.9",
+    "boxen": "^8.0.1",
+    "browser-sync": "^3.0.3",
+    "bs-html-injector": "^3.0.3",
+    "chalk": "^5.4.1",
+    "chokidar": "^4.0.3",
+    "enquirer": "^2.4.1",
+    "express": "^4.21.2",
+    "fast-glob": "^3.3.3",
+    "fs-extra": "^11.3.0",
+    "http-proxy-middleware": "^3.0.3",
+    "nodemon": "^3.1.9",
+    "ps-tree": "^1.2.0",
+    "rimraf": "^6.0.1",
+    "semver": "^7.6.3",
+    "source-map": "^0.7.4",
+    "table": "^6.9.0",
+    "ws": "^8.18.0",
+    "yargs": "^17.7.2"
+  }
 }
