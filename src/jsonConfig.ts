@@ -1,7 +1,7 @@
 export function injectCode(html: string, adapterName: string, jsonConfigFileName: string): string {
-  return html.replace(
-    '</head>',
-    `
+    return html.replace(
+        '</head>',
+        `
 <script type="module">
 import { io } from "https://cdn.socket.io/4.4.1/socket.io.esm.min.js";
 
@@ -44,5 +44,5 @@ setTimeout(async () => {
 }, 1000);
 </script>
 </head>`,
-  );
+    );
 }

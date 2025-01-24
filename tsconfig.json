@@ -35,6 +35,7 @@
 
     // Consider targetting es2019 or higher if you only support Node.js 12+
     "target": "es2018",
+    "types": ["@iobroker/types"],
 
     "sourceMap": false,
     "inlineSourceMap": false,

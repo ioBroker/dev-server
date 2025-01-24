@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.injectCode = void 0;
+exports.injectCode = injectCode;
 function injectCode(html, adapterName, jsonConfigFileName) {
     return html.replace('</head>', `
 <script type="module">
@@ -46,4 +46,3 @@ setTimeout(async () => {
 </script>
 </head>`);
 }
-exports.injectCode = injectCode;

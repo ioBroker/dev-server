@@ -3,9 +3,10 @@
 [![NPM version](https://img.shields.io/npm/v/@iobroker/dev-server.svg)](https://www.npmjs.com/package/@iobroker/dev-server)
 [![Downloads](https://img.shields.io/npm/dm/@iobroker/dev-server.svg)](https://www.npmjs.com/package/@iobroker/dev-server)
 
-ioBroker dev-server is a simple command line tool running on Windows, Linux and MacOS that allows you to quickly develop and test ioBroker adapters and their admin interface.
+ioBroker dev-server is a simple command line tool running on Windows, Linux and macOS that allows you to quickly develop and test ioBroker adapters and their admin interface.
 
-**Note:** dev-server requires at least Node.js 14.
+> [!NOTE]
+> dev-server requires at least Node.js 14.
 
 ## Installation
 
@@ -16,12 +17,12 @@ dev-server watch
 ```
 (a local installation as dev-dependency is also possible)
 
-**Note for windows users:**  
-If dev-server command is not found, check that the npm directory (typically ;C:\Users\%username%\AppData\Roaming\npm) is included into the PATH variable
+> [!TIP]
+> If the `dev-server` command is not found **under Windows**, check that the npm directory (typically `C:\Users\%username%\AppData\Roaming\npm`) is included in the `PATH` variable.
 
 ## Features
 
-- Runs on all operating systems supported by NodeJS and ioBroker
+- Runs on all operating systems supported by Node.js and ioBroker
 - Support for HTML and React UI
 - Support for JavaScript and TypeScript adapters
 - Hot reload of Admin UI upon any changes to HTML and JavaScript files.
@@ -42,31 +43,34 @@ It is possible to run `dev-server` in the root directory of your local copy of [
 You need to install the `dev-server` package as well as set it up it in the adapter directory.
 
 ### Install package
-*Before installing please check the following what is the best way or recommended:*
+*Before installing, please check the following what is the best way or recommended:*
 
 
-1. Linux
+#### Linux
 * install it as a dev-dependency of your adapter (recommended)
 * install this tool as a global tool
 
-Under Linux it is sometimes useful to install this tool as global BUT best practice for developing an own adapter it is better to install it as dev-dependency
+Under Linux, it is sometimes useful to install this tool as global, BUT best practice for developing an own adapter it is better to install it as dev-dependency
 
-2. MacOS
-* Under MacOS be careful with installation as global. This is not recommended so better to install it as dev-depency
+#### MacOS
+* Under macOS, be careful with installation as global. This is not recommended so better to install it as a dev-dependency
 
-3. Windows
+#### Windows
 
-* Under Windows a global install is no problem.
+* Under Windows, a global installation is no problem.
 
-**Note:** dev-server requires at least Node.js 14.
+> [!NOTE]
+> dev-server requires at least Node.js 14.
 
-how to nstall it globally:
+How to install it globally:
 
 ```bash
 npm install --global @iobroker/dev-server
 ```
 
-Some more explanation, especially when a **global installation** is problematic **because of permission** issues (e.g. on **MacOS**), you can add the dev-server to your adapter's `devDependencies` and add it e.g. as a script to your package.json.
+#### Installation as a development dependency
+
+Some more explanation, especially when a **global installation** is problematic **because of permission** issues (e.g., on **macOS**), you can add the dev-server to your adapter's `devDependencies` and add it e.g., as a script to your package.json.
 
 ```json
 {
@@ -89,13 +93,14 @@ To set up and configure a local dev-server in your adapter directory, change to 
 dev-server setup
 ```
 
-For additional command line arguments, see blow.
+For additional command line arguments, see below.
 
-_Note:_ the executable can either be called with the short name `dev-server` or its full name `iobroker-dev-server`. We will use the first way in this document.
+> [!NOTE]
+> The executable can either be called with the short name `dev-server` or its full name `iobroker-dev-server`. We will use the first way in this document.
 
 ### Exclude temporary folder
 
-By default dev-server creates a temporary directory called `.dev-server` in your adapter directory where all data is stored. This directory must be excluded from NPM and Git.
+By default, dev-server creates a temporary directory called `.dev-server` in your adapter directory where all data is stored. This directory must be excluded from NPM and Git.
 
 Your `.gitignore` file must be extended with a single additional line:
 
@@ -121,7 +126,7 @@ The following global options are available for all commands:
 
 ### Profiles
 
-All commands (except of course `dev-server profile`) support the `[profile]` command line argument. It allows the user to use choose between different profiles.
+All commands (except of course `dev-server profile`) support the `[profile]` command line argument. It allows the user to choose between different profiles.
 
 Each profile is a completely independent instance of ioBroker and can run in parallel with other profiles of the same adapter (if different ports are configured).
 
@@ -137,7 +142,7 @@ Set up dev-server in the current directory. This should always be called in the 
 
 The following options are available:
 
-`--adminPort <number>` TCP port on which ioBroker.admin will be available (default: 8081). This port number is also used to generate all other port numbers required to run dev-server. This allows multiple instances of dev-server to run in parallel. It is suggested to use ports in the range of 8000-9999. If you experience connection problems, try a different port.
+`--adminPort <number>` TCP port on which `ioBroker.admin` will be available (default: 8081). This port number is also used to generate all other port numbers required to run dev-server. This allows multiple instances of dev-server to run in parallel. It is suggested to use ports in the range of 8000-9999. If you experience connection problems, try a different port.
 
 `--jsController <version>` Define which version of js-controller to be used (default: "latest").
 
@@ -157,9 +162,10 @@ If you start the adapter from Admin, be aware that it will use the code uploaded
 
 Run dev-server and start the adapter in "watch" mode.
 
-The adapter will automatically restart when its source code changes (with a 2 seconds delay).
+The adapter will automatically restart when its source code changes (with a 2-seconds delay).
 
-**DO NOT** start the adapter manually in ioBroker.admin! If you see errors like ADAPTER_ALREADY_RUNNING then most likely you ignored this info :-)
+> [!IMPORTANT] 
+> **DO NOT** start the adapter manually in `ioBroker.admin`! If you see errors like `ADAPTER_ALREADY_RUNNING` then most likely you ignored this info :-)
 
 You may attach a debugger to the running adapter. Keep in mind that the debugger will be detached when you change your source code, you need to manually attach again to the new process. Watch the console output for the correct process id to attach to.
 
@@ -211,7 +217,7 @@ Lists all available profiles with their meta-data.
 
 ## IDEs
 
-You can of course use dev-server together with you preferred IDE.
+You can, of course, use dev-server together with your preferred IDE.
 
 The following chapters all assume you have dev-server installed and set up correctly (see above).
 
@@ -239,7 +245,7 @@ When the adapter is ready, you will see a message like the following:
 
 You can now attach the Visual Studio Code debugger to the given process ID:
 
-- Open the Command Pallette (Ctrl-Shift-P)
+- Open the Command Palette (Ctrl-Shift-P)
 - Choose "Debug: Attach to Node Process (legacy)"
 - Select the right process, it usually looks like follows:
 
@@ -248,7 +254,7 @@ node  --inspect <path to your dev-server directory>/node_modules/...
 process id: 1234, debug port: 9229
 ```
 
-Now you can set breakpoints (or they are hit, if you set them before) and inspect your adapter while running.
+Now you can set breakpoints (or they are hit if you set them before) and inspect your adapter while running.
 
 #### Launch adapter independently
 
@@ -292,11 +298,11 @@ Take note of the two paths and create (or extend) a file called `.vscode/launch.
 
 You may now launch this configuration with "Start Debugging" (F5).
 
-### Webstorm
+### WebStorm
 
-Depending on your preferences, you can either start the adapter with dev-server and then attach your debugger or you can start dev-server and then launch the adapter from Webstorm. Both setups are explained below.
+Depending on your preferences, you can either start the adapter with dev-server and then attach your debugger, or you can start dev-server and then launch the adapter from WebStorm. Both setups are explained below.
 
-In order to improve performance of Webstorm, I recommend to exclude the .dev-server directory from the context menu (see screenshot). This will prevent Webstorm from indexing the directory, which could take some time.
+In order to improve the performance of WebStorm, I recommend excluding the `.dev-server` directory from the context menu (see screenshot). This will prevent WebStorm from indexing the directory, which could take some time.
 
 ![Exclude .dev-server directory](docs/images/webstorm-exclude-dir.jpg)
 
@@ -306,13 +312,13 @@ Now cancel the exclusion for the adapter directory in .dev-server\default\node_m
 
 #### Attach to dev-server
 
-If you want dev-server to take care of the adapter by building (if needed), uploading, running and relaunching upon changes, start it from the built-in Terminal in Webstorm:
+If you want dev-server to take care of the adapter by building (if needed), uploading, running and relaunching upon changes, start it from the built-in Terminal in WebStorm:
 
 ```bash
 dev-server watch
 ```
 
-Setup a launch configuration to attach to the process like this:
+Set up a launch configuration to attach to the process like this:
 
 ![Attach to running process](docs/images/webstorm-attach.jpg)
 
@@ -326,7 +332,7 @@ When the adapter is ready, you will see a message like the following:
 ╰──────────────────────────────────────────────────╯
 ```
 
-You can now start the attach configuration and use the debugger console as usual.
+You can now start the `attach` configuration and use the debugger console as usual.
 
 #### Launch adapter independently
 
@@ -349,8 +355,8 @@ When dev-server is ready, you will see a message like the following:
 ╰──────────────────────────────────────────────────────────────────────────╯
 ```
 
-Take note of the paths and setup a launch configuration like in the screenshot below:
+Take note of the paths and set up a launch configuration like in the screenshot below:
 
 ![Run or debug adapter](docs/images/webstorm-debug.jpg)
 
-Now you can run / debug and restart the process from Webstorm and changes will automatically be synced.
+Now you can run / debug and restart the process from WebStorm, and changes will automatically be synced.
