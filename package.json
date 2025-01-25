@@ -49,7 +49,7 @@
     "@iobroker/testing": "^5.0.3",
     "acorn": "^8.14.0",
     "axios": "^1.7.9",
-    "boxen": "^8.0.1",
+    "boxen": "^5.1.2",
     "browser-sync": "^3.0.3",
     "bs-html-injector": "^3.0.3",
     "chalk": "^4.1.2",

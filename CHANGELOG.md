@@ -3,7 +3,7 @@
 	Placeholder for the next version (at the beginning of the line):
 	## **WORK IN PROGRESS**
 -->
-## 0.7.5 (2025-01-24)
+## **WORK IN PROGRESS**
 * (@GermanBluefox) Packages were updated
 
 ## 0.7.3 (2024-05-02)
