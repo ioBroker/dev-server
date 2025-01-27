@@ -1249,7 +1249,7 @@ class DevServer {
         if (!this.isJSController()) {
             this.socketEvents.on('objectChange', (args: any) => {
                 if (Array.isArray(args) && args.length > 1 && args[0] === `system.adapter.${this.adapterName}.0`) {
-                    this.log.notice(`Adapter configuration changed, restarting nodemon...`);
+                    this.log.notice('Adapter configuration changed, restarting nodemon...');
                     nodemon.restart();
                 }
             });
@@ -1264,9 +1264,9 @@ class DevServer {
             return;
         }
 
-        const debigPid = await this.waitForNodeChildProcess(parseInt(match[1]));
+        const debugPid = await this.waitForNodeChildProcess(parseInt(match[1]));
 
-        this.log.box(`Debugger is now available on process id ${debigPid}`);
+        this.log.box(`Debugger is now available on process id ${debugPid}`);
     }
 
     async setupDevServer(

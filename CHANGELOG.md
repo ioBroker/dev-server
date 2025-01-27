@@ -3,6 +3,9 @@
 	Placeholder for the next version (at the beginning of the line):
 	## **WORK IN PROGRESS**
 -->
+## **WORK IN PROGRESS**
+* (@GermanBluefox) nodemon reverted to 3.1.0
+
 ## 0.7.6 (2025-01-25)
 * (@GermanBluefox) Packages were updated
 
