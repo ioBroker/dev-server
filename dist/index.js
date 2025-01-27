@@ -1064,7 +1064,7 @@ class DevServer {
         if (!this.isJSController()) {
             this.socketEvents.on('objectChange', (args) => {
                 if (Array.isArray(args) && args.length > 1 && args[0] === `system.adapter.${this.adapterName}.0`) {
-                    this.log.notice(`Adapter configuration changed, restarting nodemon...`);
+                    this.log.notice('Adapter configuration changed, restarting nodemon...');
                     nodemon_1.default.restart();
                 }
             });
@@ -1076,8 +1076,8 @@ class DevServer {
         if (!match) {
             return;
         }
-        const debigPid = await this.waitForNodeChildProcess(parseInt(match[1]));
-        this.log.box(`Debugger is now available on process id ${debigPid}`);
+        const debugPid = await this.waitForNodeChildProcess(parseInt(match[1]));
+        this.log.box(`Debugger is now available on process id ${debugPid}`);
     }
     async setupDevServer(adminPort, dependencies, backupFile, useSymlinks) {
         await this.buildLocalAdapter();
