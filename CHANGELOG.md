@@ -3,9 +3,10 @@
 	Placeholder for the next version (at the beginning of the line):
 	## **WORK IN PROGRESS**
 -->
-## **WORK IN PROGRESS**
+## 0.7.8 (2025-01-29)
 * (@GermanBluefox) chokidar reverted to 3.6.0
-* 
+*
+
 ## 0.7.7 (2025-01-27)
 * (@GermanBluefox) nodemon reverted to 3.1.0
 
