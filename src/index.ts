@@ -133,8 +133,14 @@ class DevServer {
             .command(
                 ['run [profile]', 'r'],
                 'Run ioBroker dev-server, the adapter will not run, but you may test the Admin UI with hot-reload',
-                {},
-                async () => await this.run(),
+                {
+                    noBrowserSync: {
+                        type: 'boolean',
+                        alias: 'b',
+                        description: 'Do not use BrowserSync for hot-reload (serve static files instead)',
+                    },
+                },
+                async args => await this.run(!!args.noBrowserSync),
             )
             .command(
                 ['watch [profile]', 'w'],
@@ -156,8 +162,13 @@ class DevServer {
                         description:
                             'Do not watch the given files or directories for changes (provide paths relative to the adapter base directory.',
                     },
+                    noBrowserSync: {
+                        type: 'boolean',
+                        alias: 'b',
+                        description: 'Do not use BrowserSync for hot-reload (serve static files instead)',
+                    },
                 },
-                async args => await this.watch(!args.noStart, !!args.noInstall, args.doNotWatch),
+                async args => await this.watch(!args.noStart, !!args.noInstall, args.doNotWatch, !!args.noBrowserSync),
             )
             .command(
                 ['debug [profile]', 'd'],
@@ -419,13 +430,18 @@ class DevServer {
         this.log.box(`dev-server was sucessfully updated.`);
     }
 
-    async run(): Promise<void> {
+    async run(noBrowserSync = false): Promise<void> {
         await this.checkSetup();
         await this.startJsController();
-        await this.startServer();
+        await this.startServer(noBrowserSync);
     }
 
-    async watch(startAdapter: boolean, noInstall: boolean, doNotWatch: string | string[] | undefined): Promise<void> {
+    async watch(
+        startAdapter: boolean,
+        noInstall: boolean,
+        doNotWatch: string | string[] | undefined,
+        noBrowserSync = false,
+    ): Promise<void> {
         let doNotWatchArr: string[] = [];
         if (typeof doNotWatch === 'string') {
             doNotWatchArr.push(doNotWatch);
@@ -441,10 +457,10 @@ class DevServer {
         if (this.isJSController()) {
             // this watches actually js-controller
             await this.startAdapterWatch(startAdapter, doNotWatchArr);
-            await this.startServer();
+            await this.startServer(noBrowserSync);
         } else {
             await this.startJsController();
-            await this.startServer();
+            await this.startServer(noBrowserSync);
             await this.startAdapterWatch(startAdapter, doNotWatchArr);
         }
     }
@@ -646,7 +662,7 @@ class DevServer {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    async startServer(): Promise<void> {
+    async startServer(noBrowserSync = false): Promise<void> {
         this.log.notice(`Running inside ${this.profileDir}`);
 
         if (!this.config) {
@@ -668,10 +684,10 @@ class DevServer {
             );
         } else if (this.getJsonConfigPath()) {
             // JSON config
-            await this.createJsonConfigProxy(app, this.config);
+            await this.createJsonConfigProxy(app, this.config, noBrowserSync);
         } else {
             // HTML or React config
-            await this.createHtmlConfigProxy(app, this.config);
+            await this.createHtmlConfigProxy(app, this.config, noBrowserSync);
         }
 
         // start express
@@ -739,58 +755,75 @@ class DevServer {
         this.log.box(`Admin is now reachable under http://127.0.0.1:${this.config.adminPort}/`);
     }
 
-    private createJsonConfigProxy(app: Application, config: DevServerConfig): Promise<void> {
-        const browserSyncPort = this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET);
-        const bs = this.startBrowserSync(browserSyncPort, false);
-
-        // whenever jsonConfig.json[5] changes, we upload the new file
+    private createJsonConfigProxy(app: Application, config: DevServerConfig, noBrowserSync = false): Promise<void> {
         const jsonConfigFile = this.getJsonConfigPath();
-        bs.watch(jsonConfigFile, undefined, async e => {
-            if (e === 'change') {
-                const content = await readFile(jsonConfigFile);
-                this.websocket?.send(
-                    JSON.stringify([
-                        3,
-                        46,
-                        'writeFile',
-                        [
-                            `${this.adapterName}.admin`,
-                            path.basename(jsonConfigFile),
-                            Buffer.from(content).toString('base64'),
-                        ],
-                    ]),
-                );
-            }
-        });
-
-        // "proxy" for the main page which injects our script
         const adminUrl = `http://127.0.0.1:${this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET)}`;
-        app.get('/', async (_req, res) => {
-            const { data } = await axios.get<string>(adminUrl);
-            res.send(injectCode(data, this.adapterName, path.basename(jsonConfigFile)));
-        });
 
-        // browser-sync proxy
-        app.use(
-            createProxyMiddleware(['/browser-sync/**'], {
-                target: `http://127.0.0.1:${browserSyncPort}`,
-                // ws: true, // can't have two web-socket connections proxying to different locations
-            }),
-        );
+        if (!noBrowserSync) {
+            // Use BrowserSync for hot-reload functionality
+            const browserSyncPort = this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET);
+            const bs = this.startBrowserSync(browserSyncPort, false);
 
-        // admin proxy
-        app.use(
-            createProxyMiddleware({
-                target: adminUrl,
-                ws: true,
-            }),
-        );
+            // whenever jsonConfig.json[5] changes, we upload the new file
+            bs.watch(jsonConfigFile, undefined, async e => {
+                if (e === 'change') {
+                    const content = await readFile(jsonConfigFile);
+                    this.websocket?.send(
+                        JSON.stringify([
+                            3,
+                            46,
+                            'writeFile',
+                            [
+                                `${this.adapterName}.admin`,
+                                path.basename(jsonConfigFile),
+                                Buffer.from(content).toString('base64'),
+                            ],
+                        ]),
+                    );
+                }
+            });
+
+            // "proxy" for the main page which injects our script
+            app.get('/', async (_req, res) => {
+                const { data } = await axios.get<string>(adminUrl);
+                res.send(injectCode(data, this.adapterName, path.basename(jsonConfigFile)));
+            });
+
+            // browser-sync proxy
+            app.use(
+                createProxyMiddleware(['/browser-sync/**'], {
+                    target: `http://127.0.0.1:${browserSyncPort}`,
+                    // ws: true, // can't have two web-socket connections proxying to different locations
+                }),
+            );
+
+            // admin proxy
+            app.use(
+                createProxyMiddleware({
+                    target: adminUrl,
+                    ws: true,
+                }),
+            );
+        } else {
+            // Serve without BrowserSync - just proxy admin directly
+            app.use(
+                createProxyMiddleware({
+                    target: adminUrl,
+                    ws: true,
+                }),
+            );
+        }
 
         return Promise.resolve();
     }
 
-    private async createHtmlConfigProxy(app: Application, config: DevServerConfig): Promise<void> {
+    private async createHtmlConfigProxy(
+        app: Application,
+        config: DevServerConfig,
+        noBrowserSync = false,
+    ): Promise<void> {
         const pathRewrite: Record<string, string> = {};
+        const adminPattern = `/adapter/${this.adapterName}/**`;
 
         // figure out if we need to watch the React build
         let hasReact = false;
@@ -815,27 +848,43 @@ class DevServer {
             }
         }
 
-        const browserSyncPort = this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET);
-        this.startBrowserSync(browserSyncPort, hasReact);
+        if (!noBrowserSync) {
+            // Use BrowserSync for hot-reload functionality
+            const browserSyncPort = this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET);
+            this.startBrowserSync(browserSyncPort, hasReact);
 
-        // browser-sync proxy
-        const adminPattern = `/adapter/${this.adapterName}/**`;
-        pathRewrite[`^/adapter/${this.adapterName}/`] = '/';
-        app.use(
-            createProxyMiddleware([adminPattern, '/browser-sync/**'], {
-                target: `http://127.0.0.1:${browserSyncPort}`,
-                //ws: true, // can't have two web-socket connections proxying to different locations
-                pathRewrite,
-            }),
-        );
+            // browser-sync proxy
+            pathRewrite[`^/adapter/${this.adapterName}/`] = '/';
+            app.use(
+                createProxyMiddleware([adminPattern, '/browser-sync/**'], {
+                    target: `http://127.0.0.1:${browserSyncPort}`,
+                    //ws: true, // can't have two web-socket connections proxying to different locations
+                    pathRewrite,
+                }),
+            );
 
-        // admin proxy
-        app.use(
-            createProxyMiddleware([`!${adminPattern}`, '!/browser-sync/**'], {
-                target: `http://127.0.0.1:${this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET)}`,
-                ws: true,
-            }),
-        );
+            // admin proxy
+            app.use(
+                createProxyMiddleware([`!${adminPattern}`, '!/browser-sync/**'], {
+                    target: `http://127.0.0.1:${this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET)}`,
+                    ws: true,
+                }),
+            );
+        } else {
+            // Serve without BrowserSync - serve admin files directly and proxy the rest
+            const adminPath = path.resolve(this.rootDir, 'admin/');
+
+            // serve static admin files
+            app.use(`/adapter/${this.adapterName}`, express.static(adminPath));
+
+            // admin proxy for everything else
+            app.use(
+                createProxyMiddleware([`!${adminPattern}`], {
+                    target: `http://127.0.0.1:${this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET)}`,
+                    ws: true,
+                }),
+            );
+        }
     }
 
     private async copySourcemaps(): Promise<void> {
