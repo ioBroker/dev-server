@@ -219,7 +219,9 @@ class DevServer {
 
     private async checkVersion(): Promise<void> {
         try {
-            const { name, version: localVersion } = JSON.parse(readFileSync(path.join(__dirname, '..', 'package.json')).toString());
+            const { name, version: localVersion } = JSON.parse(
+                readFileSync(path.join(__dirname, '..', 'package.json')).toString(),
+            );
             const {
                 data: { version: releaseVersion },
             } = await axios.get(`https://registry.npmjs.org/${name}/latest`, { timeout: 1000 });
