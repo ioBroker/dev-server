@@ -168,8 +168,8 @@ class DevServer {
     }
     async checkVersion() {
         try {
-            const { name, version: localVersion } = JSON.parse((0, fs_extra_1.readFileSync)('../package.json').toString());
-            const { data: { version: releaseVersion }, } = await axios_1.default.get(`https://cdn.jsdelivr.net/npm/${name}/package.json`, { timeout: 1000 });
+            const { name, version: localVersion } = JSON.parse((0, fs_extra_1.readFileSync)(path.join(__dirname, '..', 'package.json')).toString());
+            const { data: { version: releaseVersion }, } = await axios_1.default.get(`https://registry.npmjs.org/${name}/latest`, { timeout: 1000 });
             if ((0, semver_1.gt)(releaseVersion, localVersion)) {
                 this.log.debug(`Found update from ${localVersion} to ${releaseVersion}`);
                 const response = await (0, enquirer_1.prompt)({

@@ -219,10 +219,10 @@ class DevServer {
 
     private async checkVersion(): Promise<void> {
         try {
-            const { name, version: localVersion } = JSON.parse(readFileSync('../package.json').toString());
+            const { name, version: localVersion } = JSON.parse(readFileSync(path.join(__dirname, '..', 'package.json')).toString());
             const {
                 data: { version: releaseVersion },
-            } = await axios.get(`https://cdn.jsdelivr.net/npm/${name}/package.json`, { timeout: 1000 });
+            } = await axios.get(`https://registry.npmjs.org/${name}/latest`, { timeout: 1000 });
             if (gt(releaseVersion, localVersion)) {
                 this.log.debug(`Found update from ${localVersion} to ${releaseVersion}`);
                 const response = await prompt<{ update: boolean }>({
