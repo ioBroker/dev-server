@@ -57,7 +57,7 @@
     "enquirer": "^2.4.1",
     "express": "^4.21.2",
     "fast-glob": "^3.3.3",
-    "fs-extra": "^11.3.0",
+    "fs-extra": "^11.3.1",
     "http-proxy-middleware": "^3.0.3",
     "nodemon": "^3.1.0",
     "ps-tree": "^1.2.0",
