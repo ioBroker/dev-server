@@ -9,7 +9,8 @@
   },
   "files": [
     "dist/*.js",
-    "LICENSE"
+    "LICENSE",
+    "README.md"
   ],
   "engines": {
     "node": ">=16.0.0"
@@ -27,6 +28,15 @@
   },
   "author": "UncleSamSwiss",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ioBroker/dev-server"
+  },
+  "homepage": "https://github.com/ioBroker/dev-server",
+  "bugs": {
+    "url": "https://github.com/ioBroker/dev-server/issues"
+  },
+  "readme": "README.md",
   "devDependencies": {
     "@alcalzone/release-script": "^3.8.0",
     "@alcalzone/release-script-plugin-license": "^3.7.0",
