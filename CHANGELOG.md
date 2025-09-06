@@ -5,7 +5,7 @@
 -->
 ## 0.7.8 (2025-01-29)
 * (@GermanBluefox) chokidar reverted to 3.6.0
-*
+* (@copilot) Add --no-browser-sync flag to run and watch commands for environments where BrowserSync causes issues
 
 ## 0.7.7 (2025-01-27)
 * (@GermanBluefox) nodemon reverted to 3.1.0

@@ -140,7 +140,7 @@ class DevServer {
                         description: 'Do not use BrowserSync for hot-reload (serve static files instead)',
                     },
                 },
-                async args => await this.run(!!args.noBrowserSync),
+                async args => await this.run(!args.noBrowserSync),
             )
             .command(
                 ['watch [profile]', 'w'],
@@ -168,7 +168,7 @@ class DevServer {
                         description: 'Do not use BrowserSync for hot-reload (serve static files instead)',
                     },
                 },
-                async args => await this.watch(!args.noStart, !!args.noInstall, args.doNotWatch, !!args.noBrowserSync),
+                async args => await this.watch(!args.noStart, !!args.noInstall, args.doNotWatch, !args.noBrowserSync),
             )
             .command(
                 ['debug [profile]', 'd'],
@@ -430,17 +430,17 @@ class DevServer {
         this.log.box(`dev-server was sucessfully updated.`);
     }
 
-    async run(noBrowserSync = false): Promise<void> {
+    async run(useBrowserSync = true): Promise<void> {
         await this.checkSetup();
         await this.startJsController();
-        await this.startServer(noBrowserSync);
+        await this.startServer(useBrowserSync);
     }
 
     async watch(
         startAdapter: boolean,
         noInstall: boolean,
         doNotWatch: string | string[] | undefined,
-        noBrowserSync = false,
+        useBrowserSync = true,
     ): Promise<void> {
         let doNotWatchArr: string[] = [];
         if (typeof doNotWatch === 'string') {
@@ -457,10 +457,10 @@ class DevServer {
         if (this.isJSController()) {
             // this watches actually js-controller
             await this.startAdapterWatch(startAdapter, doNotWatchArr);
-            await this.startServer(noBrowserSync);
+            await this.startServer(useBrowserSync);
         } else {
             await this.startJsController();
-            await this.startServer(noBrowserSync);
+            await this.startServer(useBrowserSync);
             await this.startAdapterWatch(startAdapter, doNotWatchArr);
         }
     }
@@ -662,7 +662,7 @@ class DevServer {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    async startServer(noBrowserSync = false): Promise<void> {
+    async startServer(useBrowserSync = true): Promise<void> {
         this.log.notice(`Running inside ${this.profileDir}`);
 
         if (!this.config) {
@@ -684,10 +684,10 @@ class DevServer {
             );
         } else if (this.getJsonConfigPath()) {
             // JSON config
-            await this.createJsonConfigProxy(app, this.config, noBrowserSync);
+            await this.createJsonConfigProxy(app, this.config, useBrowserSync);
         } else {
             // HTML or React config
-            await this.createHtmlConfigProxy(app, this.config, noBrowserSync);
+            await this.createHtmlConfigProxy(app, this.config, useBrowserSync);
         }
 
         // start express
@@ -755,11 +755,11 @@ class DevServer {
         this.log.box(`Admin is now reachable under http://127.0.0.1:${this.config.adminPort}/`);
     }
 
-    private createJsonConfigProxy(app: Application, config: DevServerConfig, noBrowserSync = false): Promise<void> {
+    private createJsonConfigProxy(app: Application, config: DevServerConfig, useBrowserSync = true): Promise<void> {
         const jsonConfigFile = this.getJsonConfigPath();
         const adminUrl = `http://127.0.0.1:${this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET)}`;
 
-        if (!noBrowserSync) {
+        if (useBrowserSync) {
             // Use BrowserSync for hot-reload functionality
             const browserSyncPort = this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET);
             const bs = this.startBrowserSync(browserSyncPort, false);
@@ -820,7 +820,7 @@ class DevServer {
     private async createHtmlConfigProxy(
         app: Application,
         config: DevServerConfig,
-        noBrowserSync = false,
+        useBrowserSync = true,
     ): Promise<void> {
         const pathRewrite: Record<string, string> = {};
         const adminPattern = `/adapter/${this.adapterName}/**`;
@@ -848,7 +848,7 @@ class DevServer {
             }
         }
 
-        if (!noBrowserSync) {
+        if (useBrowserSync) {
             // Use BrowserSync for hot-reload functionality
             const browserSyncPort = this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET);
             this.startBrowserSync(browserSyncPort, hasReact);
