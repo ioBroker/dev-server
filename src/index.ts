@@ -349,6 +349,153 @@ class DevServer {
         return readJson(path.join(this.rootDir, 'package.json'));
     }
 
+    private async isESMAdapter(): Promise<boolean> {
+        try {
+            const pkg = await this.readPackageJson();
+            return pkg.type === 'module';
+        } catch {
+            return false;
+        }
+    }
+
+    private async ensureESMTypeScriptConfig(): Promise<void> {
+        const tsconfigPath = path.join(this.rootDir, 'tsconfig.json');
+        const backupPath = path.join(this.rootDir, 'tsconfig.dev-server.backup.json');
+
+        try {
+            // Check if tsconfig.json exists
+            if (!existsSync(tsconfigPath)) {
+                this.log.debug('No tsconfig.json found, ESM adapter should handle this correctly');
+                return;
+            }
+
+            // Read the current tsconfig
+            const tsconfig = await readJson(tsconfigPath);
+
+            // Check if it already has the correct ESM configuration
+            const compilerOptions = tsconfig.compilerOptions || {};
+            if (
+                compilerOptions.module === 'ESNext' ||
+                compilerOptions.module === 'ES2022' ||
+                compilerOptions.module === 'ES2020'
+            ) {
+                this.log.debug('TypeScript config already configured for ESM output');
+                return;
+            }
+
+            this.log.notice('Temporarily modifying TypeScript config for ESM output');
+
+            // Backup the original tsconfig
+            await writeJson(backupPath, tsconfig, { spaces: 2 });
+
+            // Modify the tsconfig for ESM output
+            const esmConfig = {
+                ...tsconfig,
+                compilerOptions: {
+                    ...compilerOptions,
+                    module: 'ESNext',
+                    target: compilerOptions.target || 'ES2020',
+                    moduleResolution: 'node',
+                },
+            };
+
+            // Write the modified tsconfig
+            await writeJson(tsconfigPath, esmConfig, { spaces: 2 });
+
+            // Schedule restoration after build
+            this.scheduleTypeScriptConfigRestore(tsconfigPath, backupPath);
+        } catch (error) {
+            this.log.warn(`Failed to modify TypeScript config for ESM: ${String(error)}`);
+        }
+    }
+
+    private scheduleTypeScriptConfigRestore(tsconfigPath: string, backupPath: string): void {
+        // Restore the original tsconfig after a short delay to allow build to complete
+        setTimeout(async () => {
+            try {
+                if (existsSync(backupPath)) {
+                    const originalConfig = await readJson(backupPath);
+                    await writeJson(tsconfigPath, originalConfig, { spaces: 2 });
+                    await rimraf(backupPath);
+                    this.log.debug('Restored original TypeScript configuration');
+                }
+            } catch (error) {
+                this.log.warn(`Failed to restore TypeScript config: ${String(error)}`);
+            }
+        }, 5000);
+    }
+
+    private async ensureESMTypeScriptConfigForWatch(): Promise<void> {
+        const tsconfigPath = path.join(this.rootDir, 'tsconfig.json');
+        const backupPath = path.join(this.rootDir, 'tsconfig.dev-server.backup.json');
+
+        try {
+            // Check if tsconfig.json exists
+            if (!existsSync(tsconfigPath)) {
+                this.log.debug('No tsconfig.json found, ESM adapter should handle this correctly');
+                return;
+            }
+
+            // Check if we already have a backup (watch mode is running)
+            if (existsSync(backupPath)) {
+                this.log.debug('TypeScript config already modified for ESM watch mode');
+                return;
+            }
+
+            // Read the current tsconfig
+            const tsconfig = await readJson(tsconfigPath);
+
+            // Check if it already has the correct ESM configuration
+            const compilerOptions = tsconfig.compilerOptions || {};
+            if (
+                compilerOptions.module === 'ESNext' ||
+                compilerOptions.module === 'ES2022' ||
+                compilerOptions.module === 'ES2020'
+            ) {
+                this.log.debug('TypeScript config already configured for ESM output');
+                return;
+            }
+
+            this.log.notice('Modifying TypeScript config for ESM output in watch mode');
+
+            // Backup the original tsconfig
+            await writeJson(backupPath, tsconfig, { spaces: 2 });
+
+            // Modify the tsconfig for ESM output
+            const esmConfig = {
+                ...tsconfig,
+                compilerOptions: {
+                    ...compilerOptions,
+                    module: 'ESNext',
+                    target: compilerOptions.target || 'ES2020',
+                    moduleResolution: 'node',
+                },
+            };
+
+            // Write the modified tsconfig
+            await writeJson(tsconfigPath, esmConfig, { spaces: 2 });
+
+            // Set up cleanup on process exit
+            process.on('SIGINT', () => this.restoreTypeScriptConfigOnExit(tsconfigPath, backupPath));
+            process.on('SIGTERM', () => this.restoreTypeScriptConfigOnExit(tsconfigPath, backupPath));
+        } catch (error) {
+            this.log.warn(`Failed to modify TypeScript config for ESM watch: ${String(error)}`);
+        }
+    }
+
+    private restoreTypeScriptConfigOnExit(tsconfigPath: string, backupPath: string): void {
+        try {
+            if (existsSync(backupPath)) {
+                const originalConfig = JSON.parse(readFileSync(backupPath, 'utf-8'));
+                void writeFile(tsconfigPath, JSON.stringify(originalConfig, null, 2));
+                unlinkSync(backupPath);
+                this.log.debug('Restored original TypeScript configuration on exit');
+            }
+        } catch (error) {
+            this.log.warn(`Failed to restore TypeScript config on exit: ${String(error)}`);
+        }
+    }
+
     private getPort(adminPort: number, offset: number): number {
         let port = adminPort + offset;
         if (port > 65000) {
@@ -1100,6 +1247,13 @@ class DevServer {
     private async startTscWatch(): Promise<void> {
         this.log.notice('Starting tsc --watch');
         this.log.debug('Waiting for first successful tsc build...');
+
+        // Check if this is an ESM adapter and ensure proper TypeScript configuration
+        const isESM = await this.isESMAdapter();
+        if (isESM) {
+            await this.ensureESMTypeScriptConfigForWatch();
+        }
+
         await this.spawnAndAwaitOutput('npm', ['run', 'watch:ts'], this.rootDir, /watching (files )?for/i, {
             shell: true,
         });
@@ -1556,6 +1710,13 @@ class DevServer {
         const pkg = await this.readPackageJson();
         if (pkg.scripts?.build) {
             this.log.notice(`Build iobroker.${this.adapterName}`);
+
+            // Check if this is an ESM adapter and ensure proper TypeScript configuration
+            const isESM = await this.isESMAdapter();
+            if (isESM) {
+                await this.ensureESMTypeScriptConfig();
+            }
+
             this.execSync('npm run build', this.rootDir);
         }
     }
