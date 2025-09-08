@@ -5,9 +5,6 @@
 -->
 ## **WORK IN PROGRESS**
 * (copilot) Add support for TypeScript-only adapters where main field points to .ts files
-* (copilot) Automatically detect TypeScript adapters and add ts-node dependency during setup
-* (copilot) Update nodemon configuration to handle both JavaScript and TypeScript files
-* (copilot) Enhanced manual start instructions for TypeScript adapters
 
 ## 0.7.8 (2025-01-29)
 * (@GermanBluefox) chokidar reverted to 3.6.0
