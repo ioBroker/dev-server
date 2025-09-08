@@ -350,7 +350,7 @@ class DevServer {
     }
 
     private isTypeScriptMain(mainFile: string): boolean {
-        return Boolean(mainFile && mainFile.endsWith('.ts'));
+        return !!(mainFile && mainFile.endsWith('.ts'));
     }
 
     private getPort(adminPort: number, offset: number): number {

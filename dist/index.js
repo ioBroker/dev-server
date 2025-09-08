@@ -283,7 +283,7 @@ class DevServer {
         return (0, fs_extra_1.readJson)(path.join(this.rootDir, 'package.json'));
     }
     isTypeScriptMain(mainFile) {
-        return Boolean(mainFile && mainFile.endsWith('.ts'));
+        return !!(mainFile && mainFile.endsWith('.ts'));
     }
     getPort(adminPort, offset) {
         let port = adminPort + offset;
