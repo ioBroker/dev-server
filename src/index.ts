@@ -1199,6 +1199,7 @@ class DevServer {
         // Determine the appropriate execMap
         const execMap: Record<string, string> = {
             js: 'node --inspect --preserve-symlinks --preserve-symlinks-main',
+            mjs: 'node --inspect --preserve-symlinks --preserve-symlinks-main',
             ts: 'node --inspect --preserve-symlinks --preserve-symlinks-main --require ts-node/register',
         };
 

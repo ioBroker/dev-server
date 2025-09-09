@@ -5,6 +5,7 @@
 -->
 ## **WORK IN PROGRESS**
 * (copilot) Add support for TypeScript-only adapters where main field points to .ts files
+* (@bolliy) Add support for ESM modules with .mjs file extensions
 
 ## 0.7.8 (2025-01-29)
 * (@GermanBluefox) chokidar reverted to 3.6.0

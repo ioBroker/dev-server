@@ -1016,6 +1016,7 @@ class DevServer {
         // Determine the appropriate execMap
         const execMap = {
             js: 'node --inspect --preserve-symlinks --preserve-symlinks-main',
+            mjs: 'node --inspect --preserve-symlinks --preserve-symlinks-main',
             ts: 'node --inspect --preserve-symlinks --preserve-symlinks-main --require ts-node/register',
         };
         // @ts-expect-error fix later
