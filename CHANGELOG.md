@@ -5,8 +5,10 @@
 -->
 
 ## **WORK IN PROGRESS**
-* (@copilot) Add --no-browser-sync flag to run and watch commands for environments where BrowserSync causes issues
+* (@copilot) Fix version check to honor npm "latest" tag instead of jsDelivr
 * (@copilot) Add support for TypeScript-only adapters where main field points to .ts files
+* (@copilot) Add support for TypeScript-only adapters where main field points to .ts files
+* (@copilot) Add --no-browser-sync flag to run and watch commands for environments where BrowserSync causes issues
 * (@bolliy) Add support for ESM modules with .mjs file extensions
 
 ## 0.7.8 (2025-01-29)
