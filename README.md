@@ -221,6 +221,10 @@ Run dev-server, the adapter will not run, but you may test the Admin UI with hot
 
 If you start the adapter from Admin, be aware that it will use the code uploaded during setup (or when `dev-server upload` was called explicitly).
 
+The following options are available:
+
+`--no-browser-sync` Do not use BrowserSync for hot-reload (serve static files instead). This can help avoid compatibility issues or random failures with BrowserSync.
+
 ### `dev-server watch`
 
 Run dev-server and start the adapter in "watch" mode.
@@ -241,6 +245,8 @@ The following options are available:
 `--noInstall` Do not build and install the adapter before starting dev-server.
 
 `--doNotWatch <filepattern>` Provide files and locations relative to adapter base directory that should not be watched for changes. This option can be provided multiple times to ignore several locations.
+
+`--no-browser-sync` Do not use BrowserSync for hot-reload (serve static files instead). This can help avoid compatibility issues or random failures with BrowserSync.
 
 ### `dev-server debug`
 
