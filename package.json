@@ -1,75 +1,81 @@
 {
-  "name": "@iobroker/dev-server",
-  "version": "0.7.1",
-  "description": "Single package development server for ioBroker",
-  "main": "dist/index.js",
-  "bin": {
-    "dev-server": "dist/index.js",
-    "iobroker-dev-server": "dist/index.js"
-  },
-  "files": [
-    "dist/*.js"
-  ],
-  "engines": {
-    "node": ">=16.0.0"
-  },
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "prebuild": "rimraf ./dist",
-    "build": "tsc -p tsconfig.build.json",
-    "watch": "tsc -p tsconfig.build.json --watch",
-    "check": "tsc --noEmit",
-    "lint": "eslint --ext .ts src/",
-    "release": "release-script"
-  },
-  "author": "UncleSamSwiss",
-  "license": "MIT",
-  "devDependencies": {
-    "@alcalzone/release-script": "^3.6.0",
-    "@alcalzone/release-script-plugin-license": "^3.5.9",
-    "@types/browser-sync": "^2.27.4",
-    "@types/express": "^4.17.21",
-    "@types/fs-extra": "^11.0.4",
-    "@types/iobroker": "^4.0.5",
-    "@types/node": "^20.9.0",
-    "@types/nodemon": "^1.19.5",
-    "@types/ps-tree": "^1.1.5",
-    "@types/rimraf": "^4.0.5",
-    "@types/semver": "^7.5.5",
-    "@types/table": "^6.3.2",
-    "@types/ws": "^8.5.9",
-    "@types/yargs": "^17.0.31",
-    "@typescript-eslint/eslint-plugin": "^6.10.0",
-    "@typescript-eslint/parser": "^6.10.0",
-    "eslint": "^8.53.0",
-    "eslint-config-prettier": "^9.0.0",
-    "eslint-plugin-prettier": "^5.0.1",
-    "prettier": "^3.0.3",
-    "source-map-support": "^0.5.21",
-    "ts-node": "^10.9.1",
-    "typescript": "^5.2.2"
-  },
-  "dependencies": {
-    "@iobroker/testing": "^4.1.0",
-    "acorn": "^8.11.2",
-    "axios": "^1.6.1",
-    "boxen": "^5.1.2",
-    "browser-sync": "^2.29.3",
-    "bs-html-injector": "^3.0.3",
-    "chalk": "^4.1.2",
-    "chokidar": "^3.5.3",
-    "enquirer": "^2.4.1",
-    "express": "^4.18.2",
-    "fast-glob": "^3.3.2",
-    "fs-extra": "^11.1.1",
-    "http-proxy-middleware": "^2.0.6",
-    "nodemon": "^3.0.1",
-    "ps-tree": "^1.2.0",
-    "rimraf": "^5.0.5",
-    "semver": "^7.5.4",
-    "source-map": "^0.7.4",
-    "table": "^6.8.1",
-    "ws": "^8.14.2",
-    "yargs": "^17.7.2"
-  }
+    "name": "@iobroker/dev-server",
+    "version": "0.7.8",
+    "description": "Single package development server for ioBroker",
+    "main": "dist/index.js",
+    "bin": {
+        "dev-server": "dist/index.js",
+        "iobroker-dev-server": "dist/index.js"
+    },
+    "files": [
+        "dist/*.js",
+        "LICENSE",
+        "README.md"
+    ],
+    "engines": {
+        "node": ">=16.0.0"
+    },
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "prebuild": "rimraf ./dist",
+        "build": "tsc -p tsconfig.build.json",
+        "watch": "tsc -p tsconfig.build.json --watch",
+        "check": "tsc --noEmit",
+        "lint": "eslint -c eslint.config.mjs",
+        "release": "release-script",
+        "npm": "npm i -f",
+        "update-packages": "npx -y npm-check-updates --upgrade"
+    },
+    "author": "UncleSamSwiss",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/ioBroker/dev-server"
+    },
+    "homepage": "https://github.com/ioBroker/dev-server",
+    "bugs": {
+        "url": "https://github.com/ioBroker/dev-server/issues"
+    },
+    "readme": "README.md",
+    "devDependencies": {
+        "@alcalzone/release-script": "^3.8.0",
+        "@alcalzone/release-script-plugin-license": "^3.7.0",
+        "@iobroker/eslint-config": "^2.1.0",
+        "@iobroker/types": "^7.0.7",
+        "@types/browser-sync": "^2.29.0",
+        "@types/express": "^4.17.23",
+        "@types/fs-extra": "^11.0.4",
+        "@types/node": "^22.18.1",
+        "@types/ps-tree": "^1.1.6",
+        "@types/semver": "^7.7.1",
+        "@types/table": "^6.3.2",
+        "@types/ws": "^8.18.1",
+        "@types/yargs": "^17.0.33",
+        "source-map-support": "^0.5.21",
+        "ts-node": "^10.9.2",
+        "typescript": "~5.9.2"
+    },
+    "dependencies": {
+        "@iobroker/testing": "^5.1.1",
+        "acorn": "^8.15.0",
+        "axios": "^1.11.0",
+        "boxen": "^5.1.2",
+        "browser-sync": "^3.0.4",
+        "bs-html-injector": "^3.0.3",
+        "chalk": "^4.1.2",
+        "chokidar": "^3.6.0",
+        "enquirer": "^2.4.1",
+        "express": "^4.21.2",
+        "fast-glob": "^3.3.3",
+        "fs-extra": "^11.3.1",
+        "http-proxy-middleware": "^3.0.5",
+        "nodemon": "^3.1.0",
+        "ps-tree": "^1.2.0",
+        "rimraf": "^6.0.1",
+        "semver": "^7.7.2",
+        "source-map": "^0.7.6",
+        "table": "^6.9.0",
+        "ws": "^8.18.3",
+        "yargs": "^18.0.0"
+    }
 }

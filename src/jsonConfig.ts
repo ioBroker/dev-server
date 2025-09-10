@@ -1,7 +1,7 @@
-export function injectCode(html: string, adapterName: string): string {
-  return html.replace(
-    '</head>',
-    `
+export function injectCode(html: string, adapterName: string, jsonConfigFileName: string): string {
+    return html.replace(
+        '</head>',
+        `
 <script type="module">
 import { io } from "https://cdn.socket.io/4.4.1/socket.io.esm.min.js";
 
@@ -31,7 +31,7 @@ socket.on("browser:reload", async () => {
 
 async function readJsonConfig() {
   return new Promise((resolve, reject) => {
-    window.io.emit("readFile", "${adapterName}.admin", "jsonConfig.json", (err, data, type) => {
+    window.io.emit("readFile", "${adapterName}.admin", "${jsonConfigFileName}", (err, data, type) => {
       if (err) reject(err);
       else resolve(data);
     });
@@ -44,5 +44,5 @@ setTimeout(async () => {
 }, 1000);
 </script>
 </head>`,
-  );
+    );
 }
