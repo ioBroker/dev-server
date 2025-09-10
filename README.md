@@ -27,7 +27,7 @@ npm run dev-server watch
 ```
 
 > [!NOTE]
-> With local installation, all `dev-server` commands in this documentation need to be prefixed with `npm run`, e.g., `npm run dev-server setup` instead of `dev-server setup`.
+> With local installation, an extra npm script `dev-server` needs to be added to your package.json, and all `dev-server` commands in this documentation need to be prefixed with `npm run`, e.g., `npm run dev-server setup` instead of `dev-server setup`.
 
 > [!TIP]
 > If the `dev-server` command is not found **under Windows**, check that the npm directory (typically `C:\Users\%username%\AppData\Roaming\npm`) is included in the `PATH` variable.
