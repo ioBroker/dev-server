@@ -10,12 +10,24 @@ ioBroker dev-server is a simple command line tool running on Windows, Linux and 
 
 ## Installation
 
+**Global installation (recommended for most users):**
+
 ```bash
 npm install --global @iobroker/dev-server
 dev-server setup
 dev-server watch
 ```
-(a local installation as dev-dependency is also possible)
+
+**Local installation (for users with permission issues or preference for local tools):**
+
+```bash
+npm install --save-dev @iobroker/dev-server
+npm run dev-server setup
+npm run dev-server watch
+```
+
+> [!NOTE]
+> With local installation, an extra npm script `dev-server` needs to be added to your package.json (see below), and all `dev-server` commands in this documentation need to be prefixed with `npm run`, e.g., `npm run dev-server setup` instead of `dev-server setup`.
 
 > [!TIP]
 > If the `dev-server` command is not found **under Windows**, check that the npm directory (typically `C:\Users\%username%\AppData\Roaming\npm`) is included in the `PATH` variable.
@@ -70,7 +82,27 @@ npm install --global @iobroker/dev-server
 
 #### Installation as a development dependency
 
-Some more explanation, especially when a **global installation** is problematic **because of permission** issues (e.g., on **macOS**), you can add the dev-server to your adapter's `devDependencies` and add it e.g., as a script to your package.json.
+Some more explanation, especially when a **global installation** is problematic **because of permission** issues (e.g., on **macOS**), you can install the dev-server as a local development dependency.
+
+**Option 1: Using npm install command (recommended)**
+
+```bash
+npm install --save-dev @iobroker/dev-server
+```
+
+Then add it as a script to your `package.json`:
+
+```json
+{
+  "scripts": {
+    "dev-server": "dev-server"
+  }
+}
+```
+
+**Option 2: Manual package.json editing**
+
+Alternatively, you can manually add the dev-server to your adapter's `devDependencies` in `package.json`:
 
 ```json
 {
@@ -83,20 +115,48 @@ Some more explanation, especially when a **global installation** is problematic 
 }
 ```
 
-then you can run it via `npm run dev-server`.
+> [!IMPORTANT]
+> After manually editing `package.json`, you **must** run `npm install` to actually install the package. Simply adding it to `package.json` does not perform the installation.
+
+**Usage with local installation**
+
+When installed locally, you need to run all dev-server commands via npm scripts:
+
+```bash
+npm run dev-server setup
+npm run dev-server watch
+npm run dev-server debug
+# etc.
+```
+
+> [!TIP]
+> **Linux/macOS users**: You can create a shell alias to make local commands shorter:
+> ```bash
+> alias dev-server="npm run dev-server"
+> ```
+> After setting this alias, you can use `dev-server setup`, `dev-server watch`, etc. as shown in the examples throughout this documentation.
 
 ### Setup local dev-server
 
 To set up and configure a local dev-server in your adapter directory, change to the **base directory of your adapter** and execute the following command:
 
+**Global installation:**
 ```bash
 dev-server setup
+```
+
+**Local installation:**
+```bash
+npm run dev-server setup
 ```
 
 For additional command line arguments, see below.
 
 > [!NOTE]
-> The executable can either be called with the short name `dev-server` or its full name `iobroker-dev-server`. We will use the first way in this document.
+> The executable can either be called with the short name `dev-server` or its full name `iobroker-dev-server`. We will use the first way in this document. Remember that if you installed dev-server locally, you need to prefix all commands with `npm run`.
+
+> [!TIP]
+> Throughout this documentation, examples show `dev-server <command>`. If you installed locally, replace these with `npm run dev-server <command>`.
 
 ### Exclude temporary folder
 
@@ -117,6 +177,9 @@ If you created your adapter using a recent version of [Adapter Creator](https://
 ## Command line
 
 Usage: `dev-server <command> [options] [profile]`
+
+> [!NOTE]
+> If you installed dev-server locally (as a development dependency), prefix all commands with `npm run`, e.g., `npm run dev-server <command> [options] [profile]`.
 
 All long-running commands can be stopped using `Ctrl-C`.
 
@@ -235,8 +298,14 @@ Depending on your preferences, you can either start the adapter with dev-server 
 
 If you want dev-server to take care of the adapter by building (if needed), uploading, running and relaunching upon changes, start it from the built-in Terminal in Visual Studio Code:
 
+**Global installation:**
 ```bash
 dev-server watch
+```
+
+**Local installation:**
+```bash
+npm run dev-server watch
 ```
 
 When the adapter is ready, you will see a message like the following:
@@ -266,8 +335,14 @@ Now you can set breakpoints (or they are hit if you set them before) and inspect
 
 If you want to launch the adapter from Visual Studio Code, start dev-server without the adapter from the built-in Terminal:
 
+**Global installation:**
 ```bash
 dev-server watch --noStart
+```
+
+**Local installation:**
+```bash
+npm run dev-server watch --noStart
 ```
 
 When dev-server is ready, you will see a message like the following:
@@ -320,8 +395,14 @@ Now cancel the exclusion for the adapter directory in .dev-server\default\node_m
 
 If you want dev-server to take care of the adapter by building (if needed), uploading, running and relaunching upon changes, start it from the built-in Terminal in WebStorm:
 
+**Global installation:**
 ```bash
 dev-server watch
+```
+
+**Local installation:**
+```bash
+npm run dev-server watch
 ```
 
 Set up a launch configuration to attach to the process like this:
@@ -342,10 +423,16 @@ You can now start the `attach` configuration and use the debugger console as usu
 
 #### Launch adapter independently
 
-If you want to launch the adapter from Visual Studio Code, start dev-server without the adapter from the built-in Terminal:
+If you want to launch the adapter from WebStorm, start dev-server without the adapter from the built-in Terminal:
 
+**Global installation:**
 ```bash
 dev-server watch --noStart
+```
+
+**Local installation:**
+```bash
+npm run dev-server watch --noStart
 ```
 
 When dev-server is ready, you will see a message like the following:
