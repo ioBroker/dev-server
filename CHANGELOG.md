@@ -1,39 +1,49 @@
 # Changelog
+
 <!--
-	Placeholder for the next version (at the beginning of the line):
-	## **WORK IN PROGRESS**
+    Placeholder for the next version (at the beginning of the line):
+    ## **WORK IN PROGRESS**
 -->
 
 ## **WORK IN PROGRESS**
-* (@copilot) Fix version check to honor npm "latest" tag instead of jsDelivr
-* (@copilot) Add support for TypeScript-only adapters where main field points to .ts files
-* (@copilot) Add support for TypeScript-only adapters where main field points to .ts files
-* (@copilot) Add --no-browser-sync flag to run and watch commands for environments where BrowserSync causes issues
-* (@bolliy) Add support for ESM modules with .mjs file extensions
+
+- (@copilot) Fix version check to honor npm "latest" tag instead of jsDelivr
+- (@copilot) Add support for TypeScript-only adapters where main field points to .ts files
+- (@copilot) Add support for TypeScript-only adapters where main field points to .ts files
+- (@copilot) Add --no-browser-sync flag to run and watch commands for environments where BrowserSync causes issues
+- (@bolliy) Add support for ESM modules with .mjs file extensions
 
 ## 0.7.8 (2025-01-29)
-* (@GermanBluefox) chokidar reverted to 3.6.0
+
+- (@GermanBluefox) chokidar reverted to 3.6.0
 
 ## 0.7.7 (2025-01-27)
-* (@GermanBluefox) nodemon reverted to 3.1.0
+
+- (@GermanBluefox) nodemon reverted to 3.1.0
 
 ## 0.7.6 (2025-01-25)
-* (@GermanBluefox) Packages were updated
+
+- (@GermanBluefox) Packages were updated
 
 ## 0.7.3 (2024-05-02)
-* (foxriver76) set `activeRepo` as an array as it is intended
+
+- (foxriver76) set `activeRepo` as an array as it is intended
 
 ## 0.7.2 (2024-03-26)
-* (stevenengland) Add support for jsonConfig json5 files hot reload
+
+- (stevenengland) Add support for jsonConfig json5 files hot reload
 
 ## 0.7.1 (2023-11-09)
-* (Apollon77) downgrade boxen again to fix problems with it
+
+- (Apollon77) downgrade boxen again to fix problems with it
 
 ## 0.7.0 (2023-11-09)
-* (AlCalzone/Garfonso) symlink the local adapter instead of pack/install on each change
-* (Apollon77) Update dependencies
+
+- (AlCalzone/Garfonso) symlink the local adapter instead of pack/install on each change
+- (Apollon77) Update dependencies
 
 ## 0.6.0 (2022-10-02)
+
 - (Apollon77) Add option --doNotWatch for "watch" mode to ignore changes on defined files or locations
 - (Apollon77/kleinOr) Set several other system settings on "setup" call like the location, currency, language and temperature unit that they are not empty
 - (Apollon77) Only send SIGINT on exit first and then SIGKILL after 5 seconds if not yet exited to allow clean shutdown of all components

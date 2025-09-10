@@ -55,21 +55,23 @@ It is possible to run `dev-server` in the root directory of your local copy of [
 You need to install the `dev-server` package as well as set it up it in the adapter directory.
 
 ### Install package
-*Before installing, please check the following what is the best way or recommended:*
 
+_Before installing, please check the following what is the best way or recommended:_
 
 #### Linux
-* install it as a dev-dependency of your adapter (recommended)
-* install this tool as a global tool
+
+- install it as a dev-dependency of your adapter (recommended)
+- install this tool as a global tool
 
 Under Linux, it is sometimes useful to install this tool as global, BUT best practice for developing an own adapter it is better to install it as dev-dependency
 
 #### MacOS
-* Under macOS, be careful with installation as global. This is not recommended so better to install it as a dev-dependency
+
+- Under macOS, be careful with installation as global. This is not recommended so better to install it as a dev-dependency
 
 #### Windows
 
-* Under Windows, a global installation is no problem.
+- Under Windows, a global installation is no problem.
 
 > [!NOTE]
 > dev-server requires at least Node.js 14.
@@ -94,9 +96,9 @@ Then add it as a script to your `package.json`:
 
 ```json
 {
-  "scripts": {
-    "dev-server": "dev-server"
-  }
+    "scripts": {
+        "dev-server": "dev-server"
+    }
 }
 ```
 
@@ -106,12 +108,12 @@ Alternatively, you can manually add the dev-server to your adapter's `devDepende
 
 ```json
 {
-  "devDependencies": {
-    "@iobroker/dev-server": "^x.x.x"
-  },
-  "scripts": {
-    "dev-server": "dev-server"
-  }
+    "devDependencies": {
+        "@iobroker/dev-server": "^x.x.x"
+    },
+    "scripts": {
+        "dev-server": "dev-server"
+    }
 }
 ```
 
@@ -129,11 +131,12 @@ npm run dev-server debug
 # etc.
 ```
 
-> [!TIP]
-> **Linux/macOS users**: You can create a shell alias to make local commands shorter:
+> [!TIP] > **Linux/macOS users**: You can create a shell alias to make local commands shorter:
+>
 > ```bash
 > alias dev-server="npm run dev-server"
 > ```
+>
 > After setting this alias, you can use `dev-server setup`, `dev-server watch`, etc. as shown in the examples throughout this documentation.
 
 ### Setup local dev-server
@@ -141,11 +144,13 @@ npm run dev-server debug
 To set up and configure a local dev-server in your adapter directory, change to the **base directory of your adapter** and execute the following command:
 
 **Global installation:**
+
 ```bash
 dev-server setup
 ```
 
 **Local installation:**
+
 ```bash
 npm run dev-server setup
 ```
@@ -231,7 +236,7 @@ Run dev-server and start the adapter in "watch" mode.
 
 The adapter will automatically restart when its source code changes (with a 2-seconds delay).
 
-> [!IMPORTANT] 
+> [!IMPORTANT]
 > **DO NOT** start the adapter manually in `ioBroker.admin`! If you see errors like `ADAPTER_ALREADY_RUNNING` then most likely you ignored this info :-)
 
 You may attach a debugger to the running adapter. Keep in mind that the debugger will be detached when you change your source code, you need to manually attach again to the new process. Watch the console output for the correct process id to attach to.
@@ -299,11 +304,13 @@ Depending on your preferences, you can either start the adapter with dev-server 
 If you want dev-server to take care of the adapter by building (if needed), uploading, running and relaunching upon changes, start it from the built-in Terminal in Visual Studio Code:
 
 **Global installation:**
+
 ```bash
 dev-server watch
 ```
 
 **Local installation:**
+
 ```bash
 npm run dev-server watch
 ```
@@ -336,11 +343,13 @@ Now you can set breakpoints (or they are hit if you set them before) and inspect
 If you want to launch the adapter from Visual Studio Code, start dev-server without the adapter from the built-in Terminal:
 
 **Global installation:**
+
 ```bash
 dev-server watch --noStart
 ```
 
 **Local installation:**
+
 ```bash
 npm run dev-server watch --noStart
 ```
@@ -362,18 +371,18 @@ Take note of the two paths and create (or extend) a file called `.vscode/launch.
 
 ```json
 {
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "type": "node",
-      "request": "launch",
-      "name": "Launch ioBroker Adapter",
-      "skipFiles": ["<node_internals>/**"],
-      "args": ["--debug", "0"],
-      "program": "node_modules/iobroker.<adapter>/<path-to-main.js>",
-      "cwd": "${workspaceFolder}/.dev-server/default"
-    }
-  ]
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Launch ioBroker Adapter",
+            "skipFiles": ["<node_internals>/**"],
+            "args": ["--debug", "0"],
+            "program": "node_modules/iobroker.<adapter>/<path-to-main.js>",
+            "cwd": "${workspaceFolder}/.dev-server/default"
+        }
+    ]
 }
 ```
 
@@ -396,11 +405,13 @@ Now cancel the exclusion for the adapter directory in .dev-server\default\node_m
 If you want dev-server to take care of the adapter by building (if needed), uploading, running and relaunching upon changes, start it from the built-in Terminal in WebStorm:
 
 **Global installation:**
+
 ```bash
 dev-server watch
 ```
 
 **Local installation:**
+
 ```bash
 npm run dev-server watch
 ```
@@ -426,11 +437,13 @@ You can now start the `attach` configuration and use the debugger console as usu
 If you want to launch the adapter from WebStorm, start dev-server without the adapter from the built-in Terminal:
 
 **Global installation:**
+
 ```bash
 dev-server watch --noStart
 ```
 
 **Local installation:**
+
 ```bash
 npm run dev-server watch --noStart
 ```
