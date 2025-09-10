@@ -1254,7 +1254,6 @@ class DevServer {
             ts: 'node --inspect --preserve-symlinks --preserve-symlinks-main --require ts-node/register',
         };
 
-        // @ts-expect-error fix later
         nodemon({
             script,
             stdin: false,
