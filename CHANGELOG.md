@@ -4,6 +4,7 @@
 	## **WORK IN PROGRESS**
 -->
 ## **WORK IN PROGRESS**
+* (copilot) Fix version check to honor npm "latest" tag instead of jsDelivr
 * (copilot) Add support for TypeScript-only adapters where main field points to .ts files
 * (@bolliy) Add support for ESM modules with .mjs file extensions
 
