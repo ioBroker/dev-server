@@ -3,8 +3,10 @@
 	Placeholder for the next version (at the beginning of the line):
 	## **WORK IN PROGRESS**
 -->
+
 ## **WORK IN PROGRESS**
-* (copilot) Add support for TypeScript-only adapters where main field points to .ts files
+* (@copilot) Add --no-browser-sync flag to run and watch commands for environments where BrowserSync causes issues
+* (@copilot) Add support for TypeScript-only adapters where main field points to .ts files
 * (@bolliy) Add support for ESM modules with .mjs file extensions
 
 ## 0.7.8 (2025-01-29)
