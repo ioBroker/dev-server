@@ -1523,15 +1523,7 @@ class DevServer {
 
     private isGitRepository(): boolean {
         // Check if we're in a git repository by looking for .git directory
-        // Walk up the directory tree to find .git folder
-        let currentDir = this.rootDir;
-        while (currentDir !== path.dirname(currentDir)) {
-            if (existsSync(path.join(currentDir, '.git'))) {
-                return true;
-            }
-            currentDir = path.dirname(currentDir);
-        }
-        return false;
+        return existsSync(path.join(this.rootDir, '.git'));
     }
 
     private async verifyIgnoreFiles(): Promise<void> {

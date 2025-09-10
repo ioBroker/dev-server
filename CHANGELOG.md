@@ -7,6 +7,7 @@
 
 ## **WORK IN PROGRESS**
 
+- (@copilot) Fix git repository check to prevent errors in non-git directories
 - (@copilot) Fix version check to honor npm "latest" tag instead of jsDelivr
 - (@copilot) Add support for TypeScript-only adapters where main field points to .ts files
 - (@copilot) Add support for TypeScript-only adapters where main field points to .ts files
