@@ -282,6 +282,9 @@ class DevServer {
     readPackageJson() {
         return (0, fs_extra_1.readJson)(path.join(this.rootDir, 'package.json'));
     }
+    isTypeScriptMain(mainFile) {
+        return !!(mainFile && mainFile.endsWith('.ts'));
+    }
     getPort(adminPort, offset) {
         let port = adminPort + offset;
         if (port > 65000) {
@@ -912,8 +915,10 @@ class DevServer {
             await this.startNodemon(adapterRunDir, pkg.main, doNotWatch);
         }
         else {
+            const isTypeScript = this.isTypeScriptMain(pkg.main);
+            const runner = isTypeScript ? 'ts-node' : 'node';
             this.log.box(`You can now start the adapter manually by running\n    ` +
-                `node node_modules/iobroker.${this.adapterName}/${pkg.main} --debug 0\nfrom within\n    ${this.profileDir}`);
+                `${runner} node_modules/iobroker.${this.adapterName}/${pkg.main} --debug 0\nfrom within\n    ${this.profileDir}`);
         }
     }
     async startTscWatch() {
@@ -1008,6 +1013,12 @@ class DevServer {
         if (doNotWatch.length > 0) {
             doNotWatch.forEach(entry => ignoreList.push(path.join(baseDir, entry)));
         }
+        // Determine the appropriate execMap
+        const execMap = {
+            js: 'node --inspect --preserve-symlinks --preserve-symlinks-main',
+            mjs: 'node --inspect --preserve-symlinks --preserve-symlinks-main',
+            ts: 'node --inspect --preserve-symlinks --preserve-symlinks-main --require ts-node/register',
+        };
         // @ts-expect-error fix later
         (0, nodemon_1.default)({
             script,
@@ -1019,7 +1030,7 @@ class DevServer {
             ignore: ignoreList,
             ignoreRoot: [],
             delay: 2000,
-            execMap: { js: 'node --inspect --preserve-symlinks --preserve-symlinks-main' },
+            execMap,
             signal: 'SIGINT', // wrong type definition: signal is of type "string?"
             args,
         });
@@ -1164,6 +1175,11 @@ class DevServer {
         if (this.isJSController()) {
             // if this dev-server is used to debug JS-Controller, don't install a published version
             delete dependencies['iobroker.js-controller'];
+        }
+        // Check if the adapter uses TypeScript and add ts-node dependency if needed
+        const adapterPkg = await this.readPackageJson();
+        if (this.isTypeScriptMain(adapterPkg.main)) {
+            dependencies['ts-node'] = '^10.9.2';
         }
         const pkg = {
             name: `dev-server.${this.adapterName}`,
