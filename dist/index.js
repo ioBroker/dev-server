@@ -1291,6 +1291,10 @@ class DevServer {
             return systemConfig;
         });
     }
+    isGitRepository() {
+        // Check if we're in a git repository by looking for .git directory
+        return (0, fs_extra_1.existsSync)(path.join(this.rootDir, '.git'));
+    }
     async verifyIgnoreFiles() {
         this.log.notice(`Verifying .npmignore and .gitignore`);
         let relative = path.relative(this.rootDir, this.tempDir).replace('\\', '/');
@@ -1359,7 +1363,13 @@ class DevServer {
             }
         };
         await verifyFile('.npmignore', 'npm pack --dry-run', true);
-        await verifyFile('.gitignore', 'git status --short --untracked-files=all', false);
+        // Only verify .gitignore if we're in a git repository
+        if (this.isGitRepository()) {
+            await verifyFile('.gitignore', 'git status --short --untracked-files=all', false);
+        }
+        else {
+            this.log.debug('Skipping .gitignore verification: not in a git repository');
+        }
     }
     async uploadAndAddAdapter(name) {
         // upload the already installed adapter
