@@ -4,8 +4,7 @@
     Placeholder for the next version (at the beginning of the line):
     ## **WORK IN PROGRESS**
 -->
-
-## **WORK IN PROGRESS**
+## 0.8.0 (2025-09-20)
 
 - (@Apollon77/@copilot) Fix git repository check to prevent errors in non-git directories
 - (@Apollon77/@copilot) Fix version check to honor npm "latest" tag instead of jsDelivr
