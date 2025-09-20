@@ -1,0 +1,23 @@
+{
+  "adapterName": "dev-server-test-ts",
+  "description": "TypeScript test adapter for dev-server testing (generated for CI optimization)",
+  "authorName": "ioBroker Dev-Server Test",
+  "authorEmail": "dev-server-test@iobroker.net", 
+  "authorGithub": "ioBroker",
+  "keywords": ["ioBroker", "test", "dev-server"],
+  "type": "general",
+  "startMode": "daemon",
+  "language": "TypeScript",
+  "adminUi": "json",
+  "connectionIndicator": false,
+  "connectionType": "none",
+  "dataSource": "poll",
+  "tools": "ESLint + Prettier",
+  "releaseScript": "yes",
+  "dependabot": "yes",
+  "unitTests": true,
+  "integrationTests": false,
+  "gitCommit": false,
+  "npmInstall": false,
+  "gitInit": false
+}
