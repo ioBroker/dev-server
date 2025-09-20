@@ -1,0 +1,23 @@
+{
+  "adapterName": "test-ts",
+  "description": "Test TypeScript adapter for dev-server testing",
+  "authorName": "Test Author",
+  "authorEmail": "test@example.com",
+  "authorGithub": "test-user",
+  "keywords": ["test"],
+  "type": "general",
+  "startMode": "daemon",
+  "language": "TypeScript",
+  "adminUi": "json",
+  "connectionIndicator": false,
+  "connectionType": "none",
+  "dataSource": "poll",
+  "tools": "ESLint + Prettier",
+  "releaseScript": "yes",
+  "dependabot": "yes",
+  "unitTests": true,
+  "integrationTests": false,
+  "gitCommit": false,
+  "npmInstall": false,
+  "gitInit": false
+}
