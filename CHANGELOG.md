@@ -7,6 +7,7 @@
 
 ## __WORK IN PROGRESS_
 * (oweitman/Apollon77) Update chokidar and express
+* (@copilot) Fix TypeScript support for adapters with main field pointing to .ts files under node_modules
 
 ## 0.8.0 (2025-09-20)
 

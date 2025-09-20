@@ -1432,6 +1432,28 @@ class DevServer {
         const adapterPkg = await this.readPackageJson();
         if (this.isTypeScriptMain(adapterPkg.main)) {
             (dependencies as any)['ts-node'] = '^10.9.2';
+
+            // Create a tsconfig.json file for the profile to help ts-node work correctly
+            const tsConfig = {
+                compilerOptions: {
+                    target: 'ES2020',
+                    module: 'CommonJS',
+                    esModuleInterop: true,
+                    allowSyntheticDefaultImports: true,
+                    strict: false, // Be lenient for development
+                    skipLibCheck: true,
+                    forceConsistentCasingInFileNames: true,
+                },
+                'ts-node': {
+                    esm: false,
+                    preferTsExts: true,
+                    transpileOnly: true, // Skip type checking for faster startup
+                    compilerOptions: {
+                        module: 'CommonJS',
+                    },
+                },
+            };
+            await writeJson(path.join(this.profileDir, 'tsconfig.json'), tsConfig, { spaces: 2 });
         }
 
         const pkg = {
