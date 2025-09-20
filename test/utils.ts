@@ -192,6 +192,14 @@ export class TestUtils {
     
     static async cleanupTestFiles(): Promise<void> {
         try {
+            // Make sure we're not in the test directory before deleting it
+            const currentDir = process.cwd();
+            if (currentDir.includes(this.TEST_DIR)) {
+                // Change to the repository root before cleanup
+                const repoRoot = path.join(__dirname, '..');
+                process.chdir(repoRoot);
+            }
+            
             await fs.remove(this.TEST_DIR);
         } catch (error) {
             console.warn('Failed to cleanup test files:', error);
