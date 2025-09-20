@@ -7,12 +7,12 @@
 
 ## **WORK IN PROGRESS**
 
-- (@copilot) Fix git repository check to prevent errors in non-git directories
-- (@copilot) Fix version check to honor npm "latest" tag instead of jsDelivr
-- (@copilot) Add support for TypeScript-only adapters where main field points to .ts files
-- (@copilot) Add support for TypeScript-only adapters where main field points to .ts files
-- (@copilot) Add --no-browser-sync flag to run and watch commands for environments where BrowserSync causes issues
-- (@bolliy) Add support for ESM modules with .mjs file extensions
+- (@Apollon77/@copilot) Fix git repository check to prevent errors in non-git directories
+- (@Apollon77/@copilot) Fix version check to honor npm "latest" tag instead of jsDelivr
+- (@Apollon77/@copilot) Add support for TypeScript-only adapters where main field points to .ts files
+- (@Apollon77/@copilot) Add support for TypeScript-only adapters where main field points to .ts files
+- (@Apollon77/@copilot) Add --no-browser-sync flag to run and watch commands for environments where BrowserSync causes issues
+- (@Apollon77/@bolliy) Add support for ESM modules with .mjs file extensions
 
 ## 0.7.8 (2025-01-29)
 
