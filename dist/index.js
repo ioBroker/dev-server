@@ -970,7 +970,7 @@ class DevServer {
         return new Promise((resolve, reject) => {
             const patterns = this.getFilePatterns(['js', 'map'], true);
             const ignoreFiles = [];
-            const watcher = chokidar_1.default.watch(patterns, { cwd: this.rootDir });
+            const watcher = chokidar_1.default.watch(fast_glob_1.default.sync(patterns), { cwd: this.rootDir });
             let ready = false;
             let initialEventPromises = [];
             watcher.on('error', reject);

@@ -3,7 +3,11 @@
 <!--
     Placeholder for the next version (at the beginning of the line):
     ## **WORK IN PROGRESS**
--->
+ -->
+
+## __WORK IN PROGRESS_
+* (oweitman/Apollon77) Update chokidar and express
+
 ## 0.8.0 (2025-09-20)
 
 - (@Apollon77/@copilot) Fix git repository check to prevent errors in non-git directories

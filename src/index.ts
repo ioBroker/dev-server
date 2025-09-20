@@ -730,7 +730,7 @@ class DevServer {
                 this.websocket.on('error', error => this.log.silly(`WebSocket error: ${error}`));
                 this.websocket.on('message', msg => {
                     // eslint-disable-next-line @typescript-eslint/no-base-to-string
-                    const msgString = msg && typeof msg !== 'string' ? msg.toString() : null;
+                    const msgString = msg?.toString();
                     if (typeof msgString === 'string') {
                         try {
                             const data = JSON.parse(msgString);
@@ -1169,7 +1169,7 @@ class DevServer {
         return new Promise<void>((resolve, reject) => {
             const patterns = this.getFilePatterns(['js', 'map'], true);
             const ignoreFiles = [] as string[];
-            const watcher = chokidar.watch(patterns, { cwd: this.rootDir });
+            const watcher = chokidar.watch(fg.sync(patterns), { cwd: this.rootDir });
             let ready = false;
             let initialEventPromises: Promise<void>[] = [];
             watcher.on('error', reject);
