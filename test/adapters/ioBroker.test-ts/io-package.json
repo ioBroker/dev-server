@@ -1,6 +1,6 @@
 {
 	"common": {
-		"name": "test-js",
+		"name": "test-ts",
 		"version": "0.0.1",
 		"news": {
 			"0.0.1": {
@@ -18,30 +18,30 @@
 			}
 		},
 		"titleLang": {
-			"en": "Test JS",
-			"de": "Test JS",
-			"ru": "Test JS",
-			"pt": "Test JS",
-			"nl": "Test JS",
-			"fr": "Test JS",
-			"it": "Test JS",
-			"es": "Test JS",
-			"pl": "Test JS",
-			"uk": "Test JS",
-			"zh-cn": "Test JS"
+			"en": "Test TS",
+			"de": "Test TS",
+			"ru": "Test TS",
+			"pt": "Test TS",
+			"nl": "Test TS",
+			"fr": "Test TS",
+			"it": "Test TS",
+			"es": "Test TS",
+			"pl": "Test TS",
+			"uk": "Test TS",
+			"zh-cn": "Test TS"
 		},
 		"desc": {
-			"en": "Test adapter for dev-server integration testing",
-			"de": "Test adapter for dev-server integration testing",
-			"ru": "Test adapter for dev-server integration testing",
-			"pt": "Test adapter for dev-server integration testing",
-			"nl": "Test adapter for dev-server integration testing",
-			"fr": "Test adapter for dev-server integration testing",
-			"it": "Test adapter for dev-server integration testing",
-			"es": "Test adapter for dev-server integration testing",
-			"pl": "Test adapter for dev-server integration testing",
-			"uk": "Test adapter for dev-server integration testing",
-			"zh-cn": "Test adapter for dev-server integration testing"
+			"en": "Test TypeScript adapter for dev-server integration testing",
+			"de": "Test TypeScript adapter for dev-server integration testing",
+			"ru": "Test TypeScript adapter for dev-server integration testing",
+			"pt": "Test TypeScript adapter for dev-server integration testing",
+			"nl": "Test TypeScript adapter for dev-server integration testing",
+			"fr": "Test TypeScript adapter for dev-server integration testing",
+			"it": "Test TypeScript adapter for dev-server integration testing",
+			"es": "Test TypeScript adapter for dev-server integration testing",
+			"pl": "Test TypeScript adapter for dev-server integration testing",
+			"uk": "Test TypeScript adapter for dev-server integration testing",
+			"zh-cn": "Test TypeScript adapter for dev-server integration testing"
 		},
 		"authors": [
 			"Dev Server Test <test@example.com>"
@@ -49,17 +49,18 @@
 		"keywords": [
 			"test",
 			"dev-server",
-			"integration"
+			"integration",
+			"typescript"
 		],
 		"licenseInformation": {
 			"type": "free",
 			"license": "MIT"
 		},
 		"platform": "Javascript/Node.js",
-		"icon": "test-js.png",
+		"icon": "test-ts.png",
 		"enabled": true,
-		"extIcon": "https://raw.githubusercontent.com/Dev Server Test/ioBroker.test-js/main/admin/test-js.png",
-		"readme": "https://github.com/Dev Server Test/ioBroker.test-js/blob/main/README.md",
+		"extIcon": "https://raw.githubusercontent.com/Dev Server Test/ioBroker.test-ts/main/admin/test-ts.png",
+		"readme": "https://github.com/Dev Server Test/ioBroker.test-ts/blob/main/README.md",
 		"loglevel": "info",
 		"tier": 3,
 		"mode": "daemon",

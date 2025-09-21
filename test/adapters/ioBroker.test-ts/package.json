@@ -1,5 +1,5 @@
 {
-  "name": "iobroker.test-js",
+  "name": "iobroker.test-ts",
   "version": "0.0.1",
   "description": "Test adapter for dev-server integration testing",
   "author": {

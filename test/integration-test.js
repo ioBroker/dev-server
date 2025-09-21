@@ -17,8 +17,8 @@ const JS_ADAPTER_DIR = path.join(ADAPTERS_DIR, 'ioBroker.test-js');
 
 // Timeout for various operations (in ms)
 const SETUP_TIMEOUT = 120000; // 2 minutes
-const RUN_TIMEOUT = 60000; // 1 minute
-const WATCH_TIMEOUT = 60000; // 1 minute
+const RUN_TIMEOUT = 45000; // 45 seconds - reduced from 60s
+const WATCH_TIMEOUT = 45000; // 45 seconds - reduced from 60s
 
 /**
  * Run a command and return promise
@@ -74,20 +74,28 @@ function runCommandWithSignal(command, args, options = {}) {
         let stdout = '';
         let stderr = '';
         let killed = false;
+        let resolved = false;
 
         proc.stdout.on('data', (data) => {
             const str = data.toString();
             stdout += str;
-            console.log('STDOUT:', str.trim());
+            if (options.verbose) {
+                console.log('STDOUT:', str.trim());
+            }
         });
 
         proc.stderr.on('data', (data) => {
             const str = data.toString();
             stderr += str;
-            console.log('STDERR:', str.trim());
+            if (options.verbose) {
+                console.log('STDERR:', str.trim());
+            }
         });
 
         proc.on('close', (code) => {
+            if (resolved) return;
+            resolved = true;
+            
             if (killed) {
                 resolve({ stdout, stderr, code, killed: true });
             } else if (code === 0) {
@@ -97,29 +105,47 @@ function runCommandWithSignal(command, args, options = {}) {
             }
         });
 
+        proc.on('error', (error) => {
+            if (resolved) return;
+            resolved = true;
+            reject(error);
+        });
+
         // Auto-kill after timeout
         const timeoutId = setTimeout(() => {
-            console.log('Sending SIGINT...');
+            if (resolved) return;
+            
+            console.log('Timeout reached, sending SIGINT...');
             killed = true;
             proc.kill('SIGINT');
             
-            // Give it 5 seconds to gracefully exit, then force kill
+            // Give it 3 seconds to gracefully exit, then force kill
             setTimeout(() => {
-                if (!proc.killed) {
-                    console.log('Sending SIGKILL...');
+                if (!resolved && !proc.killed) {
+                    console.log('Force killing with SIGKILL...');
                     proc.kill('SIGKILL');
                 }
-            }, 5000);
+                
+                // Final fallback - resolve after another 2 seconds
+                setTimeout(() => {
+                    if (!resolved) {
+                        resolved = true;
+                        resolve({ stdout, stderr, code: -1, killed: true, timeout: true });
+                    }
+                }, 2000);
+            }, 3000);
         }, options.timeout || 30000);
 
-        // Return the process and cleanup function
-        resolve.proc = proc;
-        resolve.cleanup = () => {
+        // Cleanup function
+        const cleanup = () => {
             clearTimeout(timeoutId);
-            if (!killed && !proc.killed) {
+            if (!resolved && !killed && !proc.killed) {
                 proc.kill('SIGINT');
             }
         };
+
+        // Attach cleanup to the returned promise
+        resolve.cleanup = cleanup;
     });
 }
 
