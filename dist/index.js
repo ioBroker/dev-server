@@ -599,7 +599,7 @@ class DevServer {
                 this.websocket.on('message', msg => {
                     var _a;
                     // eslint-disable-next-line @typescript-eslint/no-base-to-string
-                    const msgString = msg && typeof msg !== 'string' ? msg.toString() : null;
+                    const msgString = msg === null || msg === void 0 ? void 0 : msg.toString();
                     if (typeof msgString === 'string') {
                         try {
                             const data = JSON.parse(msgString);
