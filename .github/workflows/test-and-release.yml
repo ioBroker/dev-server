@@ -69,7 +69,7 @@ jobs:
         run: npm run build
 
       - name: Run integration tests
-        run: node test/ci-test.js
+        run: npm test
         timeout-minutes: 5
 
   # Deploys the final package to NPM

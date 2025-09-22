@@ -4,66 +4,71 @@ This directory contains integration tests for the dev-server tool that verify it
 
 ## Test Structure
 
-- **`ci-test.js`** - Fast CI tests for essential functionality (runs in CI)
-- **`integration-test.js`** - Full integration tests including runtime testing  
-- **`adapters/`** - Test adapters created with @iobroker/create-adapter
+- **`dev-server.test.js`** - Mocha-based integration tests for dev-server functionality
+- **`test-utils.js`** - Shared utilities for running commands and creating test adapters
+- **`adapters/`** - Configuration files for test adapters
 
-## Test Adapters
+## Test Adapter Configuration
 
-The test suite uses real ioBroker adapters created with `@iobroker/create-adapter`:
+The test suite uses configuration files to create real ioBroker adapters on-the-fly:
 
-- **`ioBroker.test-js/`** - JavaScript test adapter 
-- **`ioBroker.test-ts/`** - TypeScript test adapter (based on JS config)
+- **`adapters/test-js.create-adapter.json`** - JavaScript test adapter configuration
+- **`adapters/test-ts.create-adapter.json`** - TypeScript test adapter configuration
 
-These adapters include `.create-adapter.json` configuration files that can be reused for consistent test adapter recreation.
+These configuration files are used with `@iobroker/create-adapter --replay` to dynamically create test adapters before running the tests.
 
 ## What is Tested
 
-### CI Tests (`npm test`)
-- ✅ Adapter configuration validation (io-package.json, package.json, main.js)
-- ✅ `dev-server setup` command functionality
-- ✅ Directory structure creation (.dev-server, node_modules, iobroker.json)
+### Adapter Configuration Tests
+- ✅ Validates io-package.json, package.json, and main.js files exist and are valid
+- ✅ Ensures TypeScript adapters have proper tsconfig.json configuration
+- ✅ Verifies adapter metadata and keywords are correctly set
 
-### Full Integration Tests (`npm run test:full`)
-- ✅ `dev-server setup` - Creates complete dev environment
-- ✅ `dev-server run` - Starts js-controller and admin.0 without errors
-- ✅ `dev-server watch` - Starts adapter with hot-reload and file sync
-- ✅ Process cleanup with SIGINT signal handling
-- ✅ Log validation for host, admin.0, and adapter processes
+### Dev-server Command Tests  
+- ✅ `dev-server setup` - Creates complete dev environment (.dev-server, node_modules, iobroker.json)
+- ✅ `dev-server run` - Starts js-controller and admin.0 without starting the adapter under test
+- ✅ `dev-server watch` - Starts adapter with hot-reload and validates info logs are produced
+
+### Process Management Tests
+- ✅ Validates proper SIGINT signal handling and graceful shutdown
+- ✅ Ensures no test-js.0 logs appear in "run" mode (adapter should not start)
+- ✅ Validates test-js.0 info logs appear in "watch" mode (adapter should start)
 
 ## Running Tests
 
 ```bash
-# Fast CI tests (used in GitHub Actions)
+# Run all integration tests
 npm test
 
-# Full integration tests (for development)
-npm run test:full
-
-# Run tests directly
-node test/ci-test.js
-node test/integration-test.js
+# Run with verbose mocha output
+npx mocha test/dev-server.test.js --reporter spec
 ```
+
+## Test Workflow
+
+1. **Setup Phase**: Creates test adapters using @iobroker/create-adapter
+2. **Configuration Tests**: Validates adapter files and structure
+3. **Setup Tests**: Tests dev-server setup command functionality
+4. **Runtime Tests**: Tests run and watch commands with proper log validation
+5. **Cleanup Phase**: Removes created test adapters
 
 ## Requirements Validation
 
 These tests validate the requirements specified in issue #507:
 
-1. ✅ **Adapter Creation**: Uses @iobroker/create-adapter to create test adapters
+1. ✅ **Dynamic Adapter Creation**: Uses @iobroker/create-adapter with replay configs
 2. ✅ **Setup Command**: Validates `.dev-server` directory with node_modules and iobroker.json
-3. ✅ **Run Command**: Validates js-controller and admin.0 startup with proper logging
-4. ✅ **Watch Command**: Validates adapter startup and log integration  
+3. ✅ **Run Command**: Validates js-controller and admin.0 startup, ensures adapter doesn't start
+4. ✅ **Watch Command**: Validates adapter startup and info log production
 5. ✅ **Process Management**: All processes exit cleanly with SIGINT
-6. ✅ **CI Integration**: Tests run in GitHub Actions workflow
+6. ✅ **CI Integration**: Tests run in GitHub Actions workflow with proper timeouts
 
-## Test Adapter Configuration
+## Implementation Notes
 
-The test adapters are configured as:
+- Test adapters are created dynamically and cleaned up after tests
+- Uses mocha testing framework with proper describe/it structure
+- Shared utilities prevent code duplication between tests
+- Proper timeout handling for long-running operations
+- Validates specific log patterns to ensure correct behavior
 
-- **Language**: JavaScript (test-js) and TypeScript (test-ts)  
-- **Port**: 8081 (JS) and 8082 (TS) for admin interface
-- **Type**: Network adapters with polling data source
-- **Features**: ESLint, type checking, dev-server integration
-- **Admin UI**: JSON-based configuration
-
-The `.create-adapter.json` files preserve the exact configuration used for reproducible test adapter creation.
+If adapter creation fails due to network issues, the tests will fail with clear error messages indicating the problem with the @iobroker/create-adapter tool.
