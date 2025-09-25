@@ -16,7 +16,7 @@
     "node": ">=16.0.0"
   },
   "scripts": {
-    "test": "mocha test/dev-server.test.js",
+    "test": "npx mocha test/dev-server.test.js",
     "prebuild": "rimraf ./dist",
     "build": "tsc -p tsconfig.build.json",
     "watch": "tsc -p tsconfig.build.json --watch",

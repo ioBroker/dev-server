@@ -1,14 +1,13 @@
 {
 	"cli": true,
 	"target": "directory",
-	"adapterName": "test-ts",
-	"title": "Test TS",
-	"description": "Test TypeScript adapter for dev-server integration testing",
+	"adapterName": "test-js",
+	"title": "Test JS",
+	"description": "Test adapter for dev-server integration testing",
 	"keywords": [
 		"test",
 		"dev-server",
-		"integration",
-		"typescript"
+		"integration"
 	],
 	"expert": "no",
 	"features": [
@@ -20,7 +19,7 @@
 	"connectionType": "local",
 	"dataSource": "poll",
 	"connectionIndicator": "no",
-	"language": "TypeScript",
+	"language": "JavaScript",
 	"nodeVersion": "20",
 	"adminUi": "json",
 	"tools": [
@@ -29,7 +28,7 @@
 	],
 	"releaseScript": "no",
 	"devServer": "no",
-	"devServerPort": 8082,
+	"devServerPort": 8081,
 	"indentation": "Tab",
 	"quotes": "double",
 	"authorName": "Dev Server Test",
@@ -41,5 +40,6 @@
 	"defaultBranch": "main",
 	"license": "MIT License",
 	"dependabot": "yes",
-	"creatorVersion": "2.6.5"
+	"creatorVersion": "2.6.5",
+	"replay": "/home/runner/work/dev-server/dev-server/test/adapters/test-js.create-adapter.json"
 }

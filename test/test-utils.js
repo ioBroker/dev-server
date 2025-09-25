@@ -150,8 +150,8 @@ async function createTestAdapter(configFile, targetDir) {
     try {
         await runCommand('npx', [
             '@iobroker/create-adapter@latest', 
-            '--replay', configPath, 
-            '--target', targetDir,
+            `--replay=${configPath}`, 
+            `--target=${targetDir}`,
             '--noInstall'  // Skip npm install to speed up creation
         ], {
             cwd: targetDir,

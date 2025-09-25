@@ -46,11 +46,26 @@ npx mocha test/dev-server.test.js --reporter spec
 
 ## Test Workflow
 
-1. **Setup Phase**: Creates test adapters using @iobroker/create-adapter
+1. **Setup Phase**: Creates test adapters using @iobroker/create-adapter with --replay parameter
 2. **Configuration Tests**: Validates adapter files and structure
 3. **Setup Tests**: Tests dev-server setup command functionality
 4. **Runtime Tests**: Tests run and watch commands with proper log validation
 5. **Cleanup Phase**: Removes created test adapters
+
+## Configuration Details
+
+The `.create-adapter.json` files include all necessary parameters to avoid interactive prompts:
+- `contributors: ""` - Empty contributors field to prevent prompts
+- `devServer: "no"` - Prevents installing dev-server globally during adapter creation
+- Complete author and project metadata to ensure non-interactive creation
+
+## Troubleshooting
+
+If adapter creation fails with prompts:
+- Ensure all required fields are present in the `.create-adapter.json` files
+- Verify the `--replay=` parameter uses the equals sign format
+- Check that `contributors` field is included (can be empty string)
+- Confirm `devServer` is set to `"no"` to avoid global dev-server installation
 
 ## Requirements Validation
 
