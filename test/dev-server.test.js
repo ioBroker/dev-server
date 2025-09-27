@@ -173,7 +173,7 @@ describe('dev-server integration tests', function() {
                 const output = result.stdout + result.stderr;
 
                 // Should see test adapter logs
-                assert.ok(!output.includes('startInstance test-js.0'), 'No test-js.0 controller starting found in output');
+                assert.ok(!output.includes('startInstance test-js.0'), 'test-js.0 should not start in watch mode (no "startInstance test-js.0" log expected)');
                 assert.ok(output.includes('adapter disabled'), 'No test-js.0 disabled info found in output');
 
                 assert.ok(output.includes('starting. Version 0.0.1'), 'No test-js.0 adapter starting in output');
