@@ -576,6 +576,11 @@ class DevServer {
             exiting = true;
             server.close();
             // do not kill this process when receiving SIGINT, but let all child processes exit first
+            // but send the signal to all child processes when not in a tty environment
+            if (!process.stdin.isTTY) {
+                this.log.silly('Sending SIGINT to all child processes...');
+                this.childProcesses.forEach(p => p.kill('SIGINT'));
+            }
         });
         await new Promise((resolve, reject) => {
             server.on('listening', resolve);

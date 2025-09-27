@@ -16,14 +16,16 @@
     "node": ">=16.0.0"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "mocha test/*.test.js --exit",
+    "test:js": "mocha test/js-adapters.test.js --exit",
+    "test:ts": "mocha test/ts-adapters.test.js --exit",
     "prebuild": "rimraf ./dist",
     "build": "tsc -p tsconfig.build.json",
     "watch": "tsc -p tsconfig.build.json --watch",
     "check": "tsc --noEmit",
     "lint": "eslint -c eslint.config.mjs",
     "release": "release-script",
-    "npm": "npm i -f",
+    "npm": "npm i",
     "update-packages": "npx -y npm-check-updates --upgrade"
   },
   "author": "UncleSamSwiss",
@@ -51,6 +53,7 @@
     "@types/table": "^6.3.2",
     "@types/ws": "^8.18.1",
     "@types/yargs": "^17.0.33",
+    "mocha": "^11.7.2",
     "source-map-support": "^0.5.21",
     "typescript": "~5.9.2"
   },
