@@ -56,7 +56,7 @@ jobs:
     strategy:
       matrix:
         node-version: [20.x, 22.x, 24.x]
-        test-variant: ["test:ts", "test:js"]
+        test-variant: ["test:ts", "test:js", "test:pure-ts"]
 
     steps:
       - name: Checkout code

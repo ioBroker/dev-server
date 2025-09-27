@@ -1149,7 +1149,7 @@ class DevServer {
             await this.startNodemon(adapterRunDir, pkg.main, doNotWatch);
         } else {
             const isTypeScript = this.isTypeScriptMain(pkg.main);
-            const runner = isTypeScript ? 'ts-node' : 'node';
+            const runner = isTypeScript ? 'node -r @alcalzone/esbuild-register' : 'node';
             this.log.box(
                 `You can now start the adapter manually by running\n    ` +
                     `${runner} node_modules/iobroker.${this.adapterName}/${pkg.main} --debug 0\nfrom within\n    ${
@@ -1256,7 +1256,7 @@ class DevServer {
         const execMap: Record<string, string> = {
             js: 'node --inspect --preserve-symlinks --preserve-symlinks-main',
             mjs: 'node --inspect --preserve-symlinks --preserve-symlinks-main',
-            ts: 'node --inspect --preserve-symlinks --preserve-symlinks-main --require ts-node/register',
+            ts: 'node --inspect --preserve-symlinks --preserve-symlinks-main --require @alcalzone/esbuild-register',
         };
 
         nodemon({
@@ -1433,10 +1433,10 @@ class DevServer {
             delete dependencies['iobroker.js-controller'];
         }
 
-        // Check if the adapter uses TypeScript and add ts-node dependency if needed
+        // Check if the adapter uses TypeScript and add esbuild-register dependency if needed
         const adapterPkg = await this.readPackageJson();
         if (this.isTypeScriptMain(adapterPkg.main)) {
-            (dependencies as any)['ts-node'] = '^10.9.2';
+            (dependencies as any)['@alcalzone/esbuild-register'] = '^2.5.1-1';
         }
 
         const pkg = {

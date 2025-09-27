@@ -7,6 +7,7 @@
 
 ## __WORK IN PROGRESS_
 * (oweitman/Apollon77) Update chokidar and express
+* (@copilot) Switch from ts-node to @alcalzone/esbuild-register for TypeScript support to fix conflicts with Node.js experimental TypeScript features
 
 ## 0.8.0 (2025-09-20)
 
