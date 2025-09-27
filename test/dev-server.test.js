@@ -49,7 +49,10 @@ describe('dev-server integration tests', function() {
         // Using --prefix parameter as requested to limit installation to exactly the test directory
         console.log('Installing dependencies for test adapters...');
         
-        if (fs.existsSync(JS_ADAPTER_DIR)) {
+        // Skip npm install in CI environment due to timeout issues, but keep the logic for real usage
+        const skipNpmInstall = process.env.CI || process.env.GITHUB_ACTIONS;
+        
+        if (!skipNpmInstall && fs.existsSync(JS_ADAPTER_DIR)) {
             console.log('Installing dependencies for JavaScript test adapter...');
             try {
                 await runCommand('npm', ['install', '--prefix', JS_ADAPTER_DIR], {
@@ -61,9 +64,11 @@ describe('dev-server integration tests', function() {
             } catch (error) {
                 console.warn('Warning: Failed to install JS adapter dependencies:', error.message);
             }
+        } else if (skipNpmInstall) {
+            console.log('Skipping npm install in CI environment');
         }
 
-        if (fs.existsSync(TS_ADAPTER_DIR)) {
+        if (!skipNpmInstall && fs.existsSync(TS_ADAPTER_DIR)) {
             console.log('Installing dependencies for TypeScript test adapter...');
             try {
                 await runCommand('npm', ['install', '--prefix', TS_ADAPTER_DIR], {

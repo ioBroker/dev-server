@@ -1,0 +1,91 @@
+{
+	"common": {
+		"name": "test-ts",
+		"version": "0.0.1",
+		"news": {
+			"0.0.1": {
+				"en": "initial release",
+				"de": "Erstveröffentlichung",
+				"ru": "Начальная версия",
+				"pt": "lançamento inicial",
+				"nl": "Eerste uitgave",
+				"fr": "Première version",
+				"it": "Versione iniziale",
+				"es": "Versión inicial",
+				"pl": "Pierwsze wydanie",
+				"uk": "Початкова версія",
+				"zh-cn": "首次出版"
+			}
+		},
+		"titleLang": {
+			"en": "Test TS",
+			"de": "Test ts",
+			"ru": "Тест ts",
+			"pt": "Teste ts",
+			"nl": "Test ts",
+			"fr": "Tester TS",
+			"it": "Test TS",
+			"es": "Prueba TS",
+			"pl": "Test TS",
+			"uk": "Тест ТС",
+			"zh-cn": "测试TS"
+		},
+		"desc": {
+			"en": "Test TypeScript adapter for dev-server integration testing",
+			"de": "Test TypeScript-Adapter für Dev-Server-Integrationstests",
+			"ru": "Адаптер Test TypeScript для тестирования интеграции Dev-Server",
+			"pt": "Adaptador TypeScript para teste para testes de integração do servidor de dev-servidores",
+			"nl": "Test Typescript-adapter voor dev-server integratietests",
+			"fr": "Test TypeScript Adaptateur pour les tests d'intégration Dev-Server",
+			"it": "Adattatore Test TypeScript per test di integrazione Dev Server",
+			"es": "Prueba de adaptador de mecanografiado para pruebas de integración de servidor de dev",
+			"pl": "Test TypeScript Adapter do testowania integracji deweloperów",
+			"uk": "Тест-апарат TypeScript для тестування інтеграції Dev-Server",
+			"zh-cn": "用于开发服务器集成测试的测试打字条适配器"
+		},
+		"authors": [
+			"Dev Server Test <test@example.com>"
+		],
+		"keywords": [
+			"test",
+			"dev-server",
+			"integration",
+			"typescript"
+		],
+		"licenseInformation": {
+			"type": "free",
+			"license": "MIT"
+		},
+		"platform": "Javascript/Node.js",
+		"icon": "test-ts.png",
+		"enabled": true,
+		"extIcon": "https://raw.githubusercontent.com/Dev Server Test/ioBroker.test-ts/main/admin/test-ts.png",
+		"readme": "https://github.com/Dev Server Test/ioBroker.test-ts/blob/main/README.md",
+		"loglevel": "info",
+		"tier": 3,
+		"mode": "daemon",
+		"type": "network",
+		"compact": true,
+		"connectionType": "local",
+		"dataSource": "poll",
+		"adminUI": {
+			"config": "json"
+		},
+		"dependencies": [
+			{
+				"js-controller": ">=6.0.11"
+			}
+		],
+		"globalDependencies": [
+			{
+				"admin": "7.0.23"
+			}
+		]
+	},
+	"native": {
+		"option1": true,
+		"option2": "42"
+	},
+	"objects": [],
+	"instanceObjects": []
+}
