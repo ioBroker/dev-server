@@ -38,7 +38,7 @@ function runCommand(command, args, options = {}) {
             if (rejectedOrResolved) return;
             if (timeoutId) clearTimeout(timeoutId);
             if (code === 0 || code === 255) {
-                setTimeout(() =>resolve({ stdout, stderr, code }), 5000);
+                setTimeout(() => resolve({ stdout, stderr, code }), 5000);
             } else {
                 setTimeout(reject(new Error(`Command failed with exit code ${code}\nSTDOUT: ${stdout}\nSTDERR: ${stderr}`)), 5000);
             }
