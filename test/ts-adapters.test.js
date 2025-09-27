@@ -36,8 +36,7 @@ describe('dev-server integration tests', function () {
             configFile: TS_ADAPTER_CONFIG,
             adapterDir: TS_ADAPTER_DIR,
             adaptersDir: ADAPTERS_DIR,
-            needsTypeScriptPatching: true,
-            needsPureTypeScriptSetup: false
+            needsTypeScriptPatching: true
         });
     });
 
