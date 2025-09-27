@@ -17,42 +17,38 @@ const SETUP_TIMEOUT = 180000; // 3 minutes
 const RUN_TIMEOUT = 120000; // 2 minutes
 const WATCH_TIMEOUT = 120000; // 2 minutes
 
-describe('dev-server integration tests', function() {
-    // Increase timeout for the whole suite
-    this.timeout(200000); // 200 seconds (reduced from 300)
-
-    before(async function() {
+describe('dev-server integration tests', () => {
+    before(() => {
         console.log('Setting up test adapters...');
         console.log('Test directory:', TEST_DIR);
         console.log('Dev-server root:', DEV_SERVER_ROOT);
         console.log('Node.js version:', process.version);
+    });
 
-        // Create JavaScript test adapter
-        if (fs.existsSync(JS_ADAPTER_CONFIG)) {
-            console.log('Creating JavaScript test adapter...');
-            await createTestAdapter(JS_ADAPTER_CONFIG, ADAPTERS_DIR);
-        } else {
-            throw new Error(`JavaScript adapter config not found: ${JS_ADAPTER_CONFIG}`);
-        }
+    describe('JavaScript Adapter', function () {
+        // Increase timeout for the whole suite
+        this.timeout(200000); // 200 seconds (reduced from 300)
 
-        // Create TypeScript test adapter
-        if (fs.existsSync(TS_ADAPTER_CONFIG)) {
-            console.log('Creating TypeScript test adapter...');
-            await createTestAdapter(TS_ADAPTER_CONFIG, ADAPTERS_DIR);
-        } else {
-            throw new Error(`TypeScript adapter config not found: ${TS_ADAPTER_CONFIG}`);
-        }
+        before(async () => {
+            console.log('Setting up test adapters...');
+            console.log('Test directory:', TEST_DIR);
+            console.log('Dev-server root:', DEV_SERVER_ROOT);
+            console.log('Node.js version:', process.version);
 
-        console.log('Test adapters created successfully');
+            // Create JavaScript test adapter
+            if (fs.existsSync(JS_ADAPTER_CONFIG)) {
+                console.log('Creating JavaScript test adapter...');
+                await createTestAdapter(JS_ADAPTER_CONFIG, ADAPTERS_DIR);
+            } else {
+                throw new Error(`JavaScript adapter config not found: ${JS_ADAPTER_CONFIG}`);
+            }
 
-        // Run npm install for both test adapters to ensure dependencies are installed locally
-        // Using --prefix parameter as requested to limit installation to exactly the test directory
-        console.log('Installing dependencies for test adapters...');
-        
-        // Skip npm install in CI environment due to timeout issues, but keep the logic for real usage
-        const skipNpmInstall = process.env.CI || process.env.GITHUB_ACTIONS;
-        
-        if (!skipNpmInstall && fs.existsSync(JS_ADAPTER_DIR)) {
+            console.log('Test adapters created successfully');
+
+            // Run npm install for both test adapters to ensure dependencies are installed locally
+            // Using --prefix parameter as requested to limit installation to exactly the test directory
+            console.log('Installing dependencies for test adapters...');
+
             console.log('Installing dependencies for JavaScript test adapter...');
             try {
                 await runCommand('npm', ['install', '--prefix', JS_ADAPTER_DIR], {
@@ -64,45 +60,22 @@ describe('dev-server integration tests', function() {
             } catch (error) {
                 console.warn('Warning: Failed to install JS adapter dependencies:', error.message);
             }
-        } else if (skipNpmInstall) {
-            console.log('Skipping npm install in CI environment');
-        }
 
-        if (!skipNpmInstall && fs.existsSync(TS_ADAPTER_DIR)) {
-            console.log('Installing dependencies for TypeScript test adapter...');
+            console.log('All test adapters prepared successfully');
+        });
+
+        after(() => {
+            // Clean up test adapters
+            console.log('Cleaning up test adapters...');
             try {
-                await runCommand('npm', ['install', '--prefix', TS_ADAPTER_DIR], {
-                    cwd: TS_ADAPTER_DIR,
-                    timeout: 120000, // 2 minutes
-                    verbose: false
-                });
-                console.log('TypeScript test adapter dependencies installed');
-            } catch (error) {
-                console.warn('Warning: Failed to install TS adapter dependencies:', error.message);
-            }
-        }
-
-        console.log('All test adapters prepared successfully');
-    });
-
-    after(function() {
-        // Clean up test adapters
-        console.log('Cleaning up test adapters...');
-        try {
-            if (fs.existsSync(JS_ADAPTER_DIR)) {
                 fs.rmSync(JS_ADAPTER_DIR, { recursive: true, force: true });
+            } catch (error) {
+                console.warn('Error cleaning up test adapters:', error.message);
             }
-            if (fs.existsSync(TS_ADAPTER_DIR)) {
-                fs.rmSync(TS_ADAPTER_DIR, { recursive: true, force: true });
-            }
-        } catch (error) {
-            console.warn('Error cleaning up test adapters:', error.message);
-        }
-    });
+        });
 
-    describe('JavaScript Adapter', function() {
-        describe('Adapter Configuration', function() {
-            it('should have valid io-package.json', function() {
+        describe('Adapter Configuration', () => {
+            it('should have valid io-package.json', () => {
                 const ioPackagePath = path.join(JS_ADAPTER_DIR, 'io-package.json');
                 assert.ok(fs.existsSync(ioPackagePath), 'io-package.json not found');
 
@@ -112,7 +85,7 @@ describe('dev-server integration tests', function() {
                 assert.strictEqual(ioPackage.common.name, 'test-js', 'Adapter name should be test-js');
             });
 
-            it('should have valid package.json', function() {
+            it('should have valid package.json', () => {
                 const packagePath = path.join(JS_ADAPTER_DIR, 'package.json');
                 assert.ok(fs.existsSync(packagePath), 'package.json not found');
 
@@ -121,19 +94,19 @@ describe('dev-server integration tests', function() {
                 assert.ok(packageJson.version, 'package.json missing version');
             });
 
-            it('should have main adapter file', function() {
+            it('should have main adapter file', () => {
                 const mainFile = path.join(JS_ADAPTER_DIR, 'main.js');
                 assert.ok(fs.existsSync(mainFile), 'main.js adapter file not found');
             });
         });
 
-        describe('dev-server setup', function() {
-            it('should create .dev-server directory structure', async function() {
+        describe('dev-server setup', () => {
+            it('should create .dev-server directory structure', async () => {
                 this.timeout(SETUP_TIMEOUT);
 
                 const devServerPath = path.join(DEV_SERVER_ROOT, 'dist', 'index.js');
 
-                const result = await runCommand('node', [devServerPath, 'setup'], {
+                await runCommand('node', [devServerPath, 'setup'], {
                     cwd: JS_ADAPTER_DIR,
                     timeout: SETUP_TIMEOUT,
                     verbose: true
@@ -157,8 +130,8 @@ describe('dev-server integration tests', function() {
             });
         });
 
-        describe('dev-server run', function() {
-            it('should start js-controller and admin.0 but not the adapter', async function() {
+        describe('dev-server run', () => {
+            it('should start js-controller and admin.0 but not the adapter', async () => {
                 this.timeout(RUN_TIMEOUT + 10000);
 
                 const devServerPath = path.join(DEV_SERVER_ROOT, 'dist', 'index.js');
@@ -172,7 +145,6 @@ describe('dev-server integration tests', function() {
 
                 const output = result.stdout + result.stderr;
 
-                console.log('dev-server run output:\n', output);
                 // Should see host logs
                 assert.ok(output.includes('host.'), 'No host logs found in output');
 
@@ -196,8 +168,8 @@ describe('dev-server integration tests', function() {
             });
         });
 
-        describe('dev-server watch', function() {
-            it('should start adapter and show info logs', async function() {
+        describe('dev-server watch', () => {
+            it('should start adapter and show info logs', async () => {
                 this.timeout(WATCH_TIMEOUT + 10000);
 
                 const devServerPath = path.join(DEV_SERVER_ROOT, 'dist', 'index.js');
@@ -235,9 +207,62 @@ describe('dev-server integration tests', function() {
         });
     });
 
-    describe('TypeScript Adapter', function() {
-        describe('Adapter Configuration', function() {
-            it('should have valid io-package.json with TypeScript metadata', function() {
+    describe('TypeScript Adapter', function () {
+        // Increase timeout for the whole suite
+        this.timeout(200000); // 200 seconds (reduced from 300)
+
+        before(async () => {
+            // Create TypeScript test adapter
+            if (fs.existsSync(TS_ADAPTER_CONFIG)) {
+                console.log('Creating TypeScript test adapter...');
+                await createTestAdapter(TS_ADAPTER_CONFIG, ADAPTERS_DIR);
+            } else {
+                throw new Error(`TypeScript adapter config not found: ${TS_ADAPTER_CONFIG}`);
+            }
+
+            console.log('Test adapters created successfully');
+
+            // Patch the main.ts file because create-adapter generates non-ts-compliant files right now
+            // Remove when new version of create-adapter is released
+            const mainTsPath = path.join(TS_ADAPTER_DIR, 'src', 'main.ts');
+            let mainTsContent = fs.readFileSync(mainTsPath, 'utf8');
+            mainTsContent = mainTsContent.replace('let result = await this.checkPasswordAsync("admin", "iobroker");', 'const result = await this.checkPasswordAsync("admin", "iobroker");');
+            mainTsContent = mainTsContent.replace('result = await this.checkGroupAsync("admin", "admin");', 'const groupResult = await this.checkGroupAsync("admin", "admin");');
+            mainTsContent = mainTsContent.replace('this.log.info("check group user admin group admin: " + result);', 'this.log.info("check group user admin group admin: " + groupResult);');
+            fs.writeFileSync(mainTsPath, mainTsContent, 'utf8');
+            console.log(`Patched ${mainTsPath} for TypeScript compliance`);
+
+            // Run npm install for both test adapters to ensure dependencies are installed locally
+            // Using --prefix parameter as requested to limit installation to exactly the test directory
+            console.log('Installing dependencies for test adapters...');
+
+            console.log('Installing dependencies for TypeScript test adapter...');
+            try {
+                await runCommand('npm', ['install', '--prefix', TS_ADAPTER_DIR], {
+                    cwd: TS_ADAPTER_DIR,
+                    timeout: 120000, // 2 minutes
+                    verbose: false
+                });
+                console.log('TypeScript test adapter dependencies installed');
+            } catch (error) {
+                console.warn('Warning: Failed to install TS adapter dependencies:', error.message);
+            }
+
+            console.log('All test adapters prepared successfully');
+        });
+
+        after(() => {
+            // Clean up test adapters
+            console.log('Cleaning up test adapters...');
+            try {
+                fs.rmSync(TS_ADAPTER_DIR, { recursive: true, force: true });
+            } catch (error) {
+                console.warn('Error cleaning up test adapters:', error.message);
+            }
+        });
+
+        describe('Adapter Configuration', () => {
+            it('should have valid io-package.json with TypeScript metadata', () => {
                 const ioPackagePath = path.join(TS_ADAPTER_DIR, 'io-package.json');
                 assert.ok(fs.existsSync(ioPackagePath), 'io-package.json not found');
 
@@ -250,24 +275,23 @@ describe('dev-server integration tests', function() {
                 assert.ok(ioPackage.common.keywords.includes('typescript'), 'Should include typescript keyword');
             });
 
-            it('should have TypeScript configuration files', function() {
+            it('should have TypeScript configuration files', () => {
                 const tsconfigPath = path.join(TS_ADAPTER_DIR, 'tsconfig.json');
                 assert.ok(fs.existsSync(tsconfigPath), 'tsconfig.json not found for TypeScript adapter');
             });
         });
 
-        describe('dev-server setup', function() {
-            it('should create .dev-server directory structure', async function() {
+        describe('dev-server setup', () => {
+            it('should create .dev-server directory structure', async () => {
                 this.timeout(SETUP_TIMEOUT);
 
                 const devServerPath = path.join(DEV_SERVER_ROOT, 'dist', 'index.js');
 
-                const result = await runCommand('node', [devServerPath, 'setup'], {
+                await runCommand('node', [devServerPath, 'setup'], {
                     cwd: TS_ADAPTER_DIR,
-                    timeout: SETUP_TIMEOUT
+                    timeout: SETUP_TIMEOUT,
+                    verbose: true
                 });
-
-                console.log('dev-server setup output:', result.stdout);
 
                 // Check that .dev-server directory was created
                 const devServerDir = path.join(TS_ADAPTER_DIR, '.dev-server');
@@ -281,18 +305,18 @@ describe('dev-server integration tests', function() {
                 const packageJsonPath = path.join(defaultProfileDir, 'package.json');
                 assert.ok(fs.existsSync(packageJsonPath), 'package.json not created in profile directory');
 
-                // Check that iobroker.json was created  
-                const iobrokerJsonPath = path.join(defaultProfileDir, 'iobroker.json');
-                assert.ok(fs.existsSync(iobrokerJsonPath), 'iobroker.json not created in profile directory');
-
                 // Check node_modules exists
                 const nodeModulesPath = path.join(defaultProfileDir, 'node_modules');
                 assert.ok(fs.existsSync(nodeModulesPath), 'node_modules directory not created');
+
+                // Check that iobroker.json was created
+                const iobrokerJsonPath = path.join(defaultProfileDir, 'iobroker-data', 'iobroker.json');
+                assert.ok(fs.existsSync(iobrokerJsonPath), 'iobroker.json not created in profile directory');
             });
         });
 
-        describe('dev-server run', function() {
-            it('should start js-controller and admin.0 but not the adapter', async function() {
+        describe('dev-server run', () => {
+            it('should start js-controller and admin.0 but not the adapter', async () => {
                 this.timeout(RUN_TIMEOUT + 10000);
 
                 const devServerPath = path.join(DEV_SERVER_ROOT, 'dist', 'index.js');
@@ -306,7 +330,6 @@ describe('dev-server integration tests', function() {
 
                 const output = result.stdout + result.stderr;
 
-                console.log('dev-server run output:\n', output);
                 // Should see host logs
                 assert.ok(output.includes('host.'), 'No host logs found in output');
 
@@ -332,8 +355,8 @@ describe('dev-server integration tests', function() {
             });
         });
 
-        describe('dev-server watch', function() {
-            it('should start adapter and show info logs', async function() {
+        describe('dev-server watch', () => {
+            it('should start adapter and show info logs', async () => {
                 this.timeout(WATCH_TIMEOUT + 10000);
 
                 const devServerPath = path.join(DEV_SERVER_ROOT, 'dist', 'index.js');

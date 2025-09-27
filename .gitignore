@@ -5,9 +5,6 @@ iobroker-data/
 .dev-server/
 .idea
 
-# Test adapter development directories
-test/adapters/*/.dev-server/
-test/adapters/*/node_modules/
 # Generated test adapters (created dynamically by tests)
 test/adapters/ioBroker.test-*/
 
