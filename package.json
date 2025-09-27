@@ -16,14 +16,14 @@
     "node": ">=16.0.0"
   },
   "scripts": {
-    "test": "npx mocha test/dev-server.test.js",
+    "test": "mocha test/dev-server.test.js --exit",
     "prebuild": "rimraf ./dist",
     "build": "tsc -p tsconfig.build.json",
     "watch": "tsc -p tsconfig.build.json --watch",
     "check": "tsc --noEmit",
     "lint": "eslint -c eslint.config.mjs",
     "release": "release-script",
-    "npm": "npm i -f",
+    "npm": "npm i",
     "update-packages": "npx -y npm-check-updates --upgrade"
   },
   "author": "UncleSamSwiss",
