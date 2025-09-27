@@ -576,6 +576,11 @@ class DevServer {
             exiting = true;
             server.close();
             // do not kill this process when receiving SIGINT, but let all child processes exit first
+            // but send the signal to all child processes when not in a tty environment
+            if (!process.stdin.isTTY) {
+                this.log.silly('Sending SIGINT to all child processes...');
+                this.childProcesses.forEach(p => p.kill('SIGINT'));
+            }
         });
         await new Promise((resolve, reject) => {
             server.on('listening', resolve);
@@ -599,7 +604,7 @@ class DevServer {
                 this.websocket.on('message', msg => {
                     var _a;
                     // eslint-disable-next-line @typescript-eslint/no-base-to-string
-                    const msgString = msg && typeof msg !== 'string' ? msg.toString() : null;
+                    const msgString = msg === null || msg === void 0 ? void 0 : msg.toString();
                     if (typeof msgString === 'string') {
                         try {
                             const data = JSON.parse(msgString);
