@@ -16,7 +16,9 @@
     "node": ">=16.0.0"
   },
   "scripts": {
-    "test": "mocha test/dev-server.test.js --exit",
+    "test": "mocha test/*.test.js --exit",
+    "test:js": "mocha test/js-adapters.test.js --exit",
+    "test:ts": "mocha test/ts-adapters.test.js --exit",
     "prebuild": "rimraf ./dist",
     "build": "tsc -p tsconfig.build.json",
     "watch": "tsc -p tsconfig.build.json --watch",
