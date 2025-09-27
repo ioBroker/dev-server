@@ -58,7 +58,8 @@ describe('dev-server integration tests - Pure TypeScript', function () {
         const packageJsonPath = path.join(PURE_TS_ADAPTER_DIR, 'package.json');
         const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
         packageJson.main = 'src/main.ts'; // Point directly to TypeScript file
-        
+        packageJson.files.push('src/'); // Ensure src is included in files
+
         // Remove build scripts as they're not needed for pure TypeScript mode
         if (packageJson.scripts) {
             delete packageJson.scripts.build;
@@ -66,14 +67,11 @@ describe('dev-server integration tests - Pure TypeScript', function () {
             delete packageJson.scripts.prebuild;
             delete packageJson.scripts.watch;
             delete packageJson.scripts['watch:ts'];
-            
-            // Keep only validation scripts
-            if (packageJson.scripts.check) {
-                // Keep type checking but make it not generate files
-                packageJson.scripts.check = 'tsc --noEmit';
-            }
+
+            // Keep type checking but make it not generate files
+            packageJson.scripts.build = 'tsc --noEmit';
         }
-        
+
         fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2), 'utf8');
         console.log(`Patched ${packageJsonPath} to use pure TypeScript mode`);
 
@@ -97,7 +95,7 @@ describe('dev-server integration tests - Pure TypeScript', function () {
         // Clean up test adapters
         console.log('Cleaning up pure TypeScript test adapter...');
         try {
-            fs.rmSync(PURE_TS_ADAPTER_DIR, { recursive: true, force: true });
+            //fs.rmSync(PURE_TS_ADAPTER_DIR, { recursive: true, force: true });
         } catch (error) {
             console.warn('Error cleaning up pure TypeScript test adapter:', error.message);
         }
@@ -123,9 +121,9 @@ describe('dev-server integration tests - Pure TypeScript', function () {
 
             const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
             assert.strictEqual(packageJson.main, 'src/main.ts', 'main field should point to src/main.ts');
-            
+
             // Verify the build scripts have been removed
-            assert.ok(!packageJson.scripts?.build, 'build script should be removed');
+            assert.ok(packageJson.scripts.build.includes("--noEmit"), 'build script should be removed');
             assert.ok(!packageJson.scripts?.['build:ts'], 'build:ts script should be removed');
             assert.ok(!packageJson.scripts?.prebuild, 'prebuild script should be removed');
         });
@@ -241,7 +239,7 @@ describe('dev-server integration tests - Pure TypeScript', function () {
                 cwd: PURE_TS_ADAPTER_DIR,
                 timeout: WATCH_TIMEOUT,
                 verbose: true,
-                finalMessage: /test-pure-ts\\.0 \\([\\d]+\\) state test-pure-ts\\.0\\.testVariable deleted/g,
+                finalMessage: /test-pure-ts\.0 \([\d]+\) state test-pure-ts\.0\.testVariable deleted/g,
             });
 
             const output = result.stdout + result.stderr;

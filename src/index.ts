@@ -1133,23 +1133,29 @@ class DevServer {
         const pkg = await this.readPackageJson();
         const scripts = pkg.scripts;
         if (scripts && scripts['watch:ts']) {
+            this.log.notice(`Starting TypeScript watch: ${startAdapter}`);
             // use TSC
             await this.startTscWatch();
         }
 
+        const isTypeScriptMain = this.isTypeScriptMain(pkg.main);
+        const mainFileSuffix = pkg.main.split('.').pop();
+
         // start sync
         const adapterRunDir = path.join(this.profileDir, 'node_modules', `iobroker.${this.adapterName}`);
         if (!this.config?.useSymlinks) {
+            this.log.notice('Starting file synchronization');
             // This is not necessary when using symlinks
-            await this.startFileSync(adapterRunDir);
+            await this.startFileSync(adapterRunDir, mainFileSuffix);
+            this.log.notice('File synchronization ready');
         }
 
         if (startAdapter) {
             await this.delay(3000);
+            this.log.notice('Starting Nodemon');
             await this.startNodemon(adapterRunDir, pkg.main, doNotWatch);
         } else {
-            const isTypeScript = this.isTypeScriptMain(pkg.main);
-            const runner = isTypeScript ? 'node -r @alcalzone/esbuild-register' : 'node';
+            const runner = isTypeScriptMain ? 'node -r @alcalzone/esbuild-register' : 'node';
             this.log.box(
                 `You can now start the adapter manually by running\n    ` +
                     `${runner} node_modules/iobroker.${this.adapterName}/${pkg.main} --debug 0\nfrom within\n    ${
@@ -1167,26 +1173,31 @@ class DevServer {
         });
     }
 
-    private startFileSync(destinationDir: string): Promise<void> {
+    private startFileSync(destinationDir: string, mainFileSuffix: string): Promise<void> {
         this.log.notice(`Starting file system sync from ${this.rootDir}`);
         const inSrc = (filename: string): string => path.join(this.rootDir, filename);
         const inDest = (filename: string): string => path.join(destinationDir, filename);
         return new Promise<void>((resolve, reject) => {
-            const patterns = this.getFilePatterns(['js', 'map'], true);
+            const patternList = ['js', 'map'];
+            if (!patternList.includes(mainFileSuffix)) {
+                patternList.push(mainFileSuffix);
+            }
+            const patterns = this.getFilePatterns(patternList, true);
             const ignoreFiles = [] as string[];
             const watcher = chokidar.watch(fg.sync(patterns), { cwd: this.rootDir });
             let ready = false;
             let initialEventPromises: Promise<void>[] = [];
             watcher.on('error', reject);
             watcher.on('ready', async () => {
+                this.log.debug('Initial scan complete. Ready for changes.');
                 ready = true;
                 await Promise.all(initialEventPromises);
                 initialEventPromises = [];
                 resolve();
             });
-            /*watcher.on('all', (event, path) => {
-        console.log(event, path);
-      });*/
+            watcher.on('all', (event, path) => {
+                console.log(event, path);
+            });
             const syncFile = async (filename: string): Promise<void> => {
                 try {
                     this.log.debug(`Synchronizing ${filename}`);
@@ -1256,11 +1267,12 @@ class DevServer {
         const execMap: Record<string, string> = {
             js: 'node --inspect --preserve-symlinks --preserve-symlinks-main',
             mjs: 'node --inspect --preserve-symlinks --preserve-symlinks-main',
-            ts: 'node --inspect --preserve-symlinks --preserve-symlinks-main --require @alcalzone/esbuild-register',
+            ts: 'node --inspect --preserve-symlinks --preserve-symlinks-main -r @alcalzone/esbuild-register',
         };
 
         nodemon({
             script,
+            cwd: baseDir,
             stdin: false,
             verbose: true,
             // dump: true, // this will output the entire config and not do anything

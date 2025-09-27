@@ -189,7 +189,7 @@ describe('dev-server integration tests', function () {
                 cwd: TS_ADAPTER_DIR,
                 timeout: WATCH_TIMEOUT,
                 verbose: true,
-                finalMessage: /test-ts\\.0 \\([\\d]+\\) state test-ts\\.0\\.testVariable deleted/g,
+                finalMessage: /test-ts\.0 \([\d]+\) state test-ts\.0\.testVariable deleted/g,
             });
 
             const output = result.stdout + result.stderr;
