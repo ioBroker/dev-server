@@ -55,7 +55,8 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [20.x]
+        node-version: [20.x, 22.x, 24.x]
+        test-variant: ["test:ts", "test:js"]
 
     steps:
       - name: Checkout code
@@ -73,7 +74,7 @@ jobs:
         run: npm run build
 
       - name: Run integration tests
-        run: npm test
+        run: npm run ${{ matrix.test-variant }}
         timeout-minutes: 15
 
   # Deploys the final package to NPM

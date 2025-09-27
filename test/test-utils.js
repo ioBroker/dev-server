@@ -10,6 +10,7 @@ function runCommand(command, args, options = {}) {
         console.log(`Running: ${command} ${args.join(' ')}`);
         const proc = spawn(command, args, {
             stdio: ['pipe', 'pipe', 'pipe'],
+            env: options.env || process.env,
             ...options
         });
 
@@ -66,6 +67,7 @@ function runCommandWithSignal(command, args, options = {}) {
         const proc = spawn(command, args, {
             stdio: ['pipe', 'pipe', 'pipe'],
             timeout: options.timeout || 30000,
+            env: options.env || process.env,
             ...options
         });
 
@@ -177,7 +179,8 @@ async function createTestAdapter(configFile, targetDir) {
             '--noInstall'  // Skip npm install to speed up creation
         ], {
             cwd: targetDir,
-            timeout: 180000 // 3 minutes
+            timeout: 180000, // 3 minutes
+            env: { ...process.env, NODE_TLS_REJECT_UNAUTHORIZED: '0' } // Handle certificate issues in test environment
         });
         console.log(`Test adapter "${adapterName}" created successfully`);
     } catch (error) {
