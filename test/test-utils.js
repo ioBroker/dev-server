@@ -208,8 +208,7 @@ async function setupTestAdapter(config) {
         configFile,
         adapterDir,
         adaptersDir,
-        needsTypeScriptPatching = false,
-        needsPureTypeScriptSetup = false
+        needsTypeScriptPatching = false
     } = config;
 
     logSetupInfo(adapterName, path.dirname(adaptersDir), path.dirname(path.dirname(adaptersDir)));
@@ -227,11 +226,6 @@ async function setupTestAdapter(config) {
     // Apply TypeScript patches if needed
     if (needsTypeScriptPatching) {
         await applyTypeScriptPatches(adapterDir);
-    }
-
-    // Apply pure TypeScript setup if needed  
-    if (needsPureTypeScriptSetup) {
-        await applyPureTypeScriptSetup(adapterDir);
     }
 
     // Install dependencies
@@ -263,33 +257,6 @@ async function applyTypeScriptPatches(adapterDir) {
     
     fs.writeFileSync(mainTsPath, mainTsContent, 'utf8');
     console.log(`Patched ${mainTsPath} for TypeScript compliance`);
-}
-
-/**
- * Apply pure TypeScript setup to package.json 
- */
-async function applyPureTypeScriptSetup(adapterDir) {
-    const packageJsonPath = path.join(adapterDir, 'package.json');
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-    
-    // Configure for pure TypeScript mode
-    packageJson.main = 'src/main.ts'; // Point directly to TypeScript file
-    packageJson.files.push('src/'); // Ensure src is included in files
-
-    // Remove build scripts as they're not needed for pure TypeScript mode
-    if (packageJson.scripts) {
-        delete packageJson.scripts.build;
-        delete packageJson.scripts['build:ts'];
-        delete packageJson.scripts.prebuild;
-        delete packageJson.scripts.watch;
-        delete packageJson.scripts['watch:ts'];
-
-        // Keep type checking but make it not generate files
-        packageJson.scripts.build = 'tsc --noEmit';
-    }
-
-    fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2), 'utf8');
-    console.log(`Patched ${packageJsonPath} to use pure TypeScript mode`);
 }
 
 /**
@@ -469,7 +436,6 @@ module.exports = {
     logSetupInfo,
     setupTestAdapter,
     applyTypeScriptPatches,
-    applyPureTypeScriptSetup,
     installAdapterDependencies,
     cleanupTestAdapter,
     validateIoPackageJson,
