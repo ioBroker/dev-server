@@ -74,7 +74,7 @@ jobs:
         run: npm run build
 
       - name: Run integration tests
-        run: npm ${{ matrix.test-variant }}
+        run: npm run ${{ matrix.test-variant }}
         timeout-minutes: 15
 
   # Deploys the final package to NPM
