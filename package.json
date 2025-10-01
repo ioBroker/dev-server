@@ -65,7 +65,7 @@
     "boxen": "^5.1.2",
     "browser-sync": "^3.0.4",
     "bs-html-injector": "^3.0.3",
-    "chalk": "^4.1.2",
+    "chalk": "^5.6.2",
     "chokidar": "^4.0.3",
     "enquirer": "^2.4.1",
     "express": "^5.1.0",
