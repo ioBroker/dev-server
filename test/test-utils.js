@@ -429,9 +429,162 @@ function validateWatchTestOutput(output, adapterPrefix) {
     assert.ok(infoLines.length > 0, `No info logs found from ${adapterPrefix}.0 adapter`);
 }
 
+/**
+ * Run watch command with file change trigger to test adapter restart
+ */
+function runCommandWithFileChange(command, args, options = {}) {
+    return new Promise((resolve, reject) => {
+        console.log(`Running with file change trigger: ${command} ${args.join(' ')}`);
+        const proc = spawn(command, args, {
+            stdio: ['pipe', 'pipe', 'pipe'],
+            timeout: options.timeout || 30000,
+            env: options.env || process.env,
+            ...options
+        });
+
+        let stdout = '';
+        let stderr = '';
+        let killed = false;
+        let closed = false;
+        let resolvedOrRejected = false;
+        let fileChanged = false;
+        let restartDetected = false;
+
+        const shutDown = () => {
+            if (resolvedOrRejected) return;
+
+            console.log('Final timeout reached, sending SIGINT...');
+            killed = true;
+            proc.kill('SIGINT');
+
+            // Give it 3 seconds to gracefully exit, then force kill
+            timeoutId = setTimeout(() => {
+                console.log('Checking if process has exited after SIGINT...');
+                if (!resolvedOrRejected && !closed) {
+                    console.log('Force killing with SIGKILL...');
+                    proc.kill('SIGKILL');
+                }
+
+                // Final fallback - resolve after another 2 seconds
+                timeoutId = setTimeout(() => {
+                    if (!resolvedOrRejected) {
+                        resolvedOrRejected = true;
+                        if (!closed) {
+                            reject(new Error('Process did not exit after SIGKILL'));
+                        }
+                    }
+                }, 5000);
+            }, 10000);
+        }
+
+        proc.stdout.on('data', (data) => {
+            const str = data.toString();
+            stdout += str;
+            if (options.verbose) {
+                console.log('STDOUT:', str.trim());
+            }
+            
+            // Trigger file change after initial startup
+            if (!fileChanged && options.initialMessage && str.match(options.initialMessage)) {
+                console.log('Initial message detected, triggering file change...');
+                fileChanged = true;
+                
+                // Wait a bit then trigger file change
+                setTimeout(() => {
+                    if (!resolvedOrRejected && options.fileToChange) {
+                        console.log(`Touching file: ${options.fileToChange}`);
+                        try {
+                            // Touch the file to trigger nodemon restart
+                            const now = new Date();
+                            fs.utimesSync(options.fileToChange, now, now);
+                        } catch (error) {
+                            console.error('Error touching file:', error);
+                        }
+                    }
+                }, 5000);
+            }
+            
+            // Detect restart and wait for it to complete
+            if (fileChanged && !restartDetected && str.match(/restarting|restart/i)) {
+                console.log('Restart detected...');
+                restartDetected = true;
+            }
+            
+            // After restart, wait for final message
+            if (restartDetected && options.finalMessage && str.match(options.finalMessage)) {
+                console.log('Final message after restart detected, shutting down...');
+                setTimeout(shutDown, 10000);
+            }
+        });
+
+        proc.stderr.on('data', (data) => {
+            const str = data.toString();
+            stderr += str;
+            if (options.verbose) {
+                console.log('STDERR:', str.trim());
+            }
+        });
+
+        proc.on('close', (code) => {
+            closed = true;
+            console.log(`Process exited with code ${code}`);
+            clearTimeout(timeoutId);
+            if (resolvedOrRejected) return;
+            resolvedOrRejected = true;
+
+            if (killed) {
+                setTimeout( () => resolve({ stdout, stderr, code, killed: true }), 5000);
+            } else if (code === 0 || code === 255) {
+                setTimeout( () => resolve({ stdout, stderr, code }), 5000);
+            } else {
+                setTimeout( () => reject(new Error(`Command failed with exit code ${code}\nSTDOUT: ${stdout}\nSTDERR: ${stderr}`)), 5000);
+            }
+        });
+
+        proc.on('error', (error) => {
+            console.log(`Process errored with error`, error);
+            clearTimeout(timeoutId);
+            if (resolvedOrRejected) return;
+            resolvedOrRejected = true;
+            reject(error);
+        });
+
+        // Auto-kill after timeout
+        let timeoutId = setTimeout(shutDown, (options.timeout || 30000) + 2000);
+    });
+}
+
+/**
+ * Validate that adapter restart occurred in watch mode
+ */
+function validateWatchRestartOutput(output, adapterPrefix) {
+    const assert = require('node:assert');
+
+    // Should see nodemon restart messages
+    assert.ok(
+        output.includes('restarting') || output.includes('restart'),
+        'No nodemon restart message found in output'
+    );
+
+    // Should see adapter starting multiple times (initial + after restart)
+    const startingMatches = output.match(/starting\. Version 0\.0\.1/g);
+    assert.ok(
+        startingMatches && startingMatches.length >= 2,
+        `Adapter should start at least twice (initial + restart), but found ${startingMatches ? startingMatches.length : 0} instances`
+    );
+
+    // Should see the test variable deletion message at least twice
+    const testVarMatches = output.match(new RegExp(`state ${adapterPrefix}\\.0\\.testVariable deleted`, 'g'));
+    assert.ok(
+        testVarMatches && testVarMatches.length >= 2,
+        `Should see testVariable deletion at least twice (initial + restart), but found ${testVarMatches ? testVarMatches.length : 0} instances`
+    );
+}
+
 module.exports = {
     runCommand,
     runCommandWithSignal,
+    runCommandWithFileChange,
     createTestAdapter,
     logSetupInfo,
     setupTestAdapter,
@@ -443,5 +596,6 @@ module.exports = {
     validateTypeScriptConfig,
     runDevServerSetupTest,
     validateRunTestOutput,
-    validateWatchTestOutput
+    validateWatchTestOutput,
+    validateWatchRestartOutput
 };
