@@ -2,7 +2,18 @@ const { describe, it, before, after } = require('mocha');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const { runCommand, runCommandWithSignal, createTestAdapter } = require('./test-utils');
+const { 
+    runCommand, 
+    runCommandWithSignal, 
+    setupTestAdapter, 
+    cleanupTestAdapter,
+    validateIoPackageJson,
+    validatePackageJson,
+    validateTypeScriptConfig,
+    runDevServerSetupTest,
+    validateRunTestOutput,
+    validateWatchTestOutput
+} = require('./test-utils');
 
 const DEV_SERVER_ROOT = path.resolve(__dirname, '..');
 const TEST_DIR = __dirname;
@@ -20,68 +31,26 @@ describe('dev-server integration tests', function () {
     this.timeout(200000); // 200 seconds (reduced from 300)
 
     before(async () => {
-        console.log('Setting up test adapters...');
-        console.log('Test directory:', TEST_DIR);
-        console.log('Dev-server root:', DEV_SERVER_ROOT);
-        console.log('Node.js version:', process.version);
-
-        // Create JavaScript test adapter
-        if (fs.existsSync(JS_ADAPTER_CONFIG)) {
-            console.log('Creating JavaScript test adapter...');
-            await createTestAdapter(JS_ADAPTER_CONFIG, ADAPTERS_DIR);
-        } else {
-            throw new Error(`JavaScript adapter config not found: ${JS_ADAPTER_CONFIG}`);
-        }
-
-        console.log('Test adapters created successfully');
-
-        // Run npm install for both test adapters to ensure dependencies are installed locally
-        // Using --prefix parameter as requested to limit installation to exactly the test directory
-        console.log('Installing dependencies for test adapters...');
-
-        console.log('Installing dependencies for JavaScript test adapter...');
-        try {
-            await runCommand('npm', ['install', '--prefix', JS_ADAPTER_DIR], {
-                cwd: JS_ADAPTER_DIR,
-                timeout: 120000, // 2 minutes
-                verbose: false,
-            });
-            console.log('JavaScript test adapter dependencies installed');
-        } catch (error) {
-            console.warn('Warning: Failed to install JS adapter dependencies:', error.message);
-        }
-
-        console.log('All test adapters prepared successfully');
+        await setupTestAdapter({
+            adapterName: 'JavaScript',
+            configFile: JS_ADAPTER_CONFIG,
+            adapterDir: JS_ADAPTER_DIR,
+            adaptersDir: ADAPTERS_DIR,
+            needsTypeScriptPatching: false
+        });
     });
 
     after(() => {
-        // Clean up test adapters
-        console.log('Cleaning up test adapters...');
-        try {
-            fs.rmSync(JS_ADAPTER_DIR, { recursive: true, force: true });
-        } catch (error) {
-            console.warn('Error cleaning up test adapters:', error.message);
-        }
+        cleanupTestAdapter('JavaScript', JS_ADAPTER_DIR);
     });
 
     describe('Adapter Configuration', () => {
         it('should have valid io-package.json', () => {
-            const ioPackagePath = path.join(JS_ADAPTER_DIR, 'io-package.json');
-            assert.ok(fs.existsSync(ioPackagePath), 'io-package.json not found');
-
-            const ioPackage = JSON.parse(fs.readFileSync(ioPackagePath, 'utf8'));
-            assert.ok(ioPackage.common, 'io-package.json missing common section');
-            assert.ok(ioPackage.common.name, 'io-package.json missing common.name');
-            assert.strictEqual(ioPackage.common.name, 'test-js', 'Adapter name should be test-js');
+            validateIoPackageJson(JS_ADAPTER_DIR, 'test-js', false);
         });
 
         it('should have valid package.json', () => {
-            const packagePath = path.join(JS_ADAPTER_DIR, 'package.json');
-            assert.ok(fs.existsSync(packagePath), 'package.json not found');
-
-            const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
-            assert.ok(packageJson.name, 'package.json missing name');
-            assert.ok(packageJson.version, 'package.json missing version');
+            validatePackageJson(JS_ADAPTER_DIR);
         });
 
         it('should have main adapter file', () => {
@@ -93,30 +62,7 @@ describe('dev-server integration tests', function () {
     describe('dev-server setup', () => {
         it('should create .dev-server directory structure', async () => {
             this.timeout(SETUP_TIMEOUT);
-
-            const devServerPath = path.join(DEV_SERVER_ROOT, 'dist', 'index.js');
-
-            await runCommand('node', [devServerPath, 'setup'], {
-                cwd: JS_ADAPTER_DIR,
-                timeout: SETUP_TIMEOUT,
-                verbose: true,
-            });
-
-            // Verify .dev-server directory was created
-            const devServerDir = path.join(JS_ADAPTER_DIR, '.dev-server');
-            assert.ok(fs.existsSync(devServerDir), '.dev-server directory not created');
-
-            // Verify default profile directory exists
-            const defaultDir = path.join(devServerDir, 'default');
-            assert.ok(fs.existsSync(defaultDir), '.dev-server/default directory not created');
-
-            // Verify node_modules exists
-            const nodeModulesDir = path.join(defaultDir, 'node_modules');
-            assert.ok(fs.existsSync(nodeModulesDir), 'node_modules directory not created');
-
-            // Verify iobroker.json exists
-            const iobrokerJson = path.join(defaultDir, 'iobroker-data', 'iobroker.json');
-            assert.ok(fs.existsSync(iobrokerJson), 'iobroker.json not created');
+            await runDevServerSetupTest(DEV_SERVER_ROOT, JS_ADAPTER_DIR, SETUP_TIMEOUT);
         });
     });
 
@@ -134,29 +80,7 @@ describe('dev-server integration tests', function () {
             });
 
             const output = result.stdout + result.stderr;
-
-            // Should see host logs
-            assert.ok(output.includes('host.'), 'No host logs found in output');
-
-            // Should see admin.0 logs
-            assert.ok(output.includes('admin.0'), 'No admin.0 logs found in output');
-
-            // Should NOT see test-js.0 logs (adapter should not start in run mode)
-            assert.ok(!output.includes('startInstance test-js.0'), 'test-js.0 adapter should not start in run mode');
-
-            // Check for minimal error logs
-            const errorLines = output.split('\n').filter(
-                line =>
-                    line.toLowerCase().includes('error') &&
-                    !line.includes('loglevel error') && // Ignore npm loglevel settings
-                    !line.includes('--loglevel error'),
-            );
-
-            if (errorLines.length > 5) {
-                // Allow some setup errors
-                console.warn(`Warning: Found ${errorLines.length} error lines in output`);
-                errorLines.slice(0, 3).forEach(line => console.warn('ERROR:', line));
-            }
+            validateRunTestOutput(output, 'test-js');
         });
     });
 
@@ -174,31 +98,7 @@ describe('dev-server integration tests', function () {
             });
 
             const output = result.stdout + result.stderr;
-
-            // Should see test adapter logs
-            assert.ok(
-                !output.includes('startInstance test-js.0'),
-                'test-js.0 should not start in watch mode (no "startInstance test-js.0" log expected)',
-            );
-            assert.ok(output.includes('adapter disabled'), 'No test-js.0 disabled info found in output');
-
-            assert.ok(output.includes('starting. Version 0.0.1'), 'No test-js.0 adapter starting in output');
-            assert.ok(
-                output.includes('state test-js.0.testVariable deleted'),
-                'No test-js.0 logic message subscription message in output',
-            );
-
-            // Should see host logs
-            assert.ok(output.includes('host.'), 'No host logs found in output');
-
-            // Should see admin.0 logs
-            assert.ok(output.includes('admin.0'), 'No admin.0 logs found in output');
-
-            // Look for info logs from the adapter
-            const infoLines = output.split('\n').filter(line => line.includes('test-js.0') && line.includes('info'));
-
-            // The adapter should produce some info logs
-            assert.ok(infoLines.length > 0, 'No info logs found from test-js.0 adapter');
+            validateWatchTestOutput(output, 'test-js');
         });
     });
 });
