@@ -1,6 +1,7 @@
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
+const assert = require('node:assert');
 
 /**
  * Run a command and return promise
@@ -59,11 +60,16 @@ function runCommand(command, args, options = {}) {
 }
 
 /**
- * Run a command with timeout and signal handling
+ * Core function to run a command with timeout and signal handling
+ * @param {string} command - Command to run
+ * @param {string[]} args - Command arguments
+ * @param {object} options - Options including timeout, verbose, finalMessage, onStdout callback
+ * @returns {Promise<{stdout: string, stderr: string, code: number, killed?: boolean}>}
  */
-function runCommandWithSignal(command, args, options = {}) {
+function runCommandWithTimeout(command, args, options = {}) {
     return new Promise((resolve, reject) => {
-        console.log(`Running with signal handling: ${command} ${args.join(' ')}`);
+        const logPrefix = options.logPrefix || 'Running with signal handling';
+        console.log(`${logPrefix}: ${command} ${args.join(' ')}`);
         const proc = spawn(command, args, {
             stdio: ['pipe', 'pipe', 'pipe'],
             timeout: options.timeout || 30000,
@@ -110,7 +116,14 @@ function runCommandWithSignal(command, args, options = {}) {
             if (options.verbose) {
                 console.log('STDOUT:', str.trim());
             }
-            if (options.finalMessage && str.match(options.finalMessage) && !closed && !resolvedOrRejected) {
+            
+            // Call custom stdout handler if provided
+            if (options.onStdout) {
+                options.onStdout(str, shutDown);
+            }
+            
+            // Default behavior: shutdown on final message
+            if (!options.onStdout && options.finalMessage && str.match(options.finalMessage) && !closed && !resolvedOrRejected) {
                 console.log('Final message detected, shutting down...');
                 setTimeout(shutDown, 10000);
             }
@@ -151,6 +164,13 @@ function runCommandWithSignal(command, args, options = {}) {
         // Auto-kill after timeout
         let timeoutId = setTimeout(shutDown, (options.timeout || 30000) + 2000);
     });
+}
+
+/**
+ * Run a command with timeout and signal handling
+ */
+function runCommandWithSignal(command, args, options = {}) {
+    return runCommandWithTimeout(command, args, options);
 }
 
 /**
@@ -433,124 +453,47 @@ function validateWatchTestOutput(output, adapterPrefix) {
  * Run watch command with file change trigger to test adapter restart
  */
 function runCommandWithFileChange(command, args, options = {}) {
-    return new Promise((resolve, reject) => {
-        console.log(`Running with file change trigger: ${command} ${args.join(' ')}`);
-        const proc = spawn(command, args, {
-            stdio: ['pipe', 'pipe', 'pipe'],
-            timeout: options.timeout || 30000,
-            env: options.env || process.env,
-            ...options
-        });
+    let fileChanged = false;
+    let restartDetected = false;
 
-        let stdout = '';
-        let stderr = '';
-        let killed = false;
-        let closed = false;
-        let resolvedOrRejected = false;
-        let fileChanged = false;
-        let restartDetected = false;
-
-        const shutDown = () => {
-            if (resolvedOrRejected) return;
-
-            console.log('Final timeout reached, sending SIGINT...');
-            killed = true;
-            proc.kill('SIGINT');
-
-            // Give it 3 seconds to gracefully exit, then force kill
-            timeoutId = setTimeout(() => {
-                console.log('Checking if process has exited after SIGINT...');
-                if (!resolvedOrRejected && !closed) {
-                    console.log('Force killing with SIGKILL...');
-                    proc.kill('SIGKILL');
+    const onStdout = (str, shutDown) => {
+        // Trigger file change after initial startup
+        if (!fileChanged && options.initialMessage && str.match(options.initialMessage)) {
+            console.log('Initial message detected, triggering file change...');
+            fileChanged = true;
+            
+            // Wait a bit then trigger file change
+            setTimeout(() => {
+                if (options.fileToChange) {
+                    console.log(`Touching file: ${options.fileToChange}`);
+                    try {
+                        // Touch the file to trigger nodemon restart
+                        const now = new Date();
+                        fs.utimesSync(options.fileToChange, now, now);
+                    } catch (error) {
+                        console.error('Error touching file:', error);
+                    }
                 }
-
-                // Final fallback - resolve after another 2 seconds
-                timeoutId = setTimeout(() => {
-                    if (!resolvedOrRejected) {
-                        resolvedOrRejected = true;
-                        if (!closed) {
-                            reject(new Error('Process did not exit after SIGKILL'));
-                        }
-                    }
-                }, 5000);
-            }, 10000);
+            }, 5000);
         }
+        
+        // Detect restart and wait for it to complete
+        if (fileChanged && !restartDetected && str.match(/restarting|restart/i)) {
+            console.log('Restart detected...');
+            restartDetected = true;
+        }
+        
+        // After restart, wait for final message
+        if (restartDetected && options.finalMessage && str.match(options.finalMessage)) {
+            console.log('Final message after restart detected, shutting down...');
+            setTimeout(shutDown, 10000);
+        }
+    };
 
-        proc.stdout.on('data', (data) => {
-            const str = data.toString();
-            stdout += str;
-            if (options.verbose) {
-                console.log('STDOUT:', str.trim());
-            }
-            
-            // Trigger file change after initial startup
-            if (!fileChanged && options.initialMessage && str.match(options.initialMessage)) {
-                console.log('Initial message detected, triggering file change...');
-                fileChanged = true;
-                
-                // Wait a bit then trigger file change
-                setTimeout(() => {
-                    if (!resolvedOrRejected && options.fileToChange) {
-                        console.log(`Touching file: ${options.fileToChange}`);
-                        try {
-                            // Touch the file to trigger nodemon restart
-                            const now = new Date();
-                            fs.utimesSync(options.fileToChange, now, now);
-                        } catch (error) {
-                            console.error('Error touching file:', error);
-                        }
-                    }
-                }, 5000);
-            }
-            
-            // Detect restart and wait for it to complete
-            if (fileChanged && !restartDetected && str.match(/restarting|restart/i)) {
-                console.log('Restart detected...');
-                restartDetected = true;
-            }
-            
-            // After restart, wait for final message
-            if (restartDetected && options.finalMessage && str.match(options.finalMessage)) {
-                console.log('Final message after restart detected, shutting down...');
-                setTimeout(shutDown, 10000);
-            }
-        });
-
-        proc.stderr.on('data', (data) => {
-            const str = data.toString();
-            stderr += str;
-            if (options.verbose) {
-                console.log('STDERR:', str.trim());
-            }
-        });
-
-        proc.on('close', (code) => {
-            closed = true;
-            console.log(`Process exited with code ${code}`);
-            clearTimeout(timeoutId);
-            if (resolvedOrRejected) return;
-            resolvedOrRejected = true;
-
-            if (killed) {
-                setTimeout( () => resolve({ stdout, stderr, code, killed: true }), 5000);
-            } else if (code === 0 || code === 255) {
-                setTimeout( () => resolve({ stdout, stderr, code }), 5000);
-            } else {
-                setTimeout( () => reject(new Error(`Command failed with exit code ${code}\nSTDOUT: ${stdout}\nSTDERR: ${stderr}`)), 5000);
-            }
-        });
-
-        proc.on('error', (error) => {
-            console.log(`Process errored with error`, error);
-            clearTimeout(timeoutId);
-            if (resolvedOrRejected) return;
-            resolvedOrRejected = true;
-            reject(error);
-        });
-
-        // Auto-kill after timeout
-        let timeoutId = setTimeout(shutDown, (options.timeout || 30000) + 2000);
+    return runCommandWithTimeout(command, args, {
+        ...options,
+        logPrefix: 'Running with file change trigger',
+        onStdout
     });
 }
 
@@ -558,26 +501,24 @@ function runCommandWithFileChange(command, args, options = {}) {
  * Validate that adapter restart occurred in watch mode
  */
 function validateWatchRestartOutput(output, adapterPrefix) {
-    const assert = require('node:assert');
-
     // Should see nodemon restart messages
     assert.ok(
-        output.includes('restarting') || output.includes('restart'),
+        output.includes('restarting'),
         'No nodemon restart message found in output'
     );
 
-    // Should see adapter starting multiple times (initial + after restart)
+    // Should see adapter starting exactly twice (initial + after restart)
     const startingMatches = output.match(/starting\. Version 0\.0\.1/g);
     assert.ok(
-        startingMatches && startingMatches.length >= 2,
-        `Adapter should start at least twice (initial + restart), but found ${startingMatches ? startingMatches.length : 0} instances`
+        startingMatches && startingMatches.length === 2,
+        `Adapter should start exactly twice (initial + restart), but found ${startingMatches ? startingMatches.length : 0} instances`
     );
 
-    // Should see the test variable deletion message at least twice
+    // Should see the test variable deletion message exactly twice
     const testVarMatches = output.match(new RegExp(`state ${adapterPrefix}\\.0\\.testVariable deleted`, 'g'));
     assert.ok(
-        testVarMatches && testVarMatches.length >= 2,
-        `Should see testVariable deletion at least twice (initial + restart), but found ${testVarMatches ? testVarMatches.length : 0} instances`
+        testVarMatches && testVarMatches.length === 2,
+        `Should see testVariable deletion exactly twice (initial + restart), but found ${testVarMatches ? testVarMatches.length : 0} instances`
     );
 }
 
