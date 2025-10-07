@@ -4,7 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { 
     runCommand, 
-    runCommandWithSignal, 
+    runCommandWithSignal,
+    runCommandWithFileChange,
     setupTestAdapter, 
     cleanupTestAdapter,
     validateIoPackageJson,
@@ -12,7 +13,8 @@ const {
     validateTypeScriptConfig,
     runDevServerSetupTest,
     validateRunTestOutput,
-    validateWatchTestOutput
+    validateWatchTestOutput,
+    validateWatchRestartOutput
 } = require('./test-utils');
 
 const DEV_SERVER_ROOT = path.resolve(__dirname, '..');
@@ -159,6 +161,32 @@ describe('dev-server integration tests - Pure TypeScript', function () {
             assert.ok(
                 output.includes('starting. Version 0.0.1'),
                 'esbuild-register should successfully transpile and execute TypeScript files'
+            );
+        });
+
+        it('should restart adapter when TypeScript source file changes', async () => {
+            this.timeout(WATCH_TIMEOUT + 60000); // Extra time for file change and restart
+
+            const devServerPath = path.join(DEV_SERVER_ROOT, 'dist', 'index.js');
+            const mainFile = path.join(PURE_TS_ADAPTER_DIR, 'src', 'main.ts');
+
+            const result = await runCommandWithFileChange('node', [devServerPath, 'watch'], {
+                cwd: PURE_TS_ADAPTER_DIR,
+                timeout: WATCH_TIMEOUT + 30000,
+                verbose: true,
+                initialMessage: /test-pure-ts\.0 \([\d]+\) state test-pure-ts\.0\.testVariable deleted/g,
+                finalMessage: /test-pure-ts\.0 \([\d]+\) state test-pure-ts\.0\.testVariable deleted/g,
+                fileToChange: mainFile,
+            });
+
+            const output = result.stdout + result.stderr;
+            validateWatchTestOutput(output, 'test-pure-ts');
+            validateWatchRestartOutput(output, 'test-pure-ts');
+
+            // Verify that esbuild-register is working by checking that TypeScript files are being executed
+            assert.ok(
+                output.includes('starting. Version 0.0.1'),
+                'esbuild-register should successfully transpile and execute TypeScript files after restart'
             );
         });
     });

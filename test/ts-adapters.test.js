@@ -4,7 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { 
     runCommand, 
-    runCommandWithSignal, 
+    runCommandWithSignal,
+    runCommandWithFileChange,
     setupTestAdapter, 
     cleanupTestAdapter,
     validateIoPackageJson,
@@ -12,7 +13,8 @@ const {
     validateTypeScriptConfig,
     runDevServerSetupTest,
     validateRunTestOutput,
-    validateWatchTestOutput
+    validateWatchTestOutput,
+    validateWatchRestartOutput
 } = require('./test-utils');
 
 const DEV_SERVER_ROOT = path.resolve(__dirname, '..');
@@ -94,6 +96,26 @@ describe('dev-server integration tests', function () {
 
             const output = result.stdout + result.stderr;
             validateWatchTestOutput(output, 'test-ts');
+        });
+
+        it('should restart adapter when main file changes', async () => {
+            this.timeout(WATCH_TIMEOUT + 60000); // Extra time for file change and restart
+
+            const devServerPath = path.join(DEV_SERVER_ROOT, 'dist', 'index.js');
+            const mainFile = path.join(TS_ADAPTER_DIR, 'build', 'main.js');
+
+            const result = await runCommandWithFileChange('node', [devServerPath, 'watch'], {
+                cwd: TS_ADAPTER_DIR,
+                timeout: WATCH_TIMEOUT + 30000,
+                verbose: true,
+                initialMessage: /test-ts\.0 \([\d]+\) state test-ts\.0\.testVariable deleted/g,
+                finalMessage: /test-ts\.0 \([\d]+\) state test-ts\.0\.testVariable deleted/g,
+                fileToChange: mainFile,
+            });
+
+            const output = result.stdout + result.stderr;
+            validateWatchTestOutput(output, 'test-ts');
+            validateWatchRestartOutput(output, 'test-ts');
         });
     });
 });
