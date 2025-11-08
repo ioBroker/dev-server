@@ -5,7 +5,7 @@
     ## **WORK IN PROGRESS**
  -->
 
-## __WORK IN PROGRESS_
+## __WORK IN PROGRESS__
 * (oweitman/Apollon77) Update chokidar and express
 * (@copilot) Switch from ts-node to @alcalzone/esbuild-register for TypeScript support to fix conflicts with Node.js experimental TypeScript features
 
