@@ -196,7 +196,8 @@ async function createTestAdapter(configFile, targetDir) {
             '@iobroker/create-adapter@latest',
             `--replay=${configPath}`,
             `--target=${targetDir}`,
-            '--noInstall'  // Skip npm install to speed up creation
+            '--noInstall',  // Skip npm install to speed up creation
+            '--non-interactive'  // Prevent interactive prompts
         ], {
             cwd: targetDir,
             timeout: 180000, // 3 minutes
