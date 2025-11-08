@@ -21,7 +21,7 @@
 	"connectionType": "local",
 	"dataSource": "poll",
 	"connectionIndicator": "no",
-	"language": "TypeScript",
+	"language": "TypeScript (without build)",
 	"nodeVersion": "20",
 	"adminUi": "json",
 	"tools": [
