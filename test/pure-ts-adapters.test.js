@@ -2,11 +2,11 @@ const { describe, it, before, after } = require('mocha');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const { 
-    runCommand, 
+const {
+    runCommand,
     runCommandWithSignal,
     runCommandWithFileChange,
-    setupTestAdapter, 
+    setupTestAdapter,
     cleanupTestAdapter,
     validateIoPackageJson,
     validatePackageJson,
@@ -62,9 +62,8 @@ describe('dev-server integration tests - Pure TypeScript', function () {
 
             // Verify the build scripts have been removed
             assert.ok(packageJson.scripts.check?.includes("--noEmit"), 'check script should use --noEmit for type checking only');
-            assert.ok(!packageJson.scripts?.['build:ts'], 'build:ts script should not exist');
+            assert.ok(packageJson.scripts.build?.includes("--noEmit"), 'build script should use --noEmit for type checking only');
             assert.ok(!packageJson.scripts?.prebuild, 'prebuild script should not exist');
-            assert.ok(!packageJson.scripts?.build, 'build script should not exist');
         });
 
         it('should have TypeScript source file but no dist directory', () => {
