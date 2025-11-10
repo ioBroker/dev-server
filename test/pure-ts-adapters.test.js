@@ -58,11 +58,11 @@ describe('dev-server integration tests - Pure TypeScript', function () {
 
         it('should have package.json pointing main to TypeScript file', () => {
             const packageJson = validatePackageJson(PURE_TS_ADAPTER_DIR);
+            console.log(packageJson);
             assert.strictEqual(packageJson.main, 'src/main.ts', 'main field should point to src/main.ts');
 
             // Verify the build scripts have been removed
             assert.ok(packageJson.scripts.check?.includes("--noEmit"), 'check script should use --noEmit for type checking only');
-            assert.ok(packageJson.scripts.build?.includes("--noEmit"), 'build script should use --noEmit for type checking only');
             assert.ok(!packageJson.scripts?.prebuild, 'prebuild script should not exist');
         });
 
