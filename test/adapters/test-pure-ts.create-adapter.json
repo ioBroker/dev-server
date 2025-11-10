@@ -21,12 +21,13 @@
 	"connectionType": "local",
 	"dataSource": "poll",
 	"connectionIndicator": "no",
-	"language": "TypeScript",
+	"language": "TypeScript (without build)",
 	"nodeVersion": "20",
 	"adminUi": "json",
+	"tabReact": "no",
+	"eslintConfig": "official",
 	"tools": [
-		"ESLint",
-		"type checking"
+		"ESLint"
 	],
 	"releaseScript": "no",
 	"devServer": "no",
@@ -42,5 +43,5 @@
 	"defaultBranch": "main",
 	"license": "MIT License",
 	"dependabot": "yes",
-	"creatorVersion": "2.6.5"
+	"creatorVersion": "3.0.0"
 }

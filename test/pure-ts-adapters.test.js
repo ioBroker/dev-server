@@ -2,11 +2,11 @@ const { describe, it, before, after } = require('mocha');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const { 
-    runCommand, 
+const {
+    runCommand,
     runCommandWithSignal,
     runCommandWithFileChange,
-    setupTestAdapter, 
+    setupTestAdapter,
     cleanupTestAdapter,
     validateIoPackageJson,
     validatePackageJson,
@@ -37,30 +37,8 @@ describe('dev-server integration tests - Pure TypeScript', function () {
             adapterName: 'Pure TypeScript',
             configFile: PURE_TS_ADAPTER_CONFIG,
             adapterDir: PURE_TS_ADAPTER_DIR,
-            adaptersDir: ADAPTERS_DIR,
-            needsTypeScriptPatching: true
+            adaptersDir: ADAPTERS_DIR
         });
-
-        // Patch package.json to point main directly to src/main.ts (pure TypeScript mode)
-        const packageJsonPath = path.join(PURE_TS_ADAPTER_DIR, 'package.json');
-        const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-        packageJson.main = 'src/main.ts'; // Point directly to TypeScript file
-        packageJson.files.push('src/'); // Ensure src is included in files
-
-        // Remove build scripts as they're not needed for pure TypeScript mode
-        if (packageJson.scripts) {
-            delete packageJson.scripts.build;
-            delete packageJson.scripts['build:ts'];
-            delete packageJson.scripts.prebuild;
-            delete packageJson.scripts.watch;
-            delete packageJson.scripts['watch:ts'];
-
-            // Keep type checking but make it not generate files
-            packageJson.scripts.build = 'tsc --noEmit';
-        }
-
-        fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2), 'utf8');
-        console.log(`Patched ${packageJsonPath} to use pure TypeScript mode`);
     });
 
     after(() => {
@@ -83,9 +61,8 @@ describe('dev-server integration tests - Pure TypeScript', function () {
             assert.strictEqual(packageJson.main, 'src/main.ts', 'main field should point to src/main.ts');
 
             // Verify the build scripts have been removed
-            assert.ok(packageJson.scripts.build.includes("--noEmit"), 'build script should be removed');
-            assert.ok(!packageJson.scripts?.['build:ts'], 'build:ts script should be removed');
-            assert.ok(!packageJson.scripts?.prebuild, 'prebuild script should be removed');
+            assert.ok(packageJson.scripts.check?.includes("--noEmit"), 'check script should use --noEmit for type checking only');
+            assert.ok(!packageJson.scripts?.prebuild, 'prebuild script should not exist');
         });
 
         it('should have TypeScript source file but no dist directory', () => {

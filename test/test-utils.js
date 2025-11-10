@@ -39,6 +39,7 @@ function runCommand(command, args, options = {}) {
         proc.on('close', (code) => {
             if (rejectedOrResolved) return;
             if (timeoutId) clearTimeout(timeoutId);
+            console.log(`Process exited with code ${code}`);
             if (code === 0 || code === 255) {
                 setTimeout(() => resolve({ stdout, stderr, code }), 5000);
             } else {
@@ -116,12 +117,12 @@ function runCommandWithTimeout(command, args, options = {}) {
             if (options.verbose) {
                 console.log('STDOUT:', str.trim());
             }
-            
+
             // Call custom stdout handler if provided
             if (options.onStdout) {
                 options.onStdout(str, shutDown);
             }
-            
+
             // Default behavior: shutdown on final message
             if (!options.onStdout && options.finalMessage && str.match(options.finalMessage) && !closed && !resolvedOrRejected) {
                 console.log('Final message detected, shutting down...');
@@ -196,7 +197,8 @@ async function createTestAdapter(configFile, targetDir) {
             '@iobroker/create-adapter@latest',
             `--replay=${configPath}`,
             `--target=${targetDir}`,
-            '--noInstall'  // Skip npm install to speed up creation
+            '--noInstall',  // Skip npm install to speed up creation
+            '--nonInteractive' // Run in non-interactive mode to fill in missing config details
         ], {
             cwd: targetDir,
             timeout: 180000, // 3 minutes
@@ -250,7 +252,7 @@ async function setupTestAdapter(config) {
 
     // Install dependencies
     await installAdapterDependencies(adapterName, adapterDir);
-    
+
     console.log(`${adapterName} test adapter prepared successfully`);
 }
 
@@ -260,7 +262,7 @@ async function setupTestAdapter(config) {
 async function applyTypeScriptPatches(adapterDir) {
     const mainTsPath = path.join(adapterDir, 'src', 'main.ts');
     let mainTsContent = fs.readFileSync(mainTsPath, 'utf8');
-    
+
     // Patch variable declarations for TypeScript compliance
     mainTsContent = mainTsContent.replace(
         'let result = await this.checkPasswordAsync("admin", "iobroker");',
@@ -274,7 +276,7 @@ async function applyTypeScriptPatches(adapterDir) {
         'this.log.info("check group user admin group admin: " + result);',
         'this.log.info("check group user admin group admin: " + groupResult);',
     );
-    
+
     fs.writeFileSync(mainTsPath, mainTsContent, 'utf8');
     console.log(`Patched ${mainTsPath} for TypeScript compliance`);
 }
@@ -314,7 +316,7 @@ function cleanupTestAdapter(adapterName, adapterDir) {
 function validateIoPackageJson(adapterDir, expectedName, shouldHaveTypescript = false) {
     const ioPackagePath = path.join(adapterDir, 'io-package.json');
     const assert = require('node:assert');
-    
+
     assert.ok(fs.existsSync(ioPackagePath), 'io-package.json not found');
 
     const ioPackage = JSON.parse(fs.readFileSync(ioPackagePath, 'utf8'));
@@ -328,18 +330,18 @@ function validateIoPackageJson(adapterDir, expectedName, shouldHaveTypescript = 
 }
 
 /**
- * Common assertions for package.json validation  
+ * Common assertions for package.json validation
  */
 function validatePackageJson(adapterDir) {
     const packagePath = path.join(adapterDir, 'package.json');
     const assert = require('node:assert');
-    
+
     assert.ok(fs.existsSync(packagePath), 'package.json not found');
 
     const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
     assert.ok(packageJson.name, 'package.json missing name');
     assert.ok(packageJson.version, 'package.json missing version');
-    
+
     return packageJson;
 }
 
@@ -349,7 +351,7 @@ function validatePackageJson(adapterDir) {
 function validateTypeScriptConfig(adapterDir) {
     const tsconfigPath = path.join(adapterDir, 'tsconfig.json');
     const assert = require('node:assert');
-    
+
     assert.ok(fs.existsSync(tsconfigPath), 'tsconfig.json not found for TypeScript adapter');
 }
 
@@ -461,7 +463,7 @@ function runCommandWithFileChange(command, args, options = {}) {
         if (!fileChanged && options.initialMessage && str.match(options.initialMessage)) {
             console.log('Initial message detected, triggering file change...');
             fileChanged = true;
-            
+
             // Wait a bit then trigger file change
             setTimeout(() => {
                 if (options.fileToChange) {
@@ -476,13 +478,13 @@ function runCommandWithFileChange(command, args, options = {}) {
                 }
             }, 5000);
         }
-        
+
         // Detect restart and wait for it to complete
         if (fileChanged && !restartDetected && str.match(/restarting|restart/i)) {
             console.log('Restart detected...');
             restartDetected = true;
         }
-        
+
         // After restart, wait for final message
         if (restartDetected && options.finalMessage && str.match(options.finalMessage)) {
             console.log('Final message after restart detected, shutting down...');
