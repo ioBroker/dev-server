@@ -200,7 +200,6 @@ async function createTestAdapter(configFile, targetDir) {
             '--noInstall',  // Skip npm install to speed up creation
             '--nonInteractive' // Run in non-interactive mode to fill in missing config details
         ], {
-            verbose:true,
             cwd: targetDir,
             timeout: 180000, // 3 minutes
             env: { ...process.env, NODE_TLS_REJECT_UNAUTHORIZED: '0' } // Handle certificate issues in test environment
