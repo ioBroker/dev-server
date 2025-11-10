@@ -62,7 +62,7 @@
     "@iobroker/testing": "^5.1.1",
     "acorn": "^8.15.0",
     "axios": "^1.13.1",
-    "boxen": "^5.1.2",
+    "boxen": "^8.0.1",
     "browser-sync": "^3.0.4",
     "bs-html-injector": "^3.0.3",
     "chalk": "^4.1.2",
