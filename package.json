@@ -61,7 +61,7 @@
   "dependencies": {
     "@iobroker/testing": "^5.1.1",
     "acorn": "^8.15.0",
-    "axios": "^1.13.1",
+    "axios": "^1.13.2",
     "boxen": "^5.1.2",
     "browser-sync": "^3.0.4",
     "bs-html-injector": "^3.0.3",
