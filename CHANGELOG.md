@@ -8,6 +8,12 @@
 ## __WORK IN PROGRESS__
 * (oweitman/Apollon77) Update chokidar and express
 * (@Apollon77/@copilot) Switch from ts-node to @alcalzone/esbuild-register for TypeScript support to fix conflicts with Node.js experimental TypeScript features
+* (@Apollon77/@copilot) Add support for adapters using both jsonConfig and custom tabs simultaneously
+* (@Apollon77/@copilot) Simplify UI detection to only check io-package.json adminUi field (replicating what admin does)
+* (@Apollon77/@copilot) Add comprehensive file watching for jsonConfig, jsonTab.json, jsonTab.json5, and tab.html files
+* (@Apollon77/@copilot) Refactor proxy methods to reduce code duplication with helper methods
+* (@Apollon77/@copilot) Add integration test for jsonConfig file hot-reload functionality
+* (@Apollon77/@copilot) **BREAKING:** Require Node.js >=20.19.0 <22.0.0 || >=22.13.0 (was >=16.0.0)
 
 ## 0.8.0 (2025-09-20)
 

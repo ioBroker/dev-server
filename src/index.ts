@@ -362,10 +362,29 @@ class DevServer {
         return readJson(path.join(this.rootDir, 'package.json'));
     }
 
+    /**
+     * Read and parse the io-package.json file from the adapter directory
+     *
+     * @returns Promise resolving to the parsed io-package.json content
+     */
     private async readIoPackageJson(): Promise<any> {
         return readJson(path.join(this.rootDir, 'io-package.json'));
     }
 
+    /**
+     * Detect adapter UI capabilities by reading io-package.json adminUi configuration
+     *
+     * This method determines how the adapter's configuration and tab UI should be handled
+     * by checking the adminUi field in io-package.json, which is the official ioBroker schema.
+     * It also checks for the presence of jsonConfig files to support legacy adapters.
+     *
+     * The detection logic replicates what the admin interface does to ensure dev-server
+     * behavior matches what users will see in production.
+     *
+     * @returns Promise resolving to an object containing:
+     *   - configType: 'json' (jsonConfig), 'html' (HTML/React config), or 'none'
+     *   - tabType: 'json' (jsonTab), 'html' (HTML/React tab), or 'none'
+     */
     private async getAdapterUiCapabilities(): Promise<{
         configType: 'json' | 'html' | 'none';
         tabType: 'json' | 'html' | 'none';
@@ -980,6 +999,25 @@ class DevServer {
         }
     }
 
+    /**
+     * Create a combined config proxy that supports adapters using both jsonConfig and tabs
+     *
+     * This method merges the functionality of createJsonConfigProxy and createHtmlConfigProxy
+     * to support adapters that need both configuration UI types simultaneously. It handles:
+     * - React build watching for HTML-based config or tabs
+     * - JSON config file watching with WebSocket hot-reload
+     * - JSON tab file watching with WebSocket hot-reload
+     * - HTML tab file watching with BrowserSync automatic reload
+     * - Appropriate proxy routing based on the UI types present
+     *
+     * Used when an adapter has jsonConfig AND also has custom tabs (either HTML or JSON-based).
+     * For adapters with only one UI type, use createJsonConfigProxy or createHtmlConfigProxy instead.
+     *
+     * @param app Express application instance
+     * @param config Dev server configuration
+     * @param uiCapabilities Object containing configType and tabType detected from io-package.json
+     * @param useBrowserSync Whether to use BrowserSync for hot-reload (default: true)
+     */
     private async createCombinedConfigProxy(
         app: Application,
         config: DevServerConfig,
