@@ -376,43 +376,25 @@ class DevServer {
     }> {
         const hasJsonConfig = !!this.getJsonConfigPath();
 
-        // Check if adapter has React tab or HTML config by examining:
-        // 1. package.json scripts for React builds
-        // 2. Admin files existence
-        // 3. .create-adapter.json configuration
-        // 4. io-package.json adminUi field
-        // 5. Tab files (tab.html vs jsonTab.json)
-        let hasReactTab = false;
-        let hasHtmlConfig = false;
-        let hasTab = false;
-        let hasJsonTab = false;
-        let tabType: 'html' | 'json' | 'none' = 'none';
+        // Check if adapter has React tab or HTML config by examining multiple sources
+        // Priority order (higher priority sources override lower ones):
+        // 1. io-package.json adminUi field (official ioBroker schema)
+        // 2. package.json scripts for React builds
+        // 3. File existence checks
+        // 4. .create-adapter.json configuration (last resort, might be outdated)
+        let hasReactTab: boolean | undefined = undefined;
+        let hasHtmlConfig: boolean | undefined = undefined;
+        let hasTab: boolean | undefined = undefined;
+        let hasJsonTab: boolean | undefined = undefined;
+        let tabType: 'html' | 'json' | 'none' | undefined = undefined;
 
         if (!this.isJSController()) {
-            // Check .create-adapter.json if it exists
-            const createAdapterJsonPath = path.resolve(this.rootDir, '.create-adapter.json');
-            if (existsSync(createAdapterJsonPath)) {
-                try {
-                    const createAdapterConfig = await readJson(createAdapterJsonPath);
-                    this.log.debug(`Found .create-adapter.json: ${JSON.stringify(createAdapterConfig)}`);
-
-                    // Extract UI hints from create-adapter configuration
-                    if (createAdapterConfig.adminUi?.type === 'react') {
-                        hasReactTab = true;
-                    } else if (createAdapterConfig.adminUi?.type === 'html') {
-                        hasHtmlConfig = true;
-                    }
-                } catch (error) {
-                    this.log.debug(`Failed to read .create-adapter.json: ${error as Error}`);
-                }
-            }
-
-            // Check io-package.json adminUi field
+            // Priority 1: Check io-package.json adminUi field (most authoritative)
             try {
                 const ioPackage = await this.readIoPackageJson();
                 if (ioPackage?.common?.adminUi) {
                     const adminUi = ioPackage.common.adminUi;
-                    this.log.debug(`Found adminUi configuration: ${JSON.stringify(adminUi)}`);
+                    this.log.debug(`Found adminUi configuration in io-package.json: ${JSON.stringify(adminUi)}`);
 
                     if (adminUi.config === 'json') {
                         // Has JSON config (already detected above, but this confirms it)
@@ -432,20 +414,30 @@ class DevServer {
                     }
                 }
             } catch (error) {
-                this.log.debug(`Failed to read io-package.json: ${error as Error}`);
+                this.log.debug(`Failed to read io-package.json adminUi: ${error as Error}`);
             }
 
-            // Check package.json scripts for React builds
-            const pkg = await this.readPackageJson();
-            const scripts = pkg.scripts;
-            if (scripts && (scripts['watch:react'] || scripts['watch:parcel'])) {
-                hasReactTab = true;
+            // Priority 2: Check package.json scripts for React builds
+            try {
+                const pkg = await this.readPackageJson();
+                const scripts = pkg.scripts;
+                if (scripts && (scripts['watch:react'] || scripts['watch:parcel'])) {
+                    if (hasReactTab === undefined) {
+                        hasReactTab = true;
+                        this.log.debug('Found React build scripts in package.json');
+                    }
+                }
+            } catch (error) {
+                this.log.debug(`Failed to read package.json scripts: ${error as Error}`);
             }
 
-            // Check for HTML config files
+            // Priority 3: Check for file existence
             const htmlConfigPath = path.resolve(this.rootDir, 'admin/index.html');
             if (existsSync(htmlConfigPath)) {
-                hasHtmlConfig = true;
+                if (hasHtmlConfig === undefined) {
+                    hasHtmlConfig = true;
+                    this.log.debug('Found admin/index.html file');
+                }
             }
 
             // Check for tab files
@@ -454,32 +446,75 @@ class DevServer {
             const jsonTab5Path = path.resolve(this.rootDir, 'admin/jsonTab.json5');
 
             if (existsSync(tabHtmlPath)) {
-                hasTab = true;
-                if (tabType === 'none') {
+                if (hasTab === undefined) {
+                    hasTab = true;
+                }
+                if (tabType === undefined) {
                     tabType = 'html';
+                    this.log.debug('Found admin/tab.html file');
                 }
             }
 
             if (existsSync(jsonTabPath) || existsSync(jsonTab5Path)) {
-                hasTab = true;
-                hasJsonTab = true;
-                if (tabType === 'none') {
+                if (hasTab === undefined) {
+                    hasTab = true;
+                }
+                if (hasJsonTab === undefined) {
+                    hasJsonTab = true;
+                }
+                if (tabType === undefined) {
                     tabType = 'json';
+                    this.log.debug('Found JSON tab files');
+                }
+            }
+
+            // Priority 4: Check .create-adapter.json as last resort (might be outdated)
+            // Only use if we still don't have clear information
+            if (hasReactTab === undefined || hasHtmlConfig === undefined) {
+                const createAdapterJsonPath = path.resolve(this.rootDir, '.create-adapter.json');
+                if (existsSync(createAdapterJsonPath)) {
+                    try {
+                        const createAdapterConfig = await readJson(createAdapterJsonPath);
+                        this.log.debug(
+                            `Checking .create-adapter.json as fallback: ${JSON.stringify(createAdapterConfig)}`,
+                        );
+
+                        // Extract UI hints from create-adapter configuration only if not already determined
+                        if (createAdapterConfig.adminUi?.type === 'react' && hasReactTab === undefined) {
+                            hasReactTab = true;
+                            this.log.debug('Using React hint from .create-adapter.json (fallback)');
+                        } else if (
+                            createAdapterConfig.adminUi?.type === 'html' &&
+                            hasHtmlConfig === undefined
+                        ) {
+                            hasHtmlConfig = true;
+                            this.log.debug('Using HTML hint from .create-adapter.json (fallback)');
+                        }
+                    } catch (error) {
+                        this.log.debug(`Failed to read .create-adapter.json: ${error as Error}`);
+                    }
                 }
             }
         }
 
+        // Convert undefined to false for final return values
+        const finalHasReactTab = hasReactTab ?? false;
+        const finalHasHtmlConfig = hasHtmlConfig ?? false;
+        const finalHasTab = hasTab ?? false;
+        const finalHasJsonTab = hasJsonTab ?? false;
+        const finalTabType = tabType ?? 'none';
+
         this.log.debug(
-            `UI capabilities: jsonConfig=${hasJsonConfig}, reactTab=${hasReactTab}, htmlConfig=${hasHtmlConfig}, tab=${hasTab}, jsonTab=${hasJsonTab}, tabType=${tabType}`,
+            `UI capabilities: jsonConfig=${hasJsonConfig}, reactTab=${finalHasReactTab}, htmlConfig=${finalHasHtmlConfig}, tab=${finalHasTab}, jsonTab=${finalHasJsonTab}, tabType=${finalTabType}`,
         );
 
         return {
             hasJsonConfig,
-            hasReactTab,
-            hasHtmlConfig,
-            hasTab,
-            hasJsonTab,
-            tabType,
+            hasReactTab: finalHasReactTab,
+            hasHtmlConfig: finalHasHtmlConfig,
+            hasTab: finalHasTab,
+            hasJsonTab: finalHasJsonTab,
+            tabType: finalTabType,
         };
     }
 
@@ -910,6 +945,7 @@ class DevServer {
             // whenever jsonConfig.json[5] changes, we upload the new file
             bs.watch(jsonConfigFile, undefined, async e => {
                 if (e === 'change') {
+                    this.log.info(`Detected change in ${path.basename(jsonConfigFile)}, uploading to ioBroker...`);
                     const content = await readFile(jsonConfigFile);
                     this.websocket?.send(
                         JSON.stringify([
@@ -1087,6 +1123,7 @@ class DevServer {
             if (useBrowserSync && bs) {
                 bs.watch(jsonConfigFile, undefined, async (e: any) => {
                     if (e === 'change') {
+                        this.log.info(`Detected change in ${path.basename(jsonConfigFile)}, uploading to ioBroker...`);
                         const content = await readFile(jsonConfigFile);
                         this.websocket?.send(
                             JSON.stringify([
@@ -1121,6 +1158,7 @@ class DevServer {
                 if (existsSync(jsonTabPath)) {
                     bs.watch(jsonTabPath, undefined, async (e: any) => {
                         if (e === 'change') {
+                            this.log.info('Detected change in jsonTab.json, uploading to ioBroker...');
                             const content = await readFile(jsonTabPath);
                             this.websocket?.send(
                                 JSON.stringify([
@@ -1141,6 +1179,7 @@ class DevServer {
                 if (existsSync(jsonTab5Path)) {
                     bs.watch(jsonTab5Path, undefined, async (e: any) => {
                         if (e === 'change') {
+                            this.log.info('Detected change in jsonTab.json5, uploading to ioBroker...');
                             const content = await readFile(jsonTab5Path);
                             this.websocket?.send(
                                 JSON.stringify([
@@ -1165,7 +1204,7 @@ class DevServer {
                 if (existsSync(tabHtmlPath)) {
                     bs.watch(tabHtmlPath, undefined, (e: any) => {
                         if (e === 'change') {
-                            this.log.debug('Tab HTML file changed, reloading browser...');
+                            this.log.info('Detected change in tab.html, reloading browser...');
                             // For HTML tabs, we rely on BrowserSync's automatic reload
                         }
                     });
