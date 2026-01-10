@@ -126,12 +126,8 @@ describe('dev-server integration tests', function () {
             const devServerPath = path.join(DEV_SERVER_ROOT, 'dist', 'index.js');
             const jsonConfigFile = path.join(TS_ADAPTER_DIR, 'admin', 'jsonConfig.json');
 
-            // Skip test if jsonConfig file doesn't exist
-            if (!fs.existsSync(jsonConfigFile)) {
-                console.log('Skipping jsonConfig test - file not found');
-                this.skip();
-                return;
-            }
+            // Fail test if jsonConfig file doesn't exist (test setup issue)
+            assert.ok(fs.existsSync(jsonConfigFile), 'jsonConfig.json file must exist for this test (test setup issue)');
 
             // Backup original jsonConfig
             const jsonConfigBackup = fs.readFileSync(jsonConfigFile, 'utf8');
