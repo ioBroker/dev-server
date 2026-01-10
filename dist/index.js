@@ -297,133 +297,44 @@ class DevServer {
         return (0, fs_extra_1.readJson)(path.join(this.rootDir, 'io-package.json'));
     }
     async getAdapterUiCapabilities() {
-        var _a, _b, _c;
-        const hasJsonConfig = !!this.getJsonConfigPath();
-        // Check if adapter has React tab or HTML config by examining multiple sources
-        // Priority order (higher priority sources override lower ones):
-        // 1. io-package.json adminUi field (official ioBroker schema)
-        // 2. package.json scripts for React builds
-        // 3. File existence checks
-        // 4. .create-adapter.json configuration (last resort, might be outdated)
-        let hasReactTab = undefined;
-        let hasHtmlConfig = undefined;
-        let hasTab = undefined;
-        let hasJsonTab = undefined;
-        let tabType = undefined;
+        var _a;
+        let configType = 'none';
+        let tabType = 'none';
+        // Check for jsonConfig files first
+        if (this.getJsonConfigPath()) {
+            configType = 'json';
+        }
         if (!this.isJSController()) {
-            // Priority 1: Check io-package.json adminUi field (most authoritative)
+            // Check io-package.json adminUi field (replicate what admin does)
             try {
                 const ioPackage = await this.readIoPackageJson();
                 if ((_a = ioPackage === null || ioPackage === void 0 ? void 0 : ioPackage.common) === null || _a === void 0 ? void 0 : _a.adminUi) {
                     const adminUi = ioPackage.common.adminUi;
                     this.log.debug(`Found adminUi configuration in io-package.json: ${JSON.stringify(adminUi)}`);
+                    // Set config type based on adminUi.config
                     if (adminUi.config === 'json') {
-                        // Has JSON config (already detected above, but this confirms it)
+                        configType = 'json';
                     }
                     else if (adminUi.config === 'html' || adminUi.config === 'materialize') {
-                        hasHtmlConfig = true;
+                        configType = 'html';
                     }
-                    // Check if there are tabs defined
-                    if (adminUi.tab) {
-                        hasTab = true;
-                        if (adminUi.tab === 'json') {
-                            hasJsonTab = true;
-                            tabType = 'json';
-                        }
-                        else if (adminUi.tab === 'html' || adminUi.tab === 'materialize') {
-                            tabType = 'html';
-                        }
+                    // Set tab type based on adminUi.tab
+                    if (adminUi.tab === 'json') {
+                        tabType = 'json';
+                    }
+                    else if (adminUi.tab === 'html' || adminUi.tab === 'materialize') {
+                        tabType = 'html';
                     }
                 }
             }
             catch (error) {
                 this.log.debug(`Failed to read io-package.json adminUi: ${error}`);
             }
-            // Priority 2: Check package.json scripts for React builds
-            try {
-                const pkg = await this.readPackageJson();
-                const scripts = pkg.scripts;
-                if (scripts && (scripts['watch:react'] || scripts['watch:parcel'])) {
-                    if (hasReactTab === undefined) {
-                        hasReactTab = true;
-                        this.log.debug('Found React build scripts in package.json');
-                    }
-                }
-            }
-            catch (error) {
-                this.log.debug(`Failed to read package.json scripts: ${error}`);
-            }
-            // Priority 3: Check for file existence
-            const htmlConfigPath = path.resolve(this.rootDir, 'admin/index.html');
-            if ((0, fs_extra_1.existsSync)(htmlConfigPath)) {
-                if (hasHtmlConfig === undefined) {
-                    hasHtmlConfig = true;
-                    this.log.debug('Found admin/index.html file');
-                }
-            }
-            // Check for tab files
-            const tabHtmlPath = path.resolve(this.rootDir, 'admin/tab.html');
-            const jsonTabPath = path.resolve(this.rootDir, 'admin/jsonTab.json');
-            const jsonTab5Path = path.resolve(this.rootDir, 'admin/jsonTab.json5');
-            if ((0, fs_extra_1.existsSync)(tabHtmlPath)) {
-                if (hasTab === undefined) {
-                    hasTab = true;
-                }
-                if (tabType === undefined) {
-                    tabType = 'html';
-                    this.log.debug('Found admin/tab.html file');
-                }
-            }
-            if ((0, fs_extra_1.existsSync)(jsonTabPath) || (0, fs_extra_1.existsSync)(jsonTab5Path)) {
-                if (hasTab === undefined) {
-                    hasTab = true;
-                }
-                if (hasJsonTab === undefined) {
-                    hasJsonTab = true;
-                }
-                if (tabType === undefined) {
-                    tabType = 'json';
-                    this.log.debug('Found JSON tab files');
-                }
-            }
-            // Priority 4: Check .create-adapter.json as last resort (might be outdated)
-            // Only use if we still don't have clear information
-            if (hasReactTab === undefined || hasHtmlConfig === undefined) {
-                const createAdapterJsonPath = path.resolve(this.rootDir, '.create-adapter.json');
-                if ((0, fs_extra_1.existsSync)(createAdapterJsonPath)) {
-                    try {
-                        const createAdapterConfig = await (0, fs_extra_1.readJson)(createAdapterJsonPath);
-                        this.log.debug(`Checking .create-adapter.json as fallback: ${JSON.stringify(createAdapterConfig)}`);
-                        // Extract UI hints from create-adapter configuration only if not already determined
-                        if (((_b = createAdapterConfig.adminUi) === null || _b === void 0 ? void 0 : _b.type) === 'react' && hasReactTab === undefined) {
-                            hasReactTab = true;
-                            this.log.debug('Using React hint from .create-adapter.json (fallback)');
-                        }
-                        else if (((_c = createAdapterConfig.adminUi) === null || _c === void 0 ? void 0 : _c.type) === 'html' && hasHtmlConfig === undefined) {
-                            hasHtmlConfig = true;
-                            this.log.debug('Using HTML hint from .create-adapter.json (fallback)');
-                        }
-                    }
-                    catch (error) {
-                        this.log.debug(`Failed to read .create-adapter.json: ${error}`);
-                    }
-                }
-            }
         }
-        // Convert undefined to false for final return values
-        const finalHasReactTab = hasReactTab !== null && hasReactTab !== void 0 ? hasReactTab : false;
-        const finalHasHtmlConfig = hasHtmlConfig !== null && hasHtmlConfig !== void 0 ? hasHtmlConfig : false;
-        const finalHasTab = hasTab !== null && hasTab !== void 0 ? hasTab : false;
-        const finalHasJsonTab = hasJsonTab !== null && hasJsonTab !== void 0 ? hasJsonTab : false;
-        const finalTabType = tabType !== null && tabType !== void 0 ? tabType : 'none';
-        this.log.debug(`UI capabilities: jsonConfig=${hasJsonConfig}, reactTab=${finalHasReactTab}, htmlConfig=${finalHasHtmlConfig}, tab=${finalHasTab}, jsonTab=${finalHasJsonTab}, tabType=${finalTabType}`);
+        this.log.debug(`UI capabilities: configType=${configType}, tabType=${tabType}`);
         return {
-            hasJsonConfig,
-            hasReactTab: finalHasReactTab,
-            hasHtmlConfig: finalHasHtmlConfig,
-            hasTab: finalHasTab,
-            hasJsonTab: finalHasJsonTab,
-            tabType: finalTabType,
+            configType,
+            tabType,
         };
     }
     isTypeScriptMain(mainFile) {
@@ -695,17 +606,16 @@ class DevServer {
         else {
             // Determine what UI capabilities this adapter needs
             const uiCapabilities = await this.getAdapterUiCapabilities();
-            if (uiCapabilities.hasJsonConfig &&
-                (uiCapabilities.hasReactTab || uiCapabilities.hasHtmlConfig || uiCapabilities.hasTab)) {
-                // Adapter uses both jsonConfig AND React/HTML/tabs - support both simultaneously
+            if (uiCapabilities.configType === 'json' && uiCapabilities.tabType !== 'none') {
+                // Adapter uses jsonConfig AND has tabs - support both simultaneously
                 await this.createCombinedConfigProxy(app, this.config, uiCapabilities, useBrowserSync);
             }
-            else if (uiCapabilities.hasJsonConfig) {
+            else if (uiCapabilities.configType === 'json') {
                 // JSON config only
                 await this.createJsonConfigProxy(app, this.config, useBrowserSync);
             }
             else {
-                // HTML or React config only
+                // HTML config or tabs only (or no config)
                 await this.createHtmlConfigProxy(app, this.config, useBrowserSync);
             }
         }
@@ -881,15 +791,16 @@ class DevServer {
     }
     async createCombinedConfigProxy(app, config, uiCapabilities, useBrowserSync = true) {
         // This method combines the functionality of createJsonConfigProxy and createHtmlConfigProxy
-        // to support adapters that use both jsonConfig and React/HTML tabs
+        // to support adapters that use jsonConfig and tabs simultaneously
         const pathRewrite = {};
         const browserSyncPort = this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET);
         const adminUrl = `http://127.0.0.1:${this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET)}`;
-        // Handle React build watching if needed (from createHtmlConfigProxy)
+        // Handle React build watching if needed (for HTML config or HTML tabs)
         let hasReact = false;
         let bs = null;
         if (useBrowserSync) {
-            if (uiCapabilities.hasReactTab && !this.isJSController()) {
+            // Check if we need to watch React builds (for HTML config or HTML tabs)
+            if ((uiCapabilities.configType === 'html' || uiCapabilities.tabType === 'html') && !this.isJSController()) {
                 const pkg = await this.readPackageJson();
                 const scripts = pkg.scripts;
                 if (scripts) {
@@ -909,11 +820,11 @@ class DevServer {
                     }
                 }
             }
-            // Start browser-sync (from both methods)
+            // Start browser-sync
             bs = this.startBrowserSync(browserSyncPort, hasReact);
         }
-        // Handle jsonConfig file watching if present (from createJsonConfigProxy)
-        if (uiCapabilities.hasJsonConfig) {
+        // Handle jsonConfig file watching if present
+        if (uiCapabilities.configType === 'json') {
             const jsonConfigFile = this.getJsonConfigPath();
             if (useBrowserSync && bs) {
                 bs.watch(jsonConfigFile, undefined, async (e) => {
@@ -933,7 +844,7 @@ class DevServer {
                         ]));
                     }
                 });
-                // "proxy" for the main page which injects our script (from createJsonConfigProxy)
+                // "proxy" for the main page which injects our script
                 app.get('/', async (_req, res) => {
                     const { data } = await axios_1.default.get(adminUrl);
                     res.send((0, jsonConfig_1.injectCode)(data, this.adapterName, path.basename(jsonConfigFile)));
@@ -941,8 +852,8 @@ class DevServer {
             }
         }
         // Handle tab file watching if present
-        if (uiCapabilities.hasTab && useBrowserSync && bs) {
-            if (uiCapabilities.hasJsonTab) {
+        if (uiCapabilities.tabType !== 'none' && useBrowserSync && bs) {
+            if (uiCapabilities.tabType === 'json') {
                 // Watch JSON tab files
                 const jsonTabPath = path.resolve(this.rootDir, 'admin/jsonTab.json');
                 const jsonTab5Path = path.resolve(this.rootDir, 'admin/jsonTab.json5');
@@ -998,10 +909,10 @@ class DevServer {
                 }
             }
         }
-        // Setup proxies similar to both methods
+        // Setup proxies
         if (useBrowserSync) {
-            if (uiCapabilities.hasReactTab || uiCapabilities.hasHtmlConfig || uiCapabilities.hasTab) {
-                // browser-sync proxy for adapter files (from createHtmlConfigProxy)
+            if (uiCapabilities.configType === 'html' || uiCapabilities.tabType === 'html') {
+                // browser-sync proxy for adapter files (for HTML config or HTML tabs)
                 const adminPattern = `/adapter/${this.adapterName}/**`;
                 pathRewrite[`^/adapter/${this.adapterName}/`] = '/';
                 app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)([adminPattern, '/browser-sync/**'], {
@@ -1016,7 +927,7 @@ class DevServer {
                 }));
             }
             else {
-                // browser-sync proxy (from createJsonConfigProxy)
+                // browser-sync proxy (for JSON config only)
                 app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)(['/browser-sync/**'], {
                     target: `http://127.0.0.1:${browserSyncPort}`,
                     // ws: true, // can't have two web-socket connections proxying to different locations
