@@ -685,6 +685,58 @@ class DevServer {
         }
         this.log.box(`Admin is now reachable under http://127.0.0.1:${this.config.adminPort}/`);
     }
+    /**
+     * Helper method to setup file watching for a JSON config file (jsonConfig, jsonTab, etc.)
+     * Uploads the file to ioBroker via WebSocket when changes are detected
+     */
+    setupJsonFileWatch(bs, filePath, fileName) {
+        if (!(0, fs_extra_1.existsSync)(filePath)) {
+            return;
+        }
+        bs.watch(filePath, undefined, async (e) => {
+            var _a;
+            if (e === 'change') {
+                this.log.info(`Detected change in ${fileName}, uploading to ioBroker...`);
+                const content = await (0, fs_extra_1.readFile)(filePath);
+                (_a = this.websocket) === null || _a === void 0 ? void 0 : _a.send(JSON.stringify([
+                    3,
+                    46,
+                    'writeFile',
+                    [`${this.adapterName}.admin`, fileName, Buffer.from(content).toString('base64')],
+                ]));
+            }
+        });
+    }
+    /**
+     * Helper method to setup React build watching
+     * Returns true if React watching was started, false otherwise
+     */
+    async setupReactWatch(pathRewrite) {
+        if (this.isJSController()) {
+            return false;
+        }
+        const pkg = await this.readPackageJson();
+        const scripts = pkg.scripts;
+        if (!scripts) {
+            return false;
+        }
+        let hasReact = false;
+        if (scripts['watch:react']) {
+            await this.startReact('watch:react');
+            hasReact = true;
+            if ((0, fs_extra_1.existsSync)(path.resolve(this.rootDir, 'admin/.watch'))) {
+                // rewrite the build directory to the .watch directory,
+                // because "watch:react" no longer updates the build directory automatically
+                pathRewrite[`^/adapter/${this.adapterName}/build/`] = '/.watch/';
+            }
+        }
+        else if (scripts['watch:parcel']) {
+            // use React with legacy script name
+            await this.startReact('watch:parcel');
+            hasReact = true;
+        }
+        return hasReact;
+    }
     createJsonConfigProxy(app, config, useBrowserSync = true) {
         const jsonConfigFile = this.getJsonConfigPath();
         const adminUrl = `http://127.0.0.1:${this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET)}`;
@@ -692,24 +744,8 @@ class DevServer {
             // Use BrowserSync for hot-reload functionality
             const browserSyncPort = this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET);
             const bs = this.startBrowserSync(browserSyncPort, false);
-            // whenever jsonConfig.json[5] changes, we upload the new file
-            bs.watch(jsonConfigFile, undefined, async (e) => {
-                var _a;
-                if (e === 'change') {
-                    this.log.info(`Detected change in ${path.basename(jsonConfigFile)}, uploading to ioBroker...`);
-                    const content = await (0, fs_extra_1.readFile)(jsonConfigFile);
-                    (_a = this.websocket) === null || _a === void 0 ? void 0 : _a.send(JSON.stringify([
-                        3,
-                        46,
-                        'writeFile',
-                        [
-                            `${this.adapterName}.admin`,
-                            path.basename(jsonConfigFile),
-                            Buffer.from(content).toString('base64'),
-                        ],
-                    ]));
-                }
-            });
+            // Setup file watching for jsonConfig changes
+            this.setupJsonFileWatch(bs, jsonConfigFile, path.basename(jsonConfigFile));
             // "proxy" for the main page which injects our script
             app.get('/', async (_req, res) => {
                 const { data } = await axios_1.default.get(adminUrl);
@@ -738,28 +774,8 @@ class DevServer {
     async createHtmlConfigProxy(app, config, useBrowserSync = true) {
         const pathRewrite = {};
         const adminPattern = `/adapter/${this.adapterName}/**`;
-        // figure out if we need to watch the React build
-        let hasReact = false;
-        if (!this.isJSController()) {
-            const pkg = await this.readPackageJson();
-            const scripts = pkg.scripts;
-            if (scripts) {
-                if (scripts['watch:react']) {
-                    await this.startReact('watch:react');
-                    hasReact = true;
-                    if ((0, fs_extra_1.existsSync)(path.resolve(this.rootDir, 'admin/.watch'))) {
-                        // rewrite the build directory to the .watch directory,
-                        // because "watch:react" no longer updates the build directory automatically
-                        pathRewrite[`^/adapter/${this.adapterName}/build/`] = '/.watch/';
-                    }
-                }
-                else if (scripts['watch:parcel']) {
-                    // use React with legacy script name
-                    await this.startReact('watch:parcel');
-                    hasReact = true;
-                }
-            }
-        }
+        // Setup React build watching if needed
+        const hasReact = await this.setupReactWatch(pathRewrite);
         if (useBrowserSync) {
             // Use BrowserSync for hot-reload functionality
             const browserSyncPort = this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET);
@@ -795,61 +811,25 @@ class DevServer {
         const pathRewrite = {};
         const browserSyncPort = this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET);
         const adminUrl = `http://127.0.0.1:${this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET)}`;
-        // Handle React build watching if needed (for HTML config or HTML tabs)
         let hasReact = false;
         let bs = null;
         if (useBrowserSync) {
-            // Check if we need to watch React builds (for HTML config or HTML tabs)
-            if ((uiCapabilities.configType === 'html' || uiCapabilities.tabType === 'html') && !this.isJSController()) {
-                const pkg = await this.readPackageJson();
-                const scripts = pkg.scripts;
-                if (scripts) {
-                    if (scripts['watch:react']) {
-                        await this.startReact('watch:react');
-                        hasReact = true;
-                        if ((0, fs_extra_1.existsSync)(path.resolve(this.rootDir, 'admin/.watch'))) {
-                            // rewrite the build directory to the .watch directory,
-                            // because "watch:react" no longer updates the build directory automatically
-                            pathRewrite[`^/adapter/${this.adapterName}/build/`] = '/.watch/';
-                        }
-                    }
-                    else if (scripts['watch:parcel']) {
-                        // use React with legacy script name
-                        await this.startReact('watch:parcel');
-                        hasReact = true;
-                    }
-                }
+            // Setup React build watching if needed (for HTML config or HTML tabs)
+            if (uiCapabilities.configType === 'html' || uiCapabilities.tabType === 'html') {
+                hasReact = await this.setupReactWatch(pathRewrite);
             }
             // Start browser-sync
             bs = this.startBrowserSync(browserSyncPort, hasReact);
         }
         // Handle jsonConfig file watching if present
-        if (uiCapabilities.configType === 'json') {
+        if (uiCapabilities.configType === 'json' && useBrowserSync && bs) {
             const jsonConfigFile = this.getJsonConfigPath();
-            if (useBrowserSync && bs) {
-                bs.watch(jsonConfigFile, undefined, async (e) => {
-                    var _a;
-                    if (e === 'change') {
-                        this.log.info(`Detected change in ${path.basename(jsonConfigFile)}, uploading to ioBroker...`);
-                        const content = await (0, fs_extra_1.readFile)(jsonConfigFile);
-                        (_a = this.websocket) === null || _a === void 0 ? void 0 : _a.send(JSON.stringify([
-                            3,
-                            46,
-                            'writeFile',
-                            [
-                                `${this.adapterName}.admin`,
-                                path.basename(jsonConfigFile),
-                                Buffer.from(content).toString('base64'),
-                            ],
-                        ]));
-                    }
-                });
-                // "proxy" for the main page which injects our script
-                app.get('/', async (_req, res) => {
-                    const { data } = await axios_1.default.get(adminUrl);
-                    res.send((0, jsonConfig_1.injectCode)(data, this.adapterName, path.basename(jsonConfigFile)));
-                });
-            }
+            this.setupJsonFileWatch(bs, jsonConfigFile, path.basename(jsonConfigFile));
+            // "proxy" for the main page which injects our script
+            app.get('/', async (_req, res) => {
+                const { data } = await axios_1.default.get(adminUrl);
+                res.send((0, jsonConfig_1.injectCode)(data, this.adapterName, path.basename(jsonConfigFile)));
+            });
         }
         // Handle tab file watching if present
         if (uiCapabilities.tabType !== 'none' && useBrowserSync && bs) {
@@ -857,44 +837,8 @@ class DevServer {
                 // Watch JSON tab files
                 const jsonTabPath = path.resolve(this.rootDir, 'admin/jsonTab.json');
                 const jsonTab5Path = path.resolve(this.rootDir, 'admin/jsonTab.json5');
-                if ((0, fs_extra_1.existsSync)(jsonTabPath)) {
-                    bs.watch(jsonTabPath, undefined, async (e) => {
-                        var _a;
-                        if (e === 'change') {
-                            this.log.info('Detected change in jsonTab.json, uploading to ioBroker...');
-                            const content = await (0, fs_extra_1.readFile)(jsonTabPath);
-                            (_a = this.websocket) === null || _a === void 0 ? void 0 : _a.send(JSON.stringify([
-                                3,
-                                46,
-                                'writeFile',
-                                [
-                                    `${this.adapterName}.admin`,
-                                    'jsonTab.json',
-                                    Buffer.from(content).toString('base64'),
-                                ],
-                            ]));
-                        }
-                    });
-                }
-                if ((0, fs_extra_1.existsSync)(jsonTab5Path)) {
-                    bs.watch(jsonTab5Path, undefined, async (e) => {
-                        var _a;
-                        if (e === 'change') {
-                            this.log.info('Detected change in jsonTab.json5, uploading to ioBroker...');
-                            const content = await (0, fs_extra_1.readFile)(jsonTab5Path);
-                            (_a = this.websocket) === null || _a === void 0 ? void 0 : _a.send(JSON.stringify([
-                                3,
-                                46,
-                                'writeFile',
-                                [
-                                    `${this.adapterName}.admin`,
-                                    'jsonTab.json5',
-                                    Buffer.from(content).toString('base64'),
-                                ],
-                            ]));
-                        }
-                    });
-                }
+                this.setupJsonFileWatch(bs, jsonTabPath, 'jsonTab.json');
+                this.setupJsonFileWatch(bs, jsonTab5Path, 'jsonTab.json5');
             }
             if (uiCapabilities.tabType === 'html') {
                 // Watch HTML tab files
