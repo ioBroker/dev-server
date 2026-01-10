@@ -524,10 +524,83 @@ function validateWatchRestartOutput(output, adapterPrefix) {
     );
 }
 
+/**
+ * Run watch command with jsonConfig file change to test hot-reload
+ */
+function runCommandWithJsonConfigChange(command, args, options = {}) {
+    let fileChanged = false;
+
+    const onStdout = (str, shutDown) => {
+        // Trigger jsonConfig file change after initial startup
+        if (!fileChanged && options.initialMessage && str.match(options.initialMessage)) {
+            console.log('Initial message detected, triggering jsonConfig file change...');
+            fileChanged = true;
+
+            // Wait a bit then trigger file change
+            setTimeout(() => {
+                if (options.fileToChange) {
+                    console.log(`Modifying jsonConfig file: ${options.fileToChange}`);
+                    try {
+                        // Read the jsonConfig file and modify it
+                        const content = fs.readFileSync(options.fileToChange, 'utf8');
+                        const config = JSON.parse(content);
+                        
+                        // Add/modify a timestamp field to trigger a change
+                        if (!config.items) {
+                            config.items = {};
+                        }
+                        config.items._testTimestamp = {
+                            type: 'text',
+                            label: 'Test Timestamp',
+                            text: `Last modified: ${new Date().toISOString()}`
+                        };
+                        
+                        // Write back the modified config
+                        fs.writeFileSync(options.fileToChange, JSON.stringify(config, null, 4));
+                        console.log('jsonConfig file modified successfully');
+                    } catch (error) {
+                        console.error('Error modifying jsonConfig file:', error);
+                    }
+                }
+            }, 5000);
+        }
+
+        // After file change, wait for detection message
+        if (fileChanged && options.changeDetectionMessage && str.match(options.changeDetectionMessage)) {
+            console.log('Change detection message found, shutting down...');
+            setTimeout(shutDown, 10000);
+        }
+    };
+
+    return runCommandWithTimeout(command, args, {
+        ...options,
+        logPrefix: 'Running with jsonConfig change trigger',
+        onStdout
+    });
+}
+
+/**
+ * Validate that jsonConfig file change was detected
+ */
+function validateJsonConfigChangeDetection(output) {
+    // Should see the file change detection log message
+    assert.ok(
+        output.includes('Detected change in jsonConfig.json'),
+        'No jsonConfig.json change detection message found in output'
+    );
+    
+    // Verify upload message
+    assert.ok(
+        output.includes('uploading to ioBroker'),
+        'No upload message found after jsonConfig change'
+    );
+}
+
 module.exports = {
     runCommand,
     runCommandWithSignal,
     runCommandWithFileChange,
+    runCommandWithJsonConfigChange,
     createTestAdapter,
     logSetupInfo,
     setupTestAdapter,
@@ -540,5 +613,6 @@ module.exports = {
     runDevServerSetupTest,
     validateRunTestOutput,
     validateWatchTestOutput,
-    validateWatchRestartOutput
+    validateWatchRestartOutput,
+    validateJsonConfigChangeDetection
 };

@@ -399,8 +399,7 @@ class DevServer {
                             hasReactTab = true;
                             this.log.debug('Using React hint from .create-adapter.json (fallback)');
                         }
-                        else if (((_c = createAdapterConfig.adminUi) === null || _c === void 0 ? void 0 : _c.type) === 'html' &&
-                            hasHtmlConfig === undefined) {
+                        else if (((_c = createAdapterConfig.adminUi) === null || _c === void 0 ? void 0 : _c.type) === 'html' && hasHtmlConfig === undefined) {
                             hasHtmlConfig = true;
                             this.log.debug('Using HTML hint from .create-adapter.json (fallback)');
                         }
