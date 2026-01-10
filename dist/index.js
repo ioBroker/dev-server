@@ -688,6 +688,11 @@ class DevServer {
             exiting = true;
             server.close();
             // do not kill this process when receiving SIGINT, but let all child processes exit first
+            // but send the signal to all child processes when not in a tty environment
+            if (!process.stdin.isTTY) {
+                this.log.silly('Sending SIGINT to all child processes...');
+                this.childProcesses.forEach(p => p.kill('SIGINT'));
+            }
         });
         await new Promise((resolve, reject) => {
             server.on('listening', resolve);
@@ -711,7 +716,7 @@ class DevServer {
                 this.websocket.on('message', msg => {
                     var _a;
                     // eslint-disable-next-line @typescript-eslint/no-base-to-string
-                    const msgString = msg && typeof msg !== 'string' ? msg.toString() : null;
+                    const msgString = msg === null || msg === void 0 ? void 0 : msg.toString();
                     if (typeof msgString === 'string') {
                         try {
                             const data = JSON.parse(msgString);
@@ -1202,22 +1207,27 @@ class DevServer {
         const pkg = await this.readPackageJson();
         const scripts = pkg.scripts;
         if (scripts && scripts['watch:ts']) {
+            this.log.notice(`Starting TypeScript watch: ${startAdapter}`);
             // use TSC
             await this.startTscWatch();
         }
+        const isTypeScriptMain = this.isTypeScriptMain(pkg.main);
+        const mainFileSuffix = pkg.main.split('.').pop();
         // start sync
         const adapterRunDir = path.join(this.profileDir, 'node_modules', `iobroker.${this.adapterName}`);
         if (!((_a = this.config) === null || _a === void 0 ? void 0 : _a.useSymlinks)) {
+            this.log.notice('Starting file synchronization');
             // This is not necessary when using symlinks
-            await this.startFileSync(adapterRunDir);
+            await this.startFileSync(adapterRunDir, mainFileSuffix);
+            this.log.notice('File synchronization ready');
         }
         if (startAdapter) {
             await this.delay(3000);
+            this.log.notice('Starting Nodemon');
             await this.startNodemon(adapterRunDir, pkg.main, doNotWatch);
         }
         else {
-            const isTypeScript = this.isTypeScriptMain(pkg.main);
-            const runner = isTypeScript ? 'ts-node' : 'node';
+            const runner = isTypeScriptMain ? 'node -r @alcalzone/esbuild-register' : 'node';
             this.log.box(`You can now start the adapter manually by running\n    ` +
                 `${runner} node_modules/iobroker.${this.adapterName}/${pkg.main} --debug 0\nfrom within\n    ${this.profileDir}`);
         }
@@ -1229,26 +1239,31 @@ class DevServer {
             shell: true,
         });
     }
-    startFileSync(destinationDir) {
+    startFileSync(destinationDir, mainFileSuffix) {
         this.log.notice(`Starting file system sync from ${this.rootDir}`);
         const inSrc = (filename) => path.join(this.rootDir, filename);
         const inDest = (filename) => path.join(destinationDir, filename);
         return new Promise((resolve, reject) => {
-            const patterns = this.getFilePatterns(['js', 'map'], true);
+            const patternList = ['js', 'map'];
+            if (!patternList.includes(mainFileSuffix)) {
+                patternList.push(mainFileSuffix);
+            }
+            const patterns = this.getFilePatterns(patternList, true);
             const ignoreFiles = [];
-            const watcher = chokidar_1.default.watch(patterns, { cwd: this.rootDir });
+            const watcher = chokidar_1.default.watch(fast_glob_1.default.sync(patterns), { cwd: this.rootDir });
             let ready = false;
             let initialEventPromises = [];
             watcher.on('error', reject);
             watcher.on('ready', async () => {
+                this.log.debug('Initial scan complete. Ready for changes.');
                 ready = true;
                 await Promise.all(initialEventPromises);
                 initialEventPromises = [];
                 resolve();
             });
-            /*watcher.on('all', (event, path) => {
-        console.log(event, path);
-      });*/
+            watcher.on('all', (event, path) => {
+                console.log(event, path);
+            });
             const syncFile = async (filename) => {
                 try {
                     this.log.debug(`Synchronizing ${filename}`);
@@ -1318,11 +1333,11 @@ class DevServer {
         const execMap = {
             js: 'node --inspect --preserve-symlinks --preserve-symlinks-main',
             mjs: 'node --inspect --preserve-symlinks --preserve-symlinks-main',
-            ts: 'node --inspect --preserve-symlinks --preserve-symlinks-main --require ts-node/register',
+            ts: 'node --inspect --preserve-symlinks --preserve-symlinks-main -r @alcalzone/esbuild-register',
         };
-        // @ts-expect-error fix later
         (0, nodemon_1.default)({
             script,
+            cwd: baseDir,
             stdin: false,
             verbose: true,
             // dump: true, // this will output the entire config and not do anything
@@ -1477,10 +1492,10 @@ class DevServer {
             // if this dev-server is used to debug JS-Controller, don't install a published version
             delete dependencies['iobroker.js-controller'];
         }
-        // Check if the adapter uses TypeScript and add ts-node dependency if needed
+        // Check if the adapter uses TypeScript and add esbuild-register dependency if needed
         const adapterPkg = await this.readPackageJson();
         if (this.isTypeScriptMain(adapterPkg.main)) {
-            dependencies['ts-node'] = '^10.9.2';
+            dependencies['@alcalzone/esbuild-register'] = '^2.5.1-1';
         }
         const pkg = {
             name: `dev-server.${this.adapterName}`,
@@ -1558,6 +1573,10 @@ class DevServer {
             return systemConfig;
         });
     }
+    isGitRepository() {
+        // Check if we're in a git repository by looking for .git directory
+        return (0, fs_extra_1.existsSync)(path.join(this.rootDir, '.git'));
+    }
     async verifyIgnoreFiles() {
         this.log.notice(`Verifying .npmignore and .gitignore`);
         let relative = path.relative(this.rootDir, this.tempDir).replace('\\', '/');
@@ -1626,7 +1645,13 @@ class DevServer {
             }
         };
         await verifyFile('.npmignore', 'npm pack --dry-run', true);
-        await verifyFile('.gitignore', 'git status --short --untracked-files=all', false);
+        // Only verify .gitignore if we're in a git repository
+        if (this.isGitRepository()) {
+            await verifyFile('.gitignore', 'git status --short --untracked-files=all', false);
+        }
+        else {
+            this.log.debug('Skipping .gitignore verification: not in a git repository');
+        }
     }
     async uploadAndAddAdapter(name) {
         // upload the already installed adapter
