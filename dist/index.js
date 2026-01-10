@@ -293,6 +293,69 @@ class DevServer {
     readPackageJson() {
         return (0, fs_extra_1.readJson)(path.join(this.rootDir, 'package.json'));
     }
+    /**
+     * Read and parse the io-package.json file from the adapter directory
+     *
+     * @returns Promise resolving to the parsed io-package.json content
+     */
+    async readIoPackageJson() {
+        return (0, fs_extra_1.readJson)(path.join(this.rootDir, 'io-package.json'));
+    }
+    /**
+     * Detect adapter UI capabilities by reading io-package.json adminUi configuration
+     *
+     * This method determines how the adapter's configuration and tab UI should be handled
+     * by checking the adminUi field in io-package.json, which is the official ioBroker schema.
+     * It also checks for the presence of jsonConfig files to support legacy adapters.
+     *
+     * The detection logic replicates what the admin interface does to ensure dev-server
+     * behavior matches what users will see in production.
+     *
+     * @returns Promise resolving to an object containing:
+     *   - configType: 'json' (jsonConfig), 'html' (HTML/React config), or 'none'
+     *   - tabType: 'json' (jsonTab), 'html' (HTML/React tab), or 'none'
+     */
+    async getAdapterUiCapabilities() {
+        var _a;
+        let configType = 'none';
+        let tabType = 'none';
+        // Check for jsonConfig files first
+        if (this.getJsonConfigPath()) {
+            configType = 'json';
+        }
+        if (!this.isJSController()) {
+            // Check io-package.json adminUi field (replicate what admin does)
+            try {
+                const ioPackage = await this.readIoPackageJson();
+                if ((_a = ioPackage === null || ioPackage === void 0 ? void 0 : ioPackage.common) === null || _a === void 0 ? void 0 : _a.adminUi) {
+                    const adminUi = ioPackage.common.adminUi;
+                    this.log.debug(`Found adminUi configuration in io-package.json: ${JSON.stringify(adminUi)}`);
+                    // Set config type based on adminUi.config
+                    if (adminUi.config === 'json') {
+                        configType = 'json';
+                    }
+                    else if (adminUi.config === 'html' || adminUi.config === 'materialize') {
+                        configType = 'html';
+                    }
+                    // Set tab type based on adminUi.tab
+                    if (adminUi.tab === 'json') {
+                        tabType = 'json';
+                    }
+                    else if (adminUi.tab === 'html' || adminUi.tab === 'materialize') {
+                        tabType = 'html';
+                    }
+                }
+            }
+            catch (error) {
+                this.log.debug(`Failed to read io-package.json adminUi: ${error}`);
+            }
+        }
+        this.log.debug(`UI capabilities: configType=${configType}, tabType=${tabType}`);
+        return {
+            configType,
+            tabType,
+        };
+    }
     isTypeScriptMain(mainFile) {
         return !!(mainFile && mainFile.endsWith('.ts'));
     }
@@ -559,13 +622,21 @@ class DevServer {
                 ws: true,
             }));
         }
-        else if (this.getJsonConfigPath()) {
-            // JSON config
-            await this.createJsonConfigProxy(app, this.config, useBrowserSync);
-        }
         else {
-            // HTML or React config
-            await this.createHtmlConfigProxy(app, this.config, useBrowserSync);
+            // Determine what UI capabilities this adapter needs
+            const uiCapabilities = await this.getAdapterUiCapabilities();
+            if (uiCapabilities.configType === 'json' && uiCapabilities.tabType !== 'none') {
+                // Adapter uses jsonConfig AND has tabs - support both simultaneously
+                await this.createCombinedConfigProxy(app, this.config, uiCapabilities, useBrowserSync);
+            }
+            else if (uiCapabilities.configType === 'json') {
+                // JSON config only
+                await this.createJsonConfigProxy(app, this.config, useBrowserSync);
+            }
+            else {
+                // HTML config or tabs only (or no config)
+                await this.createHtmlConfigProxy(app, this.config, useBrowserSync);
+            }
         }
         // start express
         this.log.notice(`Starting web server on port ${this.config.adminPort}`);
@@ -633,6 +704,58 @@ class DevServer {
         }
         this.log.box(`Admin is now reachable under http://127.0.0.1:${this.config.adminPort}/`);
     }
+    /**
+     * Helper method to setup file watching for a JSON config file (jsonConfig, jsonTab, etc.)
+     * Uploads the file to ioBroker via WebSocket when changes are detected
+     */
+    setupJsonFileWatch(bs, filePath, fileName) {
+        if (!(0, fs_extra_1.existsSync)(filePath)) {
+            return;
+        }
+        bs.watch(filePath, undefined, async (e) => {
+            var _a;
+            if (e === 'change') {
+                this.log.info(`Detected change in ${fileName}, uploading to ioBroker...`);
+                const content = await (0, fs_extra_1.readFile)(filePath);
+                (_a = this.websocket) === null || _a === void 0 ? void 0 : _a.send(JSON.stringify([
+                    3,
+                    46,
+                    'writeFile',
+                    [`${this.adapterName}.admin`, fileName, Buffer.from(content).toString('base64')],
+                ]));
+            }
+        });
+    }
+    /**
+     * Helper method to setup React build watching
+     * Returns true if React watching was started, false otherwise
+     */
+    async setupReactWatch(pathRewrite) {
+        if (this.isJSController()) {
+            return false;
+        }
+        const pkg = await this.readPackageJson();
+        const scripts = pkg.scripts;
+        if (!scripts) {
+            return false;
+        }
+        let hasReact = false;
+        if (scripts['watch:react']) {
+            await this.startReact('watch:react');
+            hasReact = true;
+            if ((0, fs_extra_1.existsSync)(path.resolve(this.rootDir, 'admin/.watch'))) {
+                // rewrite the build directory to the .watch directory,
+                // because "watch:react" no longer updates the build directory automatically
+                pathRewrite[`^/adapter/${this.adapterName}/build/`] = '/.watch/';
+            }
+        }
+        else if (scripts['watch:parcel']) {
+            // use React with legacy script name
+            await this.startReact('watch:parcel');
+            hasReact = true;
+        }
+        return hasReact;
+    }
     createJsonConfigProxy(app, config, useBrowserSync = true) {
         const jsonConfigFile = this.getJsonConfigPath();
         const adminUrl = `http://127.0.0.1:${this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET)}`;
@@ -640,23 +763,8 @@ class DevServer {
             // Use BrowserSync for hot-reload functionality
             const browserSyncPort = this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET);
             const bs = this.startBrowserSync(browserSyncPort, false);
-            // whenever jsonConfig.json[5] changes, we upload the new file
-            bs.watch(jsonConfigFile, undefined, async (e) => {
-                var _a;
-                if (e === 'change') {
-                    const content = await (0, fs_extra_1.readFile)(jsonConfigFile);
-                    (_a = this.websocket) === null || _a === void 0 ? void 0 : _a.send(JSON.stringify([
-                        3,
-                        46,
-                        'writeFile',
-                        [
-                            `${this.adapterName}.admin`,
-                            path.basename(jsonConfigFile),
-                            Buffer.from(content).toString('base64'),
-                        ],
-                    ]));
-                }
-            });
+            // Setup file watching for jsonConfig changes
+            this.setupJsonFileWatch(bs, jsonConfigFile, path.basename(jsonConfigFile));
             // "proxy" for the main page which injects our script
             app.get('/', async (_req, res) => {
                 const { data } = await axios_1.default.get(adminUrl);
@@ -685,28 +793,8 @@ class DevServer {
     async createHtmlConfigProxy(app, config, useBrowserSync = true) {
         const pathRewrite = {};
         const adminPattern = `/adapter/${this.adapterName}/**`;
-        // figure out if we need to watch the React build
-        let hasReact = false;
-        if (!this.isJSController()) {
-            const pkg = await this.readPackageJson();
-            const scripts = pkg.scripts;
-            if (scripts) {
-                if (scripts['watch:react']) {
-                    await this.startReact('watch:react');
-                    hasReact = true;
-                    if ((0, fs_extra_1.existsSync)(path.resolve(this.rootDir, 'admin/.watch'))) {
-                        // rewrite the build directory to the .watch directory,
-                        // because "watch:react" no longer updates the build directory automatically
-                        pathRewrite[`^/adapter/${this.adapterName}/build/`] = '/.watch/';
-                    }
-                }
-                else if (scripts['watch:parcel']) {
-                    // use React with legacy script name
-                    await this.startReact('watch:parcel');
-                    hasReact = true;
-                }
-            }
-        }
+        // Setup React build watching if needed
+        const hasReact = await this.setupReactWatch(pathRewrite);
         if (useBrowserSync) {
             // Use BrowserSync for hot-reload functionality
             const browserSyncPort = this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET);
@@ -732,6 +820,111 @@ class DevServer {
             // admin proxy for everything else
             app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)([`!${adminPattern}`], {
                 target: `http://127.0.0.1:${this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET)}`,
+                ws: true,
+            }));
+        }
+    }
+    /**
+     * Create a combined config proxy that supports adapters using both jsonConfig and tabs
+     *
+     * This method merges the functionality of createJsonConfigProxy and createHtmlConfigProxy
+     * to support adapters that need both configuration UI types simultaneously. It handles:
+     * - React build watching for HTML-based config or tabs
+     * - JSON config file watching with WebSocket hot-reload
+     * - JSON tab file watching with WebSocket hot-reload
+     * - HTML tab file watching with BrowserSync automatic reload
+     * - Appropriate proxy routing based on the UI types present
+     *
+     * Used when an adapter has jsonConfig AND also has custom tabs (either HTML or JSON-based).
+     * For adapters with only one UI type, use createJsonConfigProxy or createHtmlConfigProxy instead.
+     *
+     * @param app Express application instance
+     * @param config Dev server configuration
+     * @param uiCapabilities Object containing configType and tabType detected from io-package.json
+     * @param useBrowserSync Whether to use BrowserSync for hot-reload (default: true)
+     */
+    async createCombinedConfigProxy(app, config, uiCapabilities, useBrowserSync = true) {
+        // This method combines the functionality of createJsonConfigProxy and createHtmlConfigProxy
+        // to support adapters that use jsonConfig and tabs simultaneously
+        const pathRewrite = {};
+        const browserSyncPort = this.getPort(config.adminPort, HIDDEN_BROWSER_SYNC_PORT_OFFSET);
+        const adminUrl = `http://127.0.0.1:${this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET)}`;
+        let hasReact = false;
+        let bs = null;
+        if (useBrowserSync) {
+            // Setup React build watching if needed (for HTML config or HTML tabs)
+            if (uiCapabilities.configType === 'html' || uiCapabilities.tabType === 'html') {
+                hasReact = await this.setupReactWatch(pathRewrite);
+            }
+            // Start browser-sync
+            bs = this.startBrowserSync(browserSyncPort, hasReact);
+        }
+        // Handle jsonConfig file watching if present
+        if (uiCapabilities.configType === 'json' && useBrowserSync && bs) {
+            const jsonConfigFile = this.getJsonConfigPath();
+            this.setupJsonFileWatch(bs, jsonConfigFile, path.basename(jsonConfigFile));
+            // "proxy" for the main page which injects our script
+            app.get('/', async (_req, res) => {
+                const { data } = await axios_1.default.get(adminUrl);
+                res.send((0, jsonConfig_1.injectCode)(data, this.adapterName, path.basename(jsonConfigFile)));
+            });
+        }
+        // Handle tab file watching if present
+        if (uiCapabilities.tabType !== 'none' && useBrowserSync && bs) {
+            if (uiCapabilities.tabType === 'json') {
+                // Watch JSON tab files
+                const jsonTabPath = path.resolve(this.rootDir, 'admin/jsonTab.json');
+                const jsonTab5Path = path.resolve(this.rootDir, 'admin/jsonTab.json5');
+                this.setupJsonFileWatch(bs, jsonTabPath, 'jsonTab.json');
+                this.setupJsonFileWatch(bs, jsonTab5Path, 'jsonTab.json5');
+            }
+            if (uiCapabilities.tabType === 'html') {
+                // Watch HTML tab files
+                const tabHtmlPath = path.resolve(this.rootDir, 'admin/tab.html');
+                if ((0, fs_extra_1.existsSync)(tabHtmlPath)) {
+                    bs.watch(tabHtmlPath, undefined, (e) => {
+                        if (e === 'change') {
+                            this.log.info('Detected change in tab.html, reloading browser...');
+                            // For HTML tabs, we rely on BrowserSync's automatic reload
+                        }
+                    });
+                }
+            }
+        }
+        // Setup proxies
+        if (useBrowserSync) {
+            if (uiCapabilities.configType === 'html' || uiCapabilities.tabType === 'html') {
+                // browser-sync proxy for adapter files (for HTML config or HTML tabs)
+                const adminPattern = `/adapter/${this.adapterName}/**`;
+                pathRewrite[`^/adapter/${this.adapterName}/`] = '/';
+                app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)([adminPattern, '/browser-sync/**'], {
+                    target: `http://127.0.0.1:${browserSyncPort}`,
+                    //ws: true, // can't have two web-socket connections proxying to different locations
+                    pathRewrite,
+                }));
+                // admin proxy
+                app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)([`!${adminPattern}`, '!/browser-sync/**'], {
+                    target: adminUrl,
+                    ws: true,
+                }));
+            }
+            else {
+                // browser-sync proxy (for JSON config only)
+                app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)(['/browser-sync/**'], {
+                    target: `http://127.0.0.1:${browserSyncPort}`,
+                    // ws: true, // can't have two web-socket connections proxying to different locations
+                }));
+                // admin proxy
+                app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)({
+                    target: adminUrl,
+                    ws: true,
+                }));
+            }
+        }
+        else {
+            // Direct admin proxy without browser-sync
+            app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)({
+                target: adminUrl,
                 ws: true,
             }));
         }

@@ -6,6 +6,7 @@ const {
     runCommand, 
     runCommandWithSignal,
     runCommandWithFileChange,
+    runCommandWithJsonConfigChange,
     setupTestAdapter, 
     cleanupTestAdapter,
     validateIoPackageJson,
@@ -14,7 +15,8 @@ const {
     runDevServerSetupTest,
     validateRunTestOutput,
     validateWatchTestOutput,
-    validateWatchRestartOutput
+    validateWatchRestartOutput,
+    validateJsonConfigChangeDetection
 } = require('./test-utils');
 
 const DEV_SERVER_ROOT = path.resolve(__dirname, '..');
@@ -116,6 +118,37 @@ describe('dev-server integration tests', function () {
             const output = result.stdout + result.stderr;
             validateWatchTestOutput(output, 'test-ts');
             validateWatchRestartOutput(output, 'test-ts');
+        });
+
+        it('should detect jsonConfig.json file changes and hot-reload', async () => {
+            this.timeout(WATCH_TIMEOUT + 60000); // Extra time for file change detection
+
+            const devServerPath = path.join(DEV_SERVER_ROOT, 'dist', 'index.js');
+            const jsonConfigFile = path.join(TS_ADAPTER_DIR, 'admin', 'jsonConfig.json');
+
+            // Fail test if jsonConfig file doesn't exist (test setup issue)
+            assert.ok(fs.existsSync(jsonConfigFile), 'jsonConfig.json file must exist for this test (test setup issue)');
+
+            // Backup original jsonConfig
+            const jsonConfigBackup = fs.readFileSync(jsonConfigFile, 'utf8');
+
+            try {
+                const result = await runCommandWithJsonConfigChange('node', [devServerPath, 'watch'], {
+                    cwd: TS_ADAPTER_DIR,
+                    timeout: WATCH_TIMEOUT + 30000,
+                    verbose: true,
+                    initialMessage: /test-ts\.0 \([\d]+\) state test-ts\.0\.testVariable deleted/g,
+                    changeDetectionMessage: /Detected change in jsonConfig\.json/,
+                    fileToChange: jsonConfigFile,
+                });
+
+                const output = result.stdout + result.stderr;
+                validateWatchTestOutput(output, 'test-ts');
+                validateJsonConfigChangeDetection(output);
+            } finally {
+                // Restore original jsonConfig
+                fs.writeFileSync(jsonConfigFile, jsonConfigBackup);
+            }
         });
     });
 });

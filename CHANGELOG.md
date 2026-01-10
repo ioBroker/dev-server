@@ -6,8 +6,10 @@
  -->
 
 ## __WORK IN PROGRESS__
+* (@Apollon77/@copilot) **BREAKING:** Require Node.js >=20.19.0 <22.0.0 || >=22.13.0 (was >=16.0.0)
 * (oweitman/Apollon77) Update chokidar and express
 * (@Apollon77/@copilot) Switch from ts-node to @alcalzone/esbuild-register for TypeScript support to fix conflicts with Node.js experimental TypeScript features
+* (@Apollon77/@copilot) Added support for dynamic reloads for adapters using both jsonConfig and custom tabs simultaneously
 
 ## 0.8.0 (2025-09-20)
 
