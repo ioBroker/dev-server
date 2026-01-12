@@ -37,31 +37,31 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const yargs_1 = __importDefault(require("yargs/yargs"));
 const dbConnection_1 = require("@iobroker/testing/build/tests/integration/lib/dbConnection");
+const acorn_1 = __importDefault(require("acorn"));
 const axios_1 = __importDefault(require("axios"));
 const browser_sync_1 = __importDefault(require("browser-sync"));
 const chalk_1 = __importDefault(require("chalk"));
-const cp = __importStar(require("node:child_process"));
 const chokidar_1 = __importDefault(require("chokidar"));
 const enquirer_1 = require("enquirer");
 const express_1 = __importDefault(require("express"));
 const fast_glob_1 = __importDefault(require("fast-glob"));
 const fs_extra_1 = require("fs-extra");
 const http_proxy_middleware_1 = require("http-proxy-middleware");
+const cp = __importStar(require("node:child_process"));
+const node_events_1 = __importDefault(require("node:events"));
 const node_net_1 = require("node:net");
-const nodemon_1 = __importDefault(require("nodemon"));
 const node_os_1 = require("node:os");
 const path = __importStar(require("node:path"));
+const nodemon_1 = __importDefault(require("nodemon"));
 const ps_tree_1 = __importDefault(require("ps-tree"));
 const rimraf_1 = require("rimraf");
 const semver_1 = require("semver");
 const source_map_1 = require("source-map");
 const ws_1 = __importDefault(require("ws"));
+const yargs_1 = __importDefault(require("yargs/yargs"));
 const jsonConfig_1 = require("./jsonConfig");
 const logger_1 = require("./logger");
-const acorn_1 = __importDefault(require("acorn"));
-const node_events_1 = __importDefault(require("node:events"));
 const DEFAULT_TEMP_DIR_NAME = '.dev-server';
 const CORE_MODULE = 'iobroker.js-controller';
 const IOBROKER_CLI = 'node_modules/iobroker.js-controller/iobroker.js';
@@ -409,7 +409,7 @@ class DevServer {
         if (!this.isJSController()) {
             this.uploadAdapter(this.adapterName);
         }
-        this.log.box(`dev-server was sucessfully updated.`);
+        this.log.box(`dev-server was successfully updated.`);
     }
     async run(useBrowserSync = true) {
         await this.checkSetup();

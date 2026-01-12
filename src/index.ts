@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 
-import yargs from 'yargs/yargs';
 import { DBConnection } from '@iobroker/testing/build/tests/integration/lib/dbConnection';
+import acorn from 'acorn';
 import axios from 'axios';
 import browserSync from 'browser-sync';
 import chalk from 'chalk';
-import * as cp from 'node:child_process';
 import chokidar from 'chokidar';
 import { prompt } from 'enquirer';
 import express, { type Application } from 'express';
@@ -25,19 +24,20 @@ import {
     writeJson,
 } from 'fs-extra';
 import { legacyCreateProxyMiddleware as createProxyMiddleware } from 'http-proxy-middleware';
+import * as cp from 'node:child_process';
+import EventEmitter from 'node:events';
 import { Socket } from 'node:net';
-import nodemon from 'nodemon';
 import { EOL, hostname } from 'node:os';
 import * as path from 'node:path';
+import nodemon from 'nodemon';
 import psTree from 'ps-tree';
 import { rimraf } from 'rimraf';
 import { gt } from 'semver';
 import { type RawSourceMap, SourceMapGenerator } from 'source-map';
 import WebSocket from 'ws';
+import yargs from 'yargs/yargs';
 import { injectCode } from './jsonConfig';
 import { Logger } from './logger';
-import acorn from 'acorn';
-import EventEmitter from 'node:events';
 
 const DEFAULT_TEMP_DIR_NAME = '.dev-server';
 const CORE_MODULE = 'iobroker.js-controller';
@@ -503,7 +503,7 @@ class DevServer {
             this.uploadAdapter(this.adapterName);
         }
 
-        this.log.box(`dev-server was sucessfully updated.`);
+        this.log.box(`dev-server was successfully updated.`);
     }
 
     async run(useBrowserSync = true): Promise<void> {
