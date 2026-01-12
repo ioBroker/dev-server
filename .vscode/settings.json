@@ -8,7 +8,7 @@
     "editor.detectIndentation": false,
     "[typescript]": {
         "editor.codeActionsOnSave": {
-            "source.organizeImports": true
+            "source.organizeImports": "explicit"
         }
     },
     "[javascript]": {
