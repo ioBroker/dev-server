@@ -99,7 +99,7 @@ export class CommandBase {
             this.log.info(`Packed to ${filename}`);
             if (doInstall) {
                 const fullPath = path.join(this.rootPath, filename);
-                await this.profileDir.installTarball(fullPath);
+                await this.profileDir.execWithFile(fullPath, f => `npm install "${f}"`);
                 await rimraf(fullPath);
             }
         }

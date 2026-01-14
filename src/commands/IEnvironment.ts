@@ -1,7 +1,7 @@
 export interface IEnvironment {
-    installTarball(tarballPath: string): Promise<void>;
-
     exec(command: string): Promise<void>;
+
+    execWithFile(fullPath: string, commandBuilder: (remotePath: string) => string): Promise<void>;
 
     spawn(
         command: string,

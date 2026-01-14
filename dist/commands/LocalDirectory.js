@@ -12,13 +12,13 @@ export class LocalDirectory {
     readJson(relPath) {
         return readJson(path.join(this.directory, relPath));
     }
-    async installTarball(tarballPath) {
-        await this.exec(`npm install "${tarballPath}"`);
-    }
     exec(command) {
         this.log.debug(`${this.directory}> ${command}`);
         cp.execSync(command, { cwd: this.directory, stdio: 'inherit' });
         return Promise.resolve();
+    }
+    async execWithFile(fullPath, commandBuilder) {
+        await this.exec(commandBuilder(fullPath));
     }
     getExecOutput(command) {
         this.log.debug(`${this.directory}> ${command}`);

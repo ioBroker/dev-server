@@ -95,6 +95,11 @@ export class RemoteConnection {
             });
         });
     }
+    async execWithFile(fullPath, commandBuilder) {
+        const filename = path.basename(fullPath);
+        const remoteName = await this.upload(fullPath, filename);
+        await this.exec(commandBuilder(remoteName));
+    }
     async getExecOutput(command) {
         this.log.debug(`${this.config.user}@${this.config.host}> ${command}`);
         command = this.asBashCommand(command);
@@ -116,11 +121,6 @@ export class RemoteConnection {
     sendSigIntToChildProcesses() {
         throw new Error('Method not implemented.');
     }
-    async installTarball(tarballPath) {
-        const filename = path.basename(tarballPath);
-        await this.upload(tarballPath, filename);
-        await this.exec(`npm install "./${filename}"`);
-    }
     async upload(localPath, relPath) {
         this.log.notice(`Uploading ${relPath} to remote host...`);
         const homeDir = await this.getHomeDir();
@@ -139,6 +139,7 @@ export class RemoteConnection {
                 });
             });
         });
+        return remotePath;
     }
     async getHomeDir() {
         if (!this.homeDir) {

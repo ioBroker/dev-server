@@ -114,6 +114,12 @@ export class RemoteConnection implements IEnvironment {
         });
     }
 
+    public async execWithFile(fullPath: string, commandBuilder: (localPath: string) => string): Promise<void> {
+        const filename = path.basename(fullPath);
+        const remoteName = await this.upload(fullPath, filename);
+        await this.exec(commandBuilder(remoteName));
+    }
+
     public async getExecOutput(command: string): Promise<string> {
         this.log.debug(`${this.config.user}@${this.config.host}> ${command}`);
         command = this.asBashCommand(command);
@@ -139,13 +145,7 @@ export class RemoteConnection implements IEnvironment {
         throw new Error('Method not implemented.');
     }
 
-    public async installTarball(tarballPath: string): Promise<void> {
-        const filename = path.basename(tarballPath);
-        await this.upload(tarballPath, filename);
-        await this.exec(`npm install "./${filename}"`);
-    }
-
-    public async upload(localPath: string, relPath: string): Promise<void> {
+    public async upload(localPath: string, relPath: string): Promise<string> {
         this.log.notice(`Uploading ${relPath} to remote host...`);
         const homeDir = await this.getHomeDir();
         const remotePath = `${homeDir}/.dev-server/${this.config.id}/${relPath}`;
@@ -163,6 +163,8 @@ export class RemoteConnection implements IEnvironment {
                 });
             });
         });
+
+        return remotePath;
     }
 
     private async getHomeDir(): Promise<string> {

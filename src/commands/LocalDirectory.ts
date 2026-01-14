@@ -16,14 +16,14 @@ export class LocalDirectory implements IEnvironment {
         return readJson<T>(path.join(this.directory, relPath));
     }
 
-    public async installTarball(tarballPath: string): Promise<void> {
-        await this.exec(`npm install "${tarballPath}"`);
-    }
-
     public exec(command: string): Promise<void> {
         this.log.debug(`${this.directory}> ${command}`);
         cp.execSync(command, { cwd: this.directory, stdio: 'inherit' });
         return Promise.resolve();
+    }
+
+    public async execWithFile(fullPath: string, commandBuilder: (localPath: string) => string): Promise<void> {
+        await this.exec(commandBuilder(fullPath));
     }
 
     public getExecOutput(command: string): Promise<{ stdout: string; stderr: string }> {

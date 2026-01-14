@@ -170,7 +170,7 @@ export class Setup extends CommandBase {
         if (this.backupFile) {
             const fullPath = path.resolve(this.backupFile);
             this.log.notice(`Restoring backup from ${fullPath}`);
-            await this.profileDir.exec(`${IOBROKER_COMMAND} restore "${fullPath}"`);
+            await this.profileDir.execWithFile(fullPath, f => `${IOBROKER_COMMAND} restore "${f}"`);
         }
 
         if (this.isJSController()) {
