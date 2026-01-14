@@ -1,6 +1,6 @@
 import { CommandBase } from './CommandBase.js';
 export class Update extends CommandBase {
-    async run() {
+    async doRun() {
         this.log.notice('Updating everything...');
         if (!this.config.useSymlinks) {
             this.log.notice('Building local adapter.');

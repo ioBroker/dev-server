@@ -7,8 +7,11 @@ import type { RemoteConfig } from '../DevServer.js';
 import { type Logger } from '../logger.js';
 import type { IEnvironment } from './IEnvironment.js';
 
+type ConnectState = 'disconnected' | 'connecting' | 'connected';
+
 export class RemoteConnection implements IEnvironment {
     private client = new SSHClient();
+    private connectState: ConnectState = 'disconnected';
     private homeDir?: string;
 
     constructor(
@@ -17,13 +20,20 @@ export class RemoteConnection implements IEnvironment {
     ) {}
 
     public async connect(): Promise<void> {
+        if (this.connectState !== 'disconnected') {
+            return;
+        }
+
         this.log.notice(`Connecting to ${this.config.user}@${this.config.host}...`);
+        this.connectState = 'connecting';
         await new Promise<void>((resolve, reject) => {
             this.client.once('ready', () => {
+                this.connectState = 'connected';
                 resolve();
             });
             this.client.once('error', err => {
                 this.log.error(`SSH connection error: ${err.message}`);
+                this.connectState = 'disconnected';
                 reject(err);
             });
             const connectConfig: ConnectConfig = {
@@ -58,10 +68,16 @@ export class RemoteConnection implements IEnvironment {
             this.client.connect(connectConfig);
         });
 
-        this.log.notice('Remote SSH connection established');
+        this.log.debug('Remote SSH connection established');
     }
 
     public close(): void {
+        if (this.connectState !== 'connected') {
+            return;
+        }
+
+        this.log.debug('Closing remote SSH connection');
+        this.connectState = 'disconnected';
         this.client.end();
     }
 

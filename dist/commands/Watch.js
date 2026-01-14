@@ -18,7 +18,7 @@ export class Watch extends RunCommandBase {
         this.doNotWatch = doNotWatch;
         this.useBrowserSync = useBrowserSync;
     }
-    async run() {
+    async doRun() {
         if (!this.noInstall) {
             await this.buildLocalAdapter();
             await this.installLocalAdapter();

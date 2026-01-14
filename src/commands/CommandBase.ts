@@ -4,6 +4,7 @@ import type { DevServer, DevServerConfig } from '../DevServer.js';
 import type { Logger } from '../logger.js';
 import type { IEnvironment } from './IEnvironment.js';
 import { LocalDirectory } from './LocalDirectory.js';
+import { RemoteConnection } from './RemoteConnection.js';
 import { getChildProcesses, readJson } from './utils.js';
 
 export const IOBROKER_CLI = 'node_modules/iobroker.js-controller/iobroker.js';
@@ -20,7 +21,11 @@ export abstract class CommandBase {
 
     constructor(protected readonly owner: DevServer) {
         this.rootDir = new LocalDirectory(this.rootPath, this.log);
-        this.profileDir = new LocalDirectory(this.profilePath, this.log);
+        if (this.owner.config?.remote) {
+            this.profileDir = new RemoteConnection(this.owner.config.remote, this.log);
+        } else {
+            this.profileDir = new LocalDirectory(this.profilePath, this.log);
+        }
     }
 
     protected get log(): Logger {
@@ -51,7 +56,27 @@ export abstract class CommandBase {
         return this.owner.config;
     }
 
-    public abstract run(): Promise<void>;
+    public async run(): Promise<void> {
+        await this.prepare();
+        await this.doRun();
+        await this.teardown();
+    }
+
+    protected async prepare(): Promise<void> {
+        if (this.profileDir instanceof RemoteConnection) {
+            await this.profileDir.connect();
+        }
+    }
+
+    protected abstract doRun(): Promise<void>;
+
+    protected teardown(): Promise<void> {
+        if (this.profileDir instanceof RemoteConnection) {
+            this.profileDir.close();
+        }
+
+        return Promise.resolve();
+    }
 
     protected getPort(offset: number): number {
         return this.config.adminPort + offset;

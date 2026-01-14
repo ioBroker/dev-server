@@ -482,6 +482,15 @@ export class DevServer {
 
     public isSetUp(): boolean {
         const jsControllerDir = path.join(this.profilePath, 'node_modules', CORE_MODULE);
-        return existsSync(jsControllerDir);
+        if (existsSync(jsControllerDir)) {
+            return true;
+        }
+
+        if (this.config?.remote) {
+            // remote case (we didn't install js-controller locally)
+            return true;
+        }
+
+        return false;
     }
 }

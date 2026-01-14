@@ -22,7 +22,7 @@ export class Setup extends CommandBase {
         this.force = force;
         this.useSymlinks = useSymlinks;
     }
-    async run() {
+    async doRun() {
         if (this.force) {
             this.log.notice(`Deleting ${this.profilePath}`);
             await rimraf(this.profilePath);

@@ -1,7 +1,7 @@
 import { CommandBase } from './CommandBase.js';
 
 export class Update extends CommandBase {
-    public async run(): Promise<void> {
+    protected async doRun(): Promise<void> {
         this.log.notice('Updating everything...');
 
         if (!this.config.useSymlinks) {

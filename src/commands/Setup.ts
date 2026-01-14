@@ -28,7 +28,7 @@ export class Setup extends CommandBase {
         super(owner);
     }
 
-    public async run(): Promise<void> {
+    protected async doRun(): Promise<void> {
         if (this.force) {
             this.log.notice(`Deleting ${this.profilePath}`);
             await rimraf(this.profilePath);

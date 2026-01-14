@@ -1,6 +1,6 @@
 import { CommandBase } from './CommandBase.js';
 export class Upload extends CommandBase {
-    async run() {
+    async doRun() {
         await this.buildLocalAdapter();
         await this.installLocalAdapter();
         if (!this.isJSController()) {

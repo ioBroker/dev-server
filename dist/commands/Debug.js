@@ -9,7 +9,7 @@ export class Debug extends RunCommandBase {
         this.wait = wait;
         this.noInstall = noInstall;
     }
-    async run() {
+    async doRun() {
         if (!this.noInstall) {
             await this.buildLocalAdapter();
             await this.installLocalAdapter();

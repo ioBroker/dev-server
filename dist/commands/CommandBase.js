@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { rimraf } from 'rimraf';
 import { LocalDirectory } from './LocalDirectory.js';
+import { RemoteConnection } from './RemoteConnection.js';
 import { getChildProcesses, readJson } from './utils.js';
 export const IOBROKER_CLI = 'node_modules/iobroker.js-controller/iobroker.js';
 export const IOBROKER_COMMAND = `node ${IOBROKER_CLI}`;
@@ -15,7 +16,12 @@ export class CommandBase {
     constructor(owner) {
         this.owner = owner;
         this.rootDir = new LocalDirectory(this.rootPath, this.log);
-        this.profileDir = new LocalDirectory(this.profilePath, this.log);
+        if (this.owner.config?.remote) {
+            this.profileDir = new RemoteConnection(this.owner.config.remote, this.log);
+        }
+        else {
+            this.profileDir = new LocalDirectory(this.profilePath, this.log);
+        }
     }
     get log() {
         return this.owner.log;
@@ -37,6 +43,22 @@ export class CommandBase {
             throw new Error('DevServer is not configured yet');
         }
         return this.owner.config;
+    }
+    async run() {
+        await this.prepare();
+        await this.doRun();
+        await this.teardown();
+    }
+    async prepare() {
+        if (this.profileDir instanceof RemoteConnection) {
+            await this.profileDir.connect();
+        }
+    }
+    teardown() {
+        if (this.profileDir instanceof RemoteConnection) {
+            this.profileDir.close();
+        }
+        return Promise.resolve();
     }
     getPort(offset) {
         return this.config.adminPort + offset;

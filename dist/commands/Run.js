@@ -5,7 +5,7 @@ export class Run extends RunCommandBase {
         super(owner);
         this.useBrowserSync = useBrowserSync;
     }
-    async run() {
+    async doRun() {
         await this.startJsController();
         await this.startServer(this.useBrowserSync);
     }

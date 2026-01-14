@@ -7,19 +7,26 @@ export class RemoteConnection {
     config;
     log;
     client = new SSHClient();
+    connectState = 'disconnected';
     homeDir;
     constructor(config, log) {
         this.config = config;
         this.log = log;
     }
     async connect() {
+        if (this.connectState !== 'disconnected') {
+            return;
+        }
         this.log.notice(`Connecting to ${this.config.user}@${this.config.host}...`);
+        this.connectState = 'connecting';
         await new Promise((resolve, reject) => {
             this.client.once('ready', () => {
+                this.connectState = 'connected';
                 resolve();
             });
             this.client.once('error', err => {
                 this.log.error(`SSH connection error: ${err.message}`);
+                this.connectState = 'disconnected';
                 reject(err);
             });
             const connectConfig = {
@@ -53,9 +60,14 @@ export class RemoteConnection {
             }
             this.client.connect(connectConfig);
         });
-        this.log.notice('Remote SSH connection established');
+        this.log.debug('Remote SSH connection established');
     }
     close() {
+        if (this.connectState !== 'connected') {
+            return;
+        }
+        this.log.debug('Closing remote SSH connection');
+        this.connectState = 'disconnected';
         this.client.end();
     }
     spawn(command, args, onExit) {

@@ -9,7 +9,7 @@ export class Backup extends CommandBase {
         super(owner);
     }
 
-    public async run(): Promise<void> {
+    protected async doRun(): Promise<void> {
         await this.profileDir.exec(`${IOBROKER_COMMAND} backup "${this.filename}"`);
     }
 }

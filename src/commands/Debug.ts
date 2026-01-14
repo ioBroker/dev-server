@@ -12,7 +12,7 @@ export class Debug extends RunCommandBase {
         super(owner);
     }
 
-    public async run(): Promise<void> {
+    protected async doRun(): Promise<void> {
         if (!this.noInstall) {
             await this.buildLocalAdapter();
             await this.installLocalAdapter();

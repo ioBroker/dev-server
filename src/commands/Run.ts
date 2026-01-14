@@ -9,7 +9,7 @@ export class Run extends RunCommandBase {
         super(owner);
     }
 
-    public async run(): Promise<void> {
+    protected async doRun(): Promise<void> {
         await this.startJsController();
         await this.startServer(this.useBrowserSync);
     }
