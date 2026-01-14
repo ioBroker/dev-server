@@ -310,16 +310,12 @@ export class DevServer {
             return [
                 name,
                 `http://127.0.0.1:${infos.adminPort}`,
+                infos.remote ? `${infos.remote.user}@${infos.remote.host}:${infos.remote.port}` : '(local)',
                 dependencies['iobroker.js-controller'],
                 dependencies['iobroker.admin'],
             ];
         });
-        table.unshift([
-            chalk.bold('Profile Name'),
-            chalk.bold('Admin URL'),
-            chalk.bold('js-controller'),
-            chalk.bold('admin'),
-        ]);
+        table.unshift(['Profile Name', 'Admin URL', 'Remote Host', 'js-controller', 'admin'].map(h => chalk.bold(h)));
         this.log.info(`The following profiles exist in ${this.tempPath}`);
         this.log.table(table.filter(r => !!r));
     }
