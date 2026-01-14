@@ -296,9 +296,7 @@ export class DevServer {
     }
     async backup(filename) {
         this.checkSetup();
-        this.log.notice('Creating backup');
-        const fullPath = path.resolve(filename);
-        const backup = new Backup(this, fullPath);
+        const backup = new Backup(this, filename);
         await backup.run();
     }
     async profile() {

@@ -17,7 +17,10 @@ export class LocalDirectory {
         cp.execSync(command, { cwd: this.directory, stdio: 'inherit' });
         return Promise.resolve();
     }
-    async execWithFile(fullPath, commandBuilder) {
+    async execWithExistingFile(fullPath, commandBuilder) {
+        await this.exec(commandBuilder(fullPath));
+    }
+    async execWithNewFile(fullPath, commandBuilder) {
         await this.exec(commandBuilder(fullPath));
     }
     getExecOutput(command) {

@@ -22,7 +22,11 @@ export class LocalDirectory implements IEnvironment {
         return Promise.resolve();
     }
 
-    public async execWithFile(fullPath: string, commandBuilder: (localPath: string) => string): Promise<void> {
+    public async execWithExistingFile(fullPath: string, commandBuilder: (localPath: string) => string): Promise<void> {
+        await this.exec(commandBuilder(fullPath));
+    }
+
+    public async execWithNewFile(fullPath: string, commandBuilder: (localPath: string) => string): Promise<void> {
         await this.exec(commandBuilder(fullPath));
     }
 

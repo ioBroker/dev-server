@@ -95,10 +95,33 @@ export class RemoteConnection {
             });
         });
     }
-    async execWithFile(fullPath, commandBuilder) {
+    async execWithExistingFile(fullPath, commandBuilder) {
         const filename = path.basename(fullPath);
-        const remoteName = await this.upload(fullPath, filename);
-        await this.exec(commandBuilder(remoteName));
+        const remotePath = await this.upload(fullPath, filename);
+        await this.exec(commandBuilder(remotePath));
+        await this.exec(`rm -f "${remotePath}"`);
+    }
+    async execWithNewFile(localPath, commandBuilder) {
+        const filename = path.basename(localPath);
+        const homeDir = await this.getHomeDir();
+        const remotePath = `${homeDir}/.dev-server/${this.config.id}/${filename}`;
+        await this.exec(commandBuilder(remotePath));
+        this.log.notice(`Transferring ${remotePath} from remote host...`);
+        await new Promise((resolve, reject) => {
+            this.client.sftp((err, sftp) => {
+                if (err) {
+                    return reject(err);
+                }
+                this.log.silly(`${remotePath} -> ${localPath}`);
+                sftp.fastGet(remotePath, localPath, {}, putErr => {
+                    if (putErr) {
+                        return reject(putErr);
+                    }
+                    resolve();
+                });
+            });
+        });
+        await this.exec(`rm -f "${remotePath}"`);
     }
     async getExecOutput(command) {
         this.log.debug(`${this.config.user}@${this.config.host}> ${command}`);

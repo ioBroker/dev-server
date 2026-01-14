@@ -114,10 +114,36 @@ export class RemoteConnection implements IEnvironment {
         });
     }
 
-    public async execWithFile(fullPath: string, commandBuilder: (localPath: string) => string): Promise<void> {
+    public async execWithExistingFile(fullPath: string, commandBuilder: (localPath: string) => string): Promise<void> {
         const filename = path.basename(fullPath);
-        const remoteName = await this.upload(fullPath, filename);
-        await this.exec(commandBuilder(remoteName));
+        const remotePath = await this.upload(fullPath, filename);
+        await this.exec(commandBuilder(remotePath));
+        await this.exec(`rm -f "${remotePath}"`);
+    }
+
+    public async execWithNewFile(localPath: string, commandBuilder: (localPath: string) => string): Promise<void> {
+        const filename = path.basename(localPath);
+        const homeDir = await this.getHomeDir();
+        const remotePath = `${homeDir}/.dev-server/${this.config.id}/${filename}`;
+        await this.exec(commandBuilder(remotePath));
+
+        this.log.notice(`Transferring ${remotePath} from remote host...`);
+        await new Promise<void>((resolve, reject) => {
+            this.client.sftp((err, sftp) => {
+                if (err) {
+                    return reject(err);
+                }
+                this.log.silly(`${remotePath} -> ${localPath}`);
+                sftp.fastGet(remotePath, localPath, {}, putErr => {
+                    if (putErr) {
+                        return reject(putErr);
+                    }
+                    resolve();
+                });
+            });
+        });
+
+        await this.exec(`rm -f "${remotePath}"`);
     }
 
     public async getExecOutput(command: string): Promise<string> {

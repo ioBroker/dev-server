@@ -411,10 +411,7 @@ export class DevServer {
     async backup(filename: string): Promise<void> {
         this.checkSetup();
 
-        this.log.notice('Creating backup');
-
-        const fullPath = path.resolve(filename);
-        const backup = new Backup(this, fullPath);
+        const backup = new Backup(this, filename);
         await backup.run();
     }
 
