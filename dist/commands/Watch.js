@@ -47,7 +47,7 @@ export class Watch extends RunCommandBase {
         const mainFileSuffix = pkg.main.split('.').pop();
         // start sync
         const adapterRunDir = path.join(this.profilePath, 'node_modules', `iobroker.${this.adapterName}`);
-        if (!this.config?.useSymlinks) {
+        if (!this.config.useSymlinks) {
             this.log.notice('Starting file synchronization');
             // This is not necessary when using symlinks
             await this.startFileSync(adapterRunDir, mainFileSuffix);

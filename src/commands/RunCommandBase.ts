@@ -72,10 +72,6 @@ export abstract class RunCommandBase extends CommandBase {
     protected async startServer(useBrowserSync = true): Promise<void> {
         this.log.notice(`Running inside ${this.profilePath}`);
 
-        if (!this.config) {
-            throw new Error(`Couldn't find dev-server configuration in package.json`);
-        }
-
         await this.waitForPort(HIDDEN_ADMIN_PORT_OFFSET);
 
         const app = express();
