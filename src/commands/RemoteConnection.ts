@@ -82,9 +82,9 @@ export class RemoteConnection implements IEnvironment {
     }
 
     public spawn(
-        command: string,
-        args: ReadonlyArray<string>,
-        onExit: (exitCode: number) => void | Promise<void>,
+        _command: string,
+        _args: ReadonlyArray<string>,
+        _onExit: (exitCode: number) => void | Promise<void>,
     ): Promise<number | null> {
         throw new Error('Method not implemented.');
     }

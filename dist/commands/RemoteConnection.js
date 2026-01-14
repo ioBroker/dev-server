@@ -70,7 +70,7 @@ export class RemoteConnection {
         this.connectState = 'disconnected';
         this.client.end();
     }
-    spawn(command, args, onExit) {
+    spawn(_command, _args, _onExit) {
         throw new Error('Method not implemented.');
     }
     async exec(command) {

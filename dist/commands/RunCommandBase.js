@@ -228,6 +228,8 @@ export class RunCommandBase extends CommandBase {
      *
      * @param app Express application instance
      * @param uiCapabilities Object containing configType and tabType detected from io-package.json
+     * @param uiCapabilities.configType 'json' | 'html' | 'none' - type of configuration UI
+     * @param uiCapabilities.tabType 'json' | 'html' | 'none' - type of tab UI
      * @param useBrowserSync Whether to use BrowserSync for hot-reload (default: true)
      */
     async createCombinedConfigProxy(app, uiCapabilities, useBrowserSync = true) {
