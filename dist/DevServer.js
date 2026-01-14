@@ -293,7 +293,6 @@ export class DevServer {
         this.checkSetup();
         const upload = new Upload(this);
         await upload.run();
-        this.log.box(`The latest content of iobroker.${this.adapterName} was uploaded to ${this.profilePath}.`);
     }
     async backup(filename) {
         this.checkSetup();

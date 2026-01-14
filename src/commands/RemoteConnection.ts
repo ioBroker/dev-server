@@ -146,7 +146,7 @@ export class RemoteConnection implements IEnvironment {
     }
 
     public async upload(localPath: string, relPath: string): Promise<string> {
-        this.log.notice(`Uploading ${relPath} to remote host...`);
+        this.log.notice(`Transferring ${relPath} to remote host...`);
         const homeDir = await this.getHomeDir();
         const remotePath = `${homeDir}/.dev-server/${this.config.id}/${relPath}`;
         await new Promise<void>((resolve, reject) => {
