@@ -1,8 +1,6 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Run = void 0;
-const RunCommandBase_1 = require("./RunCommandBase");
-class Run extends RunCommandBase_1.RunCommandBase {
+import { RunCommandBase } from './RunCommandBase.js';
+export class Run extends RunCommandBase {
+    useBrowserSync;
     constructor(owner, useBrowserSync) {
         super(owner);
         this.useBrowserSync = useBrowserSync;
@@ -12,4 +10,3 @@ class Run extends RunCommandBase_1.RunCommandBase {
         await this.startServer(this.useBrowserSync);
     }
 }
-exports.Run = Run;

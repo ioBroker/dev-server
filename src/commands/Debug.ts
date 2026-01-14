@@ -1,7 +1,7 @@
 import chalk from 'chalk';
-import type { DevServer } from '../DevServer';
-import { IOBROKER_CLI } from './CommandBase';
-import { RunCommandBase } from './RunCommandBase';
+import type { DevServer } from '../DevServer.js';
+import { IOBROKER_CLI } from './CommandBase.js';
+import { RunCommandBase } from './RunCommandBase.js';
 
 export class Debug extends RunCommandBase {
     constructor(
@@ -43,14 +43,13 @@ export class Debug extends RunCommandBase {
         } else {
             nodeArgs.unshift('--inspect');
         }
-        const proc = await this.spawn('node', nodeArgs, this.profileDir);
-        proc.on('exit', code => {
+        const pid = await this.profileDir.spawn('node', nodeArgs, code => {
             console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
             return this.exit(-1);
         });
         await this.waitForJsController();
 
-        this.log.box(`Debugger is now ${this.wait ? 'waiting' : 'available'} on process id ${proc.pid}`);
+        this.log.box(`Debugger is now ${this.wait ? 'waiting' : 'available'} on process id ${pid}`);
     }
 
     private async startAdapterDebug(): Promise<void> {
@@ -65,16 +64,15 @@ export class Debug extends RunCommandBase {
         if (this.wait) {
             args.push('--wait');
         }
-        const proc = await this.spawn('node', args, this.profileDir);
-        proc.on('exit', code => {
+        const pid = await this.profileDir.spawn('node', args, code => {
             console.error(chalk.yellow(`Adapter debugging exited with code ${code}`));
             return this.exit(-1);
         });
 
-        if (!proc.pid) {
+        if (!pid) {
             throw new Error(`PID of adapter debugger unknown!`);
         }
-        const debugPid = await this.waitForNodeChildProcess(proc.pid);
+        const debugPid = await this.waitForNodeChildProcess(pid);
 
         this.log.box(`Debugger is now ${this.wait ? 'waiting' : 'available'} on process id ${debugPid}`);
     }

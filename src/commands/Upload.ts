@@ -1,4 +1,4 @@
-import { CommandBase } from './CommandBase';
+import { CommandBase } from './CommandBase.js';
 
 export class Upload extends CommandBase {
     public async run(): Promise<void> {
@@ -6,7 +6,7 @@ export class Upload extends CommandBase {
         await this.installLocalAdapter();
 
         if (!this.isJSController()) {
-            this.uploadAdapter(this.adapterName);
+            await this.uploadAdapter(this.adapterName);
         }
     }
 }

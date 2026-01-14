@@ -1,4 +1,4 @@
-import { CommandBase } from './CommandBase';
+import { CommandBase } from './CommandBase.js';
 
 export class Update extends CommandBase {
     public async run(): Promise<void> {
@@ -10,12 +10,12 @@ export class Update extends CommandBase {
             await this.installLocalAdapter(false); //do not install, keep .tgz file.
         }
 
-        this.execSync('npm update --loglevel error', this.profileDir);
-        this.uploadAdapter('admin');
+        await this.profileDir.exec('npm update --loglevel error');
+        await this.uploadAdapter('admin');
 
         await this.installLocalAdapter();
         if (!this.isJSController()) {
-            this.uploadAdapter(this.adapterName);
+            await this.uploadAdapter(this.adapterName);
         }
 
         this.log.box(`dev-server was successfully updated.`);

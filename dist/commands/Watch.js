@@ -1,17 +1,16 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Watch = void 0;
-const chokidar_1 = __importDefault(require("chokidar"));
-const fast_glob_1 = __importDefault(require("fast-glob"));
-const fs_extra_1 = require("fs-extra");
-const node_path_1 = __importDefault(require("node:path"));
-const nodemon_1 = __importDefault(require("nodemon"));
-const RunCommandBase_1 = require("./RunCommandBase");
-const utils_1 = require("./utils");
-class Watch extends RunCommandBase_1.RunCommandBase {
+import chokidar from 'chokidar';
+import fg from 'fast-glob';
+import { existsSync, unlinkSync } from 'node:fs';
+import { copyFile } from 'node:fs/promises';
+import path from 'node:path';
+import nodemon from 'nodemon';
+import { RunCommandBase } from './RunCommandBase.js';
+import { delay } from './utils.js';
+export class Watch extends RunCommandBase {
+    startAdapter;
+    noInstall;
+    doNotWatch;
+    useBrowserSync;
     constructor(owner, startAdapter, noInstall, doNotWatch, useBrowserSync) {
         super(owner);
         this.startAdapter = startAdapter;
@@ -36,7 +35,6 @@ class Watch extends RunCommandBase_1.RunCommandBase {
         }
     }
     async startAdapterWatch() {
-        var _a;
         // figure out if we need to watch for TypeScript changes
         const pkg = await this.readPackageJson();
         const scripts = pkg.scripts;
@@ -48,35 +46,35 @@ class Watch extends RunCommandBase_1.RunCommandBase {
         const isTypeScriptMain = this.isTypeScriptMain(pkg.main);
         const mainFileSuffix = pkg.main.split('.').pop();
         // start sync
-        const adapterRunDir = node_path_1.default.join(this.profileDir, 'node_modules', `iobroker.${this.adapterName}`);
-        if (!((_a = this.config) === null || _a === void 0 ? void 0 : _a.useSymlinks)) {
+        const adapterRunDir = path.join(this.profilePath, 'node_modules', `iobroker.${this.adapterName}`);
+        if (!this.config?.useSymlinks) {
             this.log.notice('Starting file synchronization');
             // This is not necessary when using symlinks
             await this.startFileSync(adapterRunDir, mainFileSuffix);
             this.log.notice('File synchronization ready');
         }
         if (this.startAdapter) {
-            await (0, utils_1.delay)(3000);
+            await delay(3000);
             this.log.notice('Starting Nodemon');
             await this.startNodemon(adapterRunDir, pkg.main, this.doNotWatch);
         }
         else {
             const runner = isTypeScriptMain ? 'node -r @alcalzone/esbuild-register' : 'node';
             this.log.box(`You can now start the adapter manually by running\n    ` +
-                `${runner} node_modules/iobroker.${this.adapterName}/${pkg.main} --debug 0\nfrom within\n    ${this.profileDir}`);
+                `${runner} node_modules/iobroker.${this.adapterName}/${pkg.main} --debug 0\nfrom within\n    ${this.profilePath}`);
         }
     }
     async startTscWatch() {
         this.log.notice('Starting tsc --watch');
         this.log.debug('Waiting for first successful tsc build...');
-        await this.spawnAndAwaitOutput('npm', ['run', 'watch:ts'], this.rootDir, /watching (files )?for/i, {
+        await this.rootDir.spawnAndAwaitOutput('npm', ['run', 'watch:ts'], /watching (files )?for/i, {
             shell: true,
         });
     }
     startFileSync(destinationDir, mainFileSuffix) {
-        this.log.notice(`Starting file system sync from ${this.rootDir}`);
-        const inSrc = (filename) => node_path_1.default.join(this.rootDir, filename);
-        const inDest = (filename) => node_path_1.default.join(destinationDir, filename);
+        this.log.notice(`Starting file system sync from ${this.rootPath}`);
+        const inSrc = (filename) => path.join(this.rootPath, filename);
+        const inDest = (filename) => path.join(destinationDir, filename);
         return new Promise((resolve, reject) => {
             const patternList = ['js', 'map'];
             if (!patternList.includes(mainFileSuffix)) {
@@ -84,7 +82,7 @@ class Watch extends RunCommandBase_1.RunCommandBase {
             }
             const patterns = this.getFilePatterns(patternList, true);
             const ignoreFiles = [];
-            const watcher = chokidar_1.default.watch(fast_glob_1.default.sync(patterns), { cwd: this.rootDir });
+            const watcher = chokidar.watch(fg.sync(patterns), { cwd: this.rootPath });
             let ready = false;
             let initialEventPromises = [];
             watcher.on('error', reject);
@@ -106,15 +104,15 @@ class Watch extends RunCommandBase_1.RunCommandBase {
                     if (filename.endsWith('.map')) {
                         await this.patchSourcemap(src, dest);
                     }
-                    else if (!(0, fs_extra_1.existsSync)(inSrc(`${filename}.map`))) {
+                    else if (!existsSync(inSrc(`${filename}.map`))) {
                         // copy file and add sourcemap
                         await this.addSourcemap(src, dest, true);
                     }
                     else {
-                        await (0, fs_extra_1.copyFile)(src, dest);
+                        await copyFile(src, dest);
                     }
                 }
-                catch (_a) {
+                catch {
                     this.log.warn(`Couldn't sync ${filename}`);
                 }
             };
@@ -122,7 +120,7 @@ class Watch extends RunCommandBase_1.RunCommandBase {
                 if (ready) {
                     void syncFile(filename);
                 }
-                else if (!filename.endsWith('map') && !(0, fs_extra_1.existsSync)(inDest(filename))) {
+                else if (!filename.endsWith('map') && !existsSync(inDest(filename))) {
                     // ignore files during initial sync if they don't exist in the target directory (except for sourcemaps)
                     ignoreFiles.push(filename);
                 }
@@ -139,16 +137,16 @@ class Watch extends RunCommandBase_1.RunCommandBase {
                 }
             });
             watcher.on('unlink', (filename) => {
-                (0, fs_extra_1.unlinkSync)(inDest(filename));
+                unlinkSync(inDest(filename));
                 const map = inDest(`${filename}.map`);
-                if ((0, fs_extra_1.existsSync)(map)) {
-                    (0, fs_extra_1.unlinkSync)(map);
+                if (existsSync(map)) {
+                    unlinkSync(map);
                 }
             });
         });
     }
     startNodemon(baseDir, scriptName, doNotWatch) {
-        const script = node_path_1.default.resolve(baseDir, scriptName);
+        const script = path.resolve(baseDir, scriptName);
         this.log.notice(`Starting nodemon for ${script}`);
         let isExiting = false;
         process.on('SIGINT', () => {
@@ -156,12 +154,12 @@ class Watch extends RunCommandBase_1.RunCommandBase {
         });
         const args = this.isJSController() ? [] : ['--debug', '0'];
         const ignoreList = [
-            node_path_1.default.join(baseDir, 'admin'),
+            path.join(baseDir, 'admin'),
             // avoid recursively following symlinks
-            node_path_1.default.join(baseDir, '.dev-server'),
+            path.join(baseDir, '.dev-server'),
         ];
         if (doNotWatch.length > 0) {
-            doNotWatch.forEach(entry => ignoreList.push(node_path_1.default.join(baseDir, entry)));
+            doNotWatch.forEach(entry => ignoreList.push(path.join(baseDir, entry)));
         }
         // Determine the appropriate execMap
         const execMap = {
@@ -169,7 +167,7 @@ class Watch extends RunCommandBase_1.RunCommandBase {
             mjs: 'node --inspect --preserve-symlinks --preserve-symlinks-main',
             ts: 'node --inspect --preserve-symlinks --preserve-symlinks-main -r @alcalzone/esbuild-register',
         };
-        (0, nodemon_1.default)({
+        nodemon({
             script,
             cwd: baseDir,
             stdin: false,
@@ -184,7 +182,7 @@ class Watch extends RunCommandBase_1.RunCommandBase {
             signal: 'SIGINT', // wrong type definition: signal is of type "string?"
             args,
         });
-        nodemon_1.default
+        nodemon
             .on('log', (msg) => {
             if (isExiting) {
                 return;
@@ -226,7 +224,7 @@ class Watch extends RunCommandBase_1.RunCommandBase {
             this.socketEvents.on('objectChange', (args) => {
                 if (Array.isArray(args) && args.length > 1 && args[0] === `system.adapter.${this.adapterName}.0`) {
                     this.log.notice('Adapter configuration changed, restarting nodemon...');
-                    nodemon_1.default.restart();
+                    nodemon.restart();
                 }
             });
         }
@@ -241,4 +239,3 @@ class Watch extends RunCommandBase_1.RunCommandBase {
         this.log.box(`Debugger is now available on process id ${debugPid}`);
     }
 }
-exports.Watch = Watch;

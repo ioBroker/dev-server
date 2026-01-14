@@ -1,5 +1,5 @@
-import type { DevServer } from '../DevServer';
-import { RunCommandBase } from './RunCommandBase';
+import type { DevServer } from '../DevServer.js';
+import { RunCommandBase } from './RunCommandBase.js';
 
 export class Run extends RunCommandBase {
     constructor(

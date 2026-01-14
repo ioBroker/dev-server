@@ -1,25 +1,25 @@
-import acorn from 'acorn';
+import { tokenizer } from 'acorn';
 import axios from 'axios';
 import browserSync from 'browser-sync';
 import chalk from 'chalk';
 import express, { type Application } from 'express';
 import fg from 'fast-glob';
-import { existsSync, readFile, readJson, writeFile, writeJson } from 'fs-extra';
 import { legacyCreateProxyMiddleware as createProxyMiddleware } from 'http-proxy-middleware';
 import EventEmitter from 'node:events';
+import { existsSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { RawSourceMap, SourceMapGenerator } from 'source-map';
+import { type RawSourceMap, SourceMapGenerator } from 'source-map';
 import WebSocket from 'ws';
-import type { DevServerConfig } from '../DevServer';
-import { injectCode } from '../jsonConfig';
+import { injectCode } from '../jsonConfig.js';
 import {
     CommandBase,
     HIDDEN_ADMIN_PORT_OFFSET,
     HIDDEN_BROWSER_SYNC_PORT_OFFSET,
     OBJECTS_DB_PORT_OFFSET,
     STATES_DB_PORT_OFFSET,
-} from './CommandBase';
-import { checkPort, delay } from './utils';
+} from './CommandBase.js';
+import { checkPort, delay, readJson, writeJson } from './utils.js';
 
 export abstract class RunCommandBase extends CommandBase {
     private websocket?: WebSocket;
@@ -27,7 +27,7 @@ export abstract class RunCommandBase extends CommandBase {
     protected readonly socketEvents = new EventEmitter();
 
     protected async startJsController(): Promise<void> {
-        const proc = await this.spawn(
+        await this.profileDir.spawn(
             'node',
             [
                 '--inspect=127.0.0.1:9228',
@@ -35,12 +35,11 @@ export abstract class RunCommandBase extends CommandBase {
                 '--preserve-symlinks-main',
                 'node_modules/iobroker.js-controller/controller.js',
             ],
-            this.profileDir,
+            async code => {
+                console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
+                return this.exit(-1, 'SIGKILL');
+            },
         );
-        proc.on('exit', async code => {
-            console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
-            return this.exit(-1, 'SIGKILL');
-        });
         this.log.notice('Waiting for js-controller to start...');
         await this.waitForJsController();
     }
@@ -71,7 +70,7 @@ export abstract class RunCommandBase extends CommandBase {
     }
 
     protected async startServer(useBrowserSync = true): Promise<void> {
-        this.log.notice(`Running inside ${this.profileDir}`);
+        this.log.notice(`Running inside ${this.profilePath}`);
 
         if (!this.config) {
             throw new Error(`Couldn't find dev-server configuration in package.json`);
@@ -95,13 +94,13 @@ export abstract class RunCommandBase extends CommandBase {
 
             if (uiCapabilities.configType === 'json' && uiCapabilities.tabType !== 'none') {
                 // Adapter uses jsonConfig AND has tabs - support both simultaneously
-                await this.createCombinedConfigProxy(app, this.config, uiCapabilities, useBrowserSync);
+                await this.createCombinedConfigProxy(app, uiCapabilities, useBrowserSync);
             } else if (uiCapabilities.configType === 'json') {
                 // JSON config only
-                await this.createJsonConfigProxy(app, this.config, useBrowserSync);
+                await this.createJsonConfigProxy(app, useBrowserSync);
             } else {
                 // HTML config or tabs only (or no config)
-                await this.createHtmlConfigProxy(app, this.config, useBrowserSync);
+                await this.createHtmlConfigProxy(app, useBrowserSync);
             }
         }
 
@@ -118,7 +117,8 @@ export abstract class RunCommandBase extends CommandBase {
             // but send the signal to all child processes when not in a tty environment
             if (!process.stdin.isTTY) {
                 this.log.silly('Sending SIGINT to all child processes...');
-                this.childProcesses.forEach(p => p.kill('SIGINT'));
+                this.rootDir.sendSigIntToChildProcesses();
+                this.profileDir.sendSigIntToChildProcesses();
             }
         });
 
@@ -237,7 +237,7 @@ export abstract class RunCommandBase extends CommandBase {
     }
 
     private getJsonConfigPath(): string {
-        const jsonConfigPath = path.resolve(this.rootDir, 'admin/jsonConfig.json');
+        const jsonConfigPath = path.resolve(this.rootPath, 'admin/jsonConfig.json');
         if (existsSync(jsonConfigPath)) {
             return jsonConfigPath;
         }
@@ -262,13 +262,11 @@ export abstract class RunCommandBase extends CommandBase {
      * For adapters with only one UI type, use createJsonConfigProxy or createHtmlConfigProxy instead.
      *
      * @param app Express application instance
-     * @param config Dev server configuration
      * @param uiCapabilities Object containing configType and tabType detected from io-package.json
      * @param useBrowserSync Whether to use BrowserSync for hot-reload (default: true)
      */
     private async createCombinedConfigProxy(
         app: Application,
-        config: DevServerConfig,
         uiCapabilities: {
             configType: 'json' | 'html' | 'none';
             tabType: 'json' | 'html' | 'none';
@@ -311,8 +309,8 @@ export abstract class RunCommandBase extends CommandBase {
         if (uiCapabilities.tabType !== 'none' && useBrowserSync && bs) {
             if (uiCapabilities.tabType === 'json') {
                 // Watch JSON tab files
-                const jsonTabPath = path.resolve(this.rootDir, 'admin/jsonTab.json');
-                const jsonTab5Path = path.resolve(this.rootDir, 'admin/jsonTab.json5');
+                const jsonTabPath = path.resolve(this.rootPath, 'admin/jsonTab.json');
+                const jsonTab5Path = path.resolve(this.rootPath, 'admin/jsonTab.json5');
 
                 this.setupJsonFileWatch(bs, jsonTabPath, 'jsonTab.json');
                 this.setupJsonFileWatch(bs, jsonTab5Path, 'jsonTab.json5');
@@ -320,7 +318,7 @@ export abstract class RunCommandBase extends CommandBase {
 
             if (uiCapabilities.tabType === 'html') {
                 // Watch HTML tab files
-                const tabHtmlPath = path.resolve(this.rootDir, 'admin/tab.html');
+                const tabHtmlPath = path.resolve(this.rootPath, 'admin/tab.html');
                 if (existsSync(tabHtmlPath)) {
                     bs.watch(tabHtmlPath, undefined, (e: any) => {
                         if (e === 'change') {
@@ -381,7 +379,7 @@ export abstract class RunCommandBase extends CommandBase {
         }
     }
 
-    private createJsonConfigProxy(app: Application, config: DevServerConfig, useBrowserSync = true): Promise<void> {
+    private createJsonConfigProxy(app: Application, useBrowserSync = true): Promise<void> {
         const jsonConfigFile = this.getJsonConfigPath();
         const adminUrl = `http://127.0.0.1:${this.getPort(HIDDEN_ADMIN_PORT_OFFSET)}`;
 
@@ -427,11 +425,7 @@ export abstract class RunCommandBase extends CommandBase {
         return Promise.resolve();
     }
 
-    private async createHtmlConfigProxy(
-        app: Application,
-        config: DevServerConfig,
-        useBrowserSync = true,
-    ): Promise<void> {
+    private async createHtmlConfigProxy(app: Application, useBrowserSync = true): Promise<void> {
         const pathRewrite: Record<string, string> = {};
         const adminPattern = `/adapter/${this.adapterName}/**`;
 
@@ -462,7 +456,7 @@ export abstract class RunCommandBase extends CommandBase {
             );
         } else {
             // Serve without BrowserSync - serve admin files directly and proxy the rest
-            const adminPath = path.resolve(this.rootDir, 'admin/');
+            const adminPath = path.resolve(this.rootPath, 'admin/');
 
             // serve static admin files
             app.use(`/adapter/${this.adapterName}`, express.static(adminPath));
@@ -497,7 +491,7 @@ export abstract class RunCommandBase extends CommandBase {
             await this.startReact('watch:react');
             hasReact = true;
 
-            if (existsSync(path.resolve(this.rootDir, 'admin/.watch'))) {
+            if (existsSync(path.resolve(this.rootPath, 'admin/.watch'))) {
                 // rewrite the build directory to the .watch directory,
                 // because "watch:react" no longer updates the build directory automatically
                 pathRewrite[`^/adapter/${this.adapterName}/build/`] = '/.watch/';
@@ -515,7 +509,7 @@ export abstract class RunCommandBase extends CommandBase {
         this.log.notice('Starting browser-sync');
         const bs = browserSync.create();
 
-        const adminPath = path.resolve(this.rootDir, 'admin/');
+        const adminPath = path.resolve(this.rootPath, 'admin/');
         const config: browserSync.Options = {
             server: { baseDir: adminPath, directory: true },
             port: port,
@@ -567,10 +561,9 @@ export abstract class RunCommandBase extends CommandBase {
     private async startReact(scriptName: string): Promise<void> {
         this.log.notice('Starting React build');
         this.log.debug('Waiting for first successful React build...');
-        await this.spawnAndAwaitOutput(
+        await this.rootDir.spawnAndAwaitOutput(
             'npm',
             ['run', scriptName],
-            this.rootDir,
             /(built in|done in|watching (files )?for)/i,
             {
                 shell: true,
@@ -579,18 +572,18 @@ export abstract class RunCommandBase extends CommandBase {
     }
 
     protected async copySourcemaps(): Promise<void> {
-        const outDir = path.join(this.profileDir, 'node_modules', `iobroker.${this.adapterName}`);
+        const outDir = path.join(this.profilePath, 'node_modules', `iobroker.${this.adapterName}`);
         this.log.notice(`Creating or patching sourcemaps in ${outDir}`);
         const sourcemaps = await this.findFiles('map', true);
         if (sourcemaps.length === 0) {
-            this.log.debug(`Couldn't find any sourcemaps in ${this.rootDir},\nwill try to reverse map .js files`);
+            this.log.debug(`Couldn't find any sourcemaps in ${this.rootPath},\nwill try to reverse map .js files`);
 
             // search all .js files that exist in the node module in the temp directory as well as in the root directory and
             // create sourcemap files for each of them
             const jsFiles = await this.findFiles('js', true);
             await Promise.all(
                 jsFiles.map(async js => {
-                    const src = path.join(this.rootDir, js);
+                    const src = path.join(this.rootPath, js);
                     const dest = path.join(outDir, js);
                     await this.addSourcemap(src, dest, false);
                 }),
@@ -602,7 +595,7 @@ export abstract class RunCommandBase extends CommandBase {
         // change their sourceRoot so they can be found in the development directory
         await Promise.all(
             sourcemaps.map(async sourcemap => {
-                const src = path.join(this.rootDir, sourcemap);
+                const src = path.join(this.rootPath, sourcemap);
                 const dest = path.join(outDir, sourcemap);
                 await this.patchSourcemap(src, dest);
             }),
@@ -640,7 +633,7 @@ export abstract class RunCommandBase extends CommandBase {
         try {
             const mapFile = `${dest}.map`;
             const data = await this.createIdentitySourcemap(src.replace(/\\/g, '/'));
-            await writeFile(mapFile, JSON.stringify(data));
+            await writeJson(mapFile, data);
 
             // append the sourcemap reference comment to the bottom of the file
             const fileContent = await readFile(copyFromSrc ? src : dest, { encoding: 'utf-8' });
@@ -669,14 +662,14 @@ export abstract class RunCommandBase extends CommandBase {
         // thanks to https://github.com/gulp-sourcemaps/identity-map/blob/251b51598d02e5aedaea8f1a475dfc42103a2727/lib/generate.js [MIT]
         const generator = new SourceMapGenerator({ file: filename });
         const fileContent = await readFile(filename, { encoding: 'utf-8' });
-        const tokenizer = acorn.tokenizer(fileContent, {
+        const tok = tokenizer(fileContent, {
             ecmaVersion: 'latest',
             allowHashBang: true,
             locations: true,
         });
 
         while (true) {
-            const token = tokenizer.getToken();
+            const token = tok.getToken();
 
             if (token.type.label === 'eof' || !token.loc) {
                 break;
@@ -705,6 +698,6 @@ export abstract class RunCommandBase extends CommandBase {
     }
 
     private async findFiles(extension: string, excludeAdmin: boolean): Promise<string[]> {
-        return await fg(this.getFilePatterns(extension, excludeAdmin), { cwd: this.rootDir });
+        return await fg(this.getFilePatterns(extension, excludeAdmin), { cwd: this.rootPath });
     }
 }

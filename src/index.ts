@@ -1,3 +1,3 @@
-import { DevServer } from './DevServer';
+import { DevServer } from './DevServer.js';
 
 (() => new DevServer())();

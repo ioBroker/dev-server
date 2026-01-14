@@ -1,5 +1,5 @@
-import type { DevServer } from '../DevServer';
-import { CommandBase, IOBROKER_COMMAND } from './CommandBase';
+import type { DevServer } from '../DevServer.js';
+import { CommandBase, IOBROKER_COMMAND } from './CommandBase.js';
 
 export class Backup extends CommandBase {
     constructor(
@@ -10,6 +10,6 @@ export class Backup extends CommandBase {
     }
 
     public async run(): Promise<void> {
-        this.execSync(`${IOBROKER_COMMAND} backup "${this.filename}"`, this.profileDir);
+        await this.profileDir.exec(`${IOBROKER_COMMAND} backup "${this.filename}"`);
     }
 }

@@ -1,45 +1,37 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.RunCommandBase = void 0;
-const acorn_1 = __importDefault(require("acorn"));
-const axios_1 = __importDefault(require("axios"));
-const browser_sync_1 = __importDefault(require("browser-sync"));
-const chalk_1 = __importDefault(require("chalk"));
-const express_1 = __importDefault(require("express"));
-const fast_glob_1 = __importDefault(require("fast-glob"));
-const fs_extra_1 = require("fs-extra");
-const http_proxy_middleware_1 = require("http-proxy-middleware");
-const node_events_1 = __importDefault(require("node:events"));
-const node_path_1 = __importDefault(require("node:path"));
-const source_map_1 = require("source-map");
-const ws_1 = __importDefault(require("ws"));
-const jsonConfig_1 = require("../jsonConfig");
-const CommandBase_1 = require("./CommandBase");
-const utils_1 = require("./utils");
-class RunCommandBase extends CommandBase_1.CommandBase {
-    constructor() {
-        super(...arguments);
-        this.socketEvents = new node_events_1.default();
-    }
+import { tokenizer } from 'acorn';
+import axios from 'axios';
+import browserSync from 'browser-sync';
+import chalk from 'chalk';
+import express from 'express';
+import fg from 'fast-glob';
+import { legacyCreateProxyMiddleware as createProxyMiddleware } from 'http-proxy-middleware';
+import EventEmitter from 'node:events';
+import { existsSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { SourceMapGenerator } from 'source-map';
+import WebSocket from 'ws';
+import { injectCode } from '../jsonConfig.js';
+import { CommandBase, HIDDEN_ADMIN_PORT_OFFSET, HIDDEN_BROWSER_SYNC_PORT_OFFSET, OBJECTS_DB_PORT_OFFSET, STATES_DB_PORT_OFFSET, } from './CommandBase.js';
+import { checkPort, delay, readJson, writeJson } from './utils.js';
+export class RunCommandBase extends CommandBase {
+    websocket;
+    socketEvents = new EventEmitter();
     async startJsController() {
-        const proc = await this.spawn('node', [
+        await this.profileDir.spawn('node', [
             '--inspect=127.0.0.1:9228',
             '--preserve-symlinks',
             '--preserve-symlinks-main',
             'node_modules/iobroker.js-controller/controller.js',
-        ], this.profileDir);
-        proc.on('exit', async (code) => {
-            console.error(chalk_1.default.yellow(`ioBroker controller exited with code ${code}`));
+        ], async (code) => {
+            console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
             return this.exit(-1, 'SIGKILL');
         });
         this.log.notice('Waiting for js-controller to start...');
         await this.waitForJsController();
     }
     async waitForJsController() {
-        if (!(await this.waitForPort(CommandBase_1.OBJECTS_DB_PORT_OFFSET)) || !(await this.waitForPort(CommandBase_1.STATES_DB_PORT_OFFSET))) {
+        if (!(await this.waitForPort(OBJECTS_DB_PORT_OFFSET)) || !(await this.waitForPort(STATES_DB_PORT_OFFSET))) {
             throw new Error(`Couldn't start js-controller`);
         }
     }
@@ -49,30 +41,30 @@ class RunCommandBase extends CommandBase_1.CommandBase {
         let tries = 0;
         while (true) {
             try {
-                await (0, utils_1.checkPort)(port);
+                await checkPort(port);
                 this.log.debug(`Port ${port} is available...`);
                 return true;
             }
-            catch (_a) {
+            catch {
                 if (tries++ > 30) {
                     this.log.error(`Port ${port} is not available after 30 seconds.`);
                     return false;
                 }
-                await (0, utils_1.delay)(1000);
+                await delay(1000);
             }
         }
     }
     async startServer(useBrowserSync = true) {
-        this.log.notice(`Running inside ${this.profileDir}`);
+        this.log.notice(`Running inside ${this.profilePath}`);
         if (!this.config) {
             throw new Error(`Couldn't find dev-server configuration in package.json`);
         }
-        await this.waitForPort(CommandBase_1.HIDDEN_ADMIN_PORT_OFFSET);
-        const app = (0, express_1.default)();
-        const hiddenAdminPort = this.getPort(CommandBase_1.HIDDEN_ADMIN_PORT_OFFSET);
+        await this.waitForPort(HIDDEN_ADMIN_PORT_OFFSET);
+        const app = express();
+        const hiddenAdminPort = this.getPort(HIDDEN_ADMIN_PORT_OFFSET);
         if (this.isJSController()) {
             // simply forward admin as-is
-            app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)({
+            app.use(createProxyMiddleware({
                 target: `http://127.0.0.1:${hiddenAdminPort}`,
                 ws: true,
             }));
@@ -82,15 +74,15 @@ class RunCommandBase extends CommandBase_1.CommandBase {
             const uiCapabilities = await this.getAdapterUiCapabilities();
             if (uiCapabilities.configType === 'json' && uiCapabilities.tabType !== 'none') {
                 // Adapter uses jsonConfig AND has tabs - support both simultaneously
-                await this.createCombinedConfigProxy(app, this.config, uiCapabilities, useBrowserSync);
+                await this.createCombinedConfigProxy(app, uiCapabilities, useBrowserSync);
             }
             else if (uiCapabilities.configType === 'json') {
                 // JSON config only
-                await this.createJsonConfigProxy(app, this.config, useBrowserSync);
+                await this.createJsonConfigProxy(app, useBrowserSync);
             }
             else {
                 // HTML config or tabs only (or no config)
-                await this.createHtmlConfigProxy(app, this.config, useBrowserSync);
+                await this.createHtmlConfigProxy(app, useBrowserSync);
             }
         }
         // start express
@@ -105,7 +97,8 @@ class RunCommandBase extends CommandBase_1.CommandBase {
             // but send the signal to all child processes when not in a tty environment
             if (!process.stdin.isTTY) {
                 this.log.silly('Sending SIGINT to all child processes...');
-                this.childProcesses.forEach(p => p.kill('SIGINT'));
+                this.rootDir.sendSigIntToChildProcesses();
+                this.profileDir.sendSigIntToChildProcesses();
             }
         });
         await new Promise((resolve, reject) => {
@@ -119,7 +112,7 @@ class RunCommandBase extends CommandBase_1.CommandBase {
                     return;
                 }
                 // TODO: replace this with @iobroker/socket-client
-                this.websocket = new ws_1.default(`ws://127.0.0.1:${hiddenAdminPort}/?sid=${Date.now()}&name=admin`);
+                this.websocket = new WebSocket(`ws://127.0.0.1:${hiddenAdminPort}/?sid=${Date.now()}&name=admin`);
                 this.websocket.on('open', () => this.log.silly('WebSocket open'));
                 this.websocket.on('close', () => {
                     this.log.silly('WebSocket closed');
@@ -128,9 +121,8 @@ class RunCommandBase extends CommandBase_1.CommandBase {
                 });
                 this.websocket.on('error', error => this.log.silly(`WebSocket error: ${error}`));
                 this.websocket.on('message', msg => {
-                    var _a;
                     // eslint-disable-next-line @typescript-eslint/no-base-to-string
-                    const msgString = msg === null || msg === void 0 ? void 0 : msg.toString();
+                    const msgString = msg?.toString();
                     if (typeof msgString === 'string') {
                         try {
                             const data = JSON.parse(msgString);
@@ -145,7 +137,7 @@ class RunCommandBase extends CommandBase_1.CommandBase {
                                     break;
                                 case 1:
                                     // ping received, send pong (keep-alive)
-                                    (_a = this.websocket) === null || _a === void 0 ? void 0 : _a.send('[2]');
+                                    this.websocket?.send('[2]');
                                     break;
                             }
                         }
@@ -174,7 +166,6 @@ class RunCommandBase extends CommandBase_1.CommandBase {
      *   - tabType: 'json' (jsonTab), 'html' (HTML/React tab), or 'none'
      */
     async getAdapterUiCapabilities() {
-        var _a;
         let configType = 'none';
         let tabType = 'none';
         // Check for jsonConfig files first
@@ -185,7 +176,7 @@ class RunCommandBase extends CommandBase_1.CommandBase {
             // Check io-package.json adminUi field (replicate what admin does)
             try {
                 const ioPackage = await this.readIoPackageJson();
-                if ((_a = ioPackage === null || ioPackage === void 0 ? void 0 : ioPackage.common) === null || _a === void 0 ? void 0 : _a.adminUi) {
+                if (ioPackage?.common?.adminUi) {
                     const adminUi = ioPackage.common.adminUi;
                     this.log.debug(`Found adminUi configuration in io-package.json: ${JSON.stringify(adminUi)}`);
                     // Set config type based on adminUi.config
@@ -215,11 +206,11 @@ class RunCommandBase extends CommandBase_1.CommandBase {
         };
     }
     getJsonConfigPath() {
-        const jsonConfigPath = node_path_1.default.resolve(this.rootDir, 'admin/jsonConfig.json');
-        if ((0, fs_extra_1.existsSync)(jsonConfigPath)) {
+        const jsonConfigPath = path.resolve(this.rootPath, 'admin/jsonConfig.json');
+        if (existsSync(jsonConfigPath)) {
             return jsonConfigPath;
         }
-        if ((0, fs_extra_1.existsSync)(`${jsonConfigPath}5`)) {
+        if (existsSync(`${jsonConfigPath}5`)) {
             return `${jsonConfigPath}5`;
         }
         return '';
@@ -239,16 +230,15 @@ class RunCommandBase extends CommandBase_1.CommandBase {
      * For adapters with only one UI type, use createJsonConfigProxy or createHtmlConfigProxy instead.
      *
      * @param app Express application instance
-     * @param config Dev server configuration
      * @param uiCapabilities Object containing configType and tabType detected from io-package.json
      * @param useBrowserSync Whether to use BrowserSync for hot-reload (default: true)
      */
-    async createCombinedConfigProxy(app, config, uiCapabilities, useBrowserSync = true) {
+    async createCombinedConfigProxy(app, uiCapabilities, useBrowserSync = true) {
         // This method combines the functionality of createJsonConfigProxy and createHtmlConfigProxy
         // to support adapters that use jsonConfig and tabs simultaneously
         const pathRewrite = {};
-        const browserSyncPort = this.getPort(CommandBase_1.HIDDEN_BROWSER_SYNC_PORT_OFFSET);
-        const adminUrl = `http://127.0.0.1:${this.getPort(CommandBase_1.HIDDEN_ADMIN_PORT_OFFSET)}`;
+        const browserSyncPort = this.getPort(HIDDEN_BROWSER_SYNC_PORT_OFFSET);
+        const adminUrl = `http://127.0.0.1:${this.getPort(HIDDEN_ADMIN_PORT_OFFSET)}`;
         let hasReact = false;
         let bs = null;
         if (useBrowserSync) {
@@ -262,26 +252,26 @@ class RunCommandBase extends CommandBase_1.CommandBase {
         // Handle jsonConfig file watching if present
         if (uiCapabilities.configType === 'json' && useBrowserSync && bs) {
             const jsonConfigFile = this.getJsonConfigPath();
-            this.setupJsonFileWatch(bs, jsonConfigFile, node_path_1.default.basename(jsonConfigFile));
+            this.setupJsonFileWatch(bs, jsonConfigFile, path.basename(jsonConfigFile));
             // "proxy" for the main page which injects our script
             app.get('/', async (_req, res) => {
-                const { data } = await axios_1.default.get(adminUrl);
-                res.send((0, jsonConfig_1.injectCode)(data, this.adapterName, node_path_1.default.basename(jsonConfigFile)));
+                const { data } = await axios.get(adminUrl);
+                res.send(injectCode(data, this.adapterName, path.basename(jsonConfigFile)));
             });
         }
         // Handle tab file watching if present
         if (uiCapabilities.tabType !== 'none' && useBrowserSync && bs) {
             if (uiCapabilities.tabType === 'json') {
                 // Watch JSON tab files
-                const jsonTabPath = node_path_1.default.resolve(this.rootDir, 'admin/jsonTab.json');
-                const jsonTab5Path = node_path_1.default.resolve(this.rootDir, 'admin/jsonTab.json5');
+                const jsonTabPath = path.resolve(this.rootPath, 'admin/jsonTab.json');
+                const jsonTab5Path = path.resolve(this.rootPath, 'admin/jsonTab.json5');
                 this.setupJsonFileWatch(bs, jsonTabPath, 'jsonTab.json');
                 this.setupJsonFileWatch(bs, jsonTab5Path, 'jsonTab.json5');
             }
             if (uiCapabilities.tabType === 'html') {
                 // Watch HTML tab files
-                const tabHtmlPath = node_path_1.default.resolve(this.rootDir, 'admin/tab.html');
-                if ((0, fs_extra_1.existsSync)(tabHtmlPath)) {
+                const tabHtmlPath = path.resolve(this.rootPath, 'admin/tab.html');
+                if (existsSync(tabHtmlPath)) {
                     bs.watch(tabHtmlPath, undefined, (e) => {
                         if (e === 'change') {
                             this.log.info('Detected change in tab.html, reloading browser...');
@@ -297,25 +287,25 @@ class RunCommandBase extends CommandBase_1.CommandBase {
                 // browser-sync proxy for adapter files (for HTML config or HTML tabs)
                 const adminPattern = `/adapter/${this.adapterName}/**`;
                 pathRewrite[`^/adapter/${this.adapterName}/`] = '/';
-                app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)([adminPattern, '/browser-sync/**'], {
+                app.use(createProxyMiddleware([adminPattern, '/browser-sync/**'], {
                     target: `http://127.0.0.1:${browserSyncPort}`,
                     //ws: true, // can't have two web-socket connections proxying to different locations
                     pathRewrite,
                 }));
                 // admin proxy
-                app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)([`!${adminPattern}`, '!/browser-sync/**'], {
+                app.use(createProxyMiddleware([`!${adminPattern}`, '!/browser-sync/**'], {
                     target: adminUrl,
                     ws: true,
                 }));
             }
             else {
                 // browser-sync proxy (for JSON config only)
-                app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)(['/browser-sync/**'], {
+                app.use(createProxyMiddleware(['/browser-sync/**'], {
                     target: `http://127.0.0.1:${browserSyncPort}`,
                     // ws: true, // can't have two web-socket connections proxying to different locations
                 }));
                 // admin proxy
-                app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)({
+                app.use(createProxyMiddleware({
                     target: adminUrl,
                     ws: true,
                 }));
@@ -323,76 +313,76 @@ class RunCommandBase extends CommandBase_1.CommandBase {
         }
         else {
             // Direct admin proxy without browser-sync
-            app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)({
+            app.use(createProxyMiddleware({
                 target: adminUrl,
                 ws: true,
             }));
         }
     }
-    createJsonConfigProxy(app, config, useBrowserSync = true) {
+    createJsonConfigProxy(app, useBrowserSync = true) {
         const jsonConfigFile = this.getJsonConfigPath();
-        const adminUrl = `http://127.0.0.1:${this.getPort(CommandBase_1.HIDDEN_ADMIN_PORT_OFFSET)}`;
+        const adminUrl = `http://127.0.0.1:${this.getPort(HIDDEN_ADMIN_PORT_OFFSET)}`;
         if (useBrowserSync) {
             // Use BrowserSync for hot-reload functionality
-            const browserSyncPort = this.getPort(CommandBase_1.HIDDEN_BROWSER_SYNC_PORT_OFFSET);
+            const browserSyncPort = this.getPort(HIDDEN_BROWSER_SYNC_PORT_OFFSET);
             const bs = this.startBrowserSync(browserSyncPort, false);
             // Setup file watching for jsonConfig changes
-            this.setupJsonFileWatch(bs, jsonConfigFile, node_path_1.default.basename(jsonConfigFile));
+            this.setupJsonFileWatch(bs, jsonConfigFile, path.basename(jsonConfigFile));
             // "proxy" for the main page which injects our script
             app.get('/', async (_req, res) => {
-                const { data } = await axios_1.default.get(adminUrl);
-                res.send((0, jsonConfig_1.injectCode)(data, this.adapterName, node_path_1.default.basename(jsonConfigFile)));
+                const { data } = await axios.get(adminUrl);
+                res.send(injectCode(data, this.adapterName, path.basename(jsonConfigFile)));
             });
             // browser-sync proxy
-            app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)(['/browser-sync/**'], {
+            app.use(createProxyMiddleware(['/browser-sync/**'], {
                 target: `http://127.0.0.1:${browserSyncPort}`,
                 // ws: true, // can't have two web-socket connections proxying to different locations
             }));
             // admin proxy
-            app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)({
+            app.use(createProxyMiddleware({
                 target: adminUrl,
                 ws: true,
             }));
         }
         else {
             // Serve without BrowserSync - just proxy admin directly
-            app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)({
+            app.use(createProxyMiddleware({
                 target: adminUrl,
                 ws: true,
             }));
         }
         return Promise.resolve();
     }
-    async createHtmlConfigProxy(app, config, useBrowserSync = true) {
+    async createHtmlConfigProxy(app, useBrowserSync = true) {
         const pathRewrite = {};
         const adminPattern = `/adapter/${this.adapterName}/**`;
         // Setup React build watching if needed
         const hasReact = await this.setupReactWatch(pathRewrite);
         if (useBrowserSync) {
             // Use BrowserSync for hot-reload functionality
-            const browserSyncPort = this.getPort(CommandBase_1.HIDDEN_BROWSER_SYNC_PORT_OFFSET);
+            const browserSyncPort = this.getPort(HIDDEN_BROWSER_SYNC_PORT_OFFSET);
             this.startBrowserSync(browserSyncPort, hasReact);
             // browser-sync proxy
             pathRewrite[`^/adapter/${this.adapterName}/`] = '/';
-            app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)([adminPattern, '/browser-sync/**'], {
+            app.use(createProxyMiddleware([adminPattern, '/browser-sync/**'], {
                 target: `http://127.0.0.1:${browserSyncPort}`,
                 //ws: true, // can't have two web-socket connections proxying to different locations
                 pathRewrite,
             }));
             // admin proxy
-            app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)([`!${adminPattern}`, '!/browser-sync/**'], {
-                target: `http://127.0.0.1:${this.getPort(CommandBase_1.HIDDEN_ADMIN_PORT_OFFSET)}`,
+            app.use(createProxyMiddleware([`!${adminPattern}`, '!/browser-sync/**'], {
+                target: `http://127.0.0.1:${this.getPort(HIDDEN_ADMIN_PORT_OFFSET)}`,
                 ws: true,
             }));
         }
         else {
             // Serve without BrowserSync - serve admin files directly and proxy the rest
-            const adminPath = node_path_1.default.resolve(this.rootDir, 'admin/');
+            const adminPath = path.resolve(this.rootPath, 'admin/');
             // serve static admin files
-            app.use(`/adapter/${this.adapterName}`, express_1.default.static(adminPath));
+            app.use(`/adapter/${this.adapterName}`, express.static(adminPath));
             // admin proxy for everything else
-            app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)([`!${adminPattern}`], {
-                target: `http://127.0.0.1:${this.getPort(CommandBase_1.HIDDEN_ADMIN_PORT_OFFSET)}`,
+            app.use(createProxyMiddleware([`!${adminPattern}`], {
+                target: `http://127.0.0.1:${this.getPort(HIDDEN_ADMIN_PORT_OFFSET)}`,
                 ws: true,
             }));
         }
@@ -414,7 +404,7 @@ class RunCommandBase extends CommandBase_1.CommandBase {
         if (scripts['watch:react']) {
             await this.startReact('watch:react');
             hasReact = true;
-            if ((0, fs_extra_1.existsSync)(node_path_1.default.resolve(this.rootDir, 'admin/.watch'))) {
+            if (existsSync(path.resolve(this.rootPath, 'admin/.watch'))) {
                 // rewrite the build directory to the .watch directory,
                 // because "watch:react" no longer updates the build directory automatically
                 pathRewrite[`^/adapter/${this.adapterName}/build/`] = '/.watch/';
@@ -429,8 +419,8 @@ class RunCommandBase extends CommandBase_1.CommandBase {
     }
     startBrowserSync(port, hasReact) {
         this.log.notice('Starting browser-sync');
-        const bs = browser_sync_1.default.create();
-        const adminPath = node_path_1.default.resolve(this.rootDir, 'admin/');
+        const bs = browserSync.create();
+        const adminPath = path.resolve(this.rootPath, 'admin/');
         const config = {
             server: { baseDir: adminPath, directory: true },
             port: port,
@@ -439,12 +429,12 @@ class RunCommandBase extends CommandBase_1.CommandBase {
             logLevel: 'info',
             reloadDelay: hasReact ? 500 : 0,
             reloadDebounce: hasReact ? 500 : 0,
-            files: [node_path_1.default.join(adminPath, '**')],
+            files: [path.join(adminPath, '**')],
             plugins: [
                 {
                     module: 'bs-html-injector',
                     options: {
-                        files: [node_path_1.default.join(adminPath, '*.html')],
+                        files: [path.join(adminPath, '*.html')],
                     },
                 },
             ],
@@ -458,15 +448,14 @@ class RunCommandBase extends CommandBase_1.CommandBase {
      * Uploads the file to ioBroker via WebSocket when changes are detected
      */
     setupJsonFileWatch(bs, filePath, fileName) {
-        if (!(0, fs_extra_1.existsSync)(filePath)) {
+        if (!existsSync(filePath)) {
             return;
         }
         bs.watch(filePath, undefined, async (e) => {
-            var _a;
             if (e === 'change') {
                 this.log.info(`Detected change in ${fileName}, uploading to ioBroker...`);
-                const content = await (0, fs_extra_1.readFile)(filePath);
-                (_a = this.websocket) === null || _a === void 0 ? void 0 : _a.send(JSON.stringify([
+                const content = await readFile(filePath);
+                this.websocket?.send(JSON.stringify([
                     3,
                     46,
                     'writeFile',
@@ -478,22 +467,22 @@ class RunCommandBase extends CommandBase_1.CommandBase {
     async startReact(scriptName) {
         this.log.notice('Starting React build');
         this.log.debug('Waiting for first successful React build...');
-        await this.spawnAndAwaitOutput('npm', ['run', scriptName], this.rootDir, /(built in|done in|watching (files )?for)/i, {
+        await this.rootDir.spawnAndAwaitOutput('npm', ['run', scriptName], /(built in|done in|watching (files )?for)/i, {
             shell: true,
         });
     }
     async copySourcemaps() {
-        const outDir = node_path_1.default.join(this.profileDir, 'node_modules', `iobroker.${this.adapterName}`);
+        const outDir = path.join(this.profilePath, 'node_modules', `iobroker.${this.adapterName}`);
         this.log.notice(`Creating or patching sourcemaps in ${outDir}`);
         const sourcemaps = await this.findFiles('map', true);
         if (sourcemaps.length === 0) {
-            this.log.debug(`Couldn't find any sourcemaps in ${this.rootDir},\nwill try to reverse map .js files`);
+            this.log.debug(`Couldn't find any sourcemaps in ${this.rootPath},\nwill try to reverse map .js files`);
             // search all .js files that exist in the node module in the temp directory as well as in the root directory and
             // create sourcemap files for each of them
             const jsFiles = await this.findFiles('js', true);
             await Promise.all(jsFiles.map(async (js) => {
-                const src = node_path_1.default.join(this.rootDir, js);
-                const dest = node_path_1.default.join(outDir, js);
+                const src = path.join(this.rootPath, js);
+                const dest = path.join(outDir, js);
                 await this.addSourcemap(src, dest, false);
             }));
             return;
@@ -501,8 +490,8 @@ class RunCommandBase extends CommandBase_1.CommandBase {
         // copy all *.map files to the node module in the temp directory and
         // change their sourceRoot so they can be found in the development directory
         await Promise.all(sourcemaps.map(async (sourcemap) => {
-            const src = node_path_1.default.join(this.rootDir, sourcemap);
-            const dest = node_path_1.default.join(outDir, sourcemap);
+            const src = path.join(this.rootPath, sourcemap);
+            const dest = path.join(outDir, sourcemap);
             await this.patchSourcemap(src, dest);
         }));
     }
@@ -514,12 +503,12 @@ class RunCommandBase extends CommandBase_1.CommandBase {
      */
     async patchSourcemap(src, dest) {
         try {
-            const data = await (0, fs_extra_1.readJson)(src);
+            const data = await readJson(src);
             if (data.version !== 3) {
                 throw new Error(`Unsupported sourcemap version: ${data.version}`);
             }
-            data.sourceRoot = node_path_1.default.dirname(src).replace(/\\/g, '/');
-            await (0, fs_extra_1.writeJson)(dest, data);
+            data.sourceRoot = path.dirname(src).replace(/\\/g, '/');
+            await writeJson(dest, data);
             this.log.debug(`Patched ${dest} from ${src}`);
         }
         catch (error) {
@@ -537,10 +526,10 @@ class RunCommandBase extends CommandBase_1.CommandBase {
         try {
             const mapFile = `${dest}.map`;
             const data = await this.createIdentitySourcemap(src.replace(/\\/g, '/'));
-            await (0, fs_extra_1.writeFile)(mapFile, JSON.stringify(data));
+            await writeJson(mapFile, data);
             // append the sourcemap reference comment to the bottom of the file
-            const fileContent = await (0, fs_extra_1.readFile)(copyFromSrc ? src : dest, { encoding: 'utf-8' });
-            const filename = node_path_1.default.basename(mapFile);
+            const fileContent = await readFile(copyFromSrc ? src : dest, { encoding: 'utf-8' });
+            const filename = path.basename(mapFile);
             let updatedContent = fileContent.replace(/(\/\/# sourceMappingURL=).+/, `$1${filename}`);
             if (updatedContent === fileContent) {
                 // no existing source mapping URL was found in the file
@@ -553,7 +542,7 @@ class RunCommandBase extends CommandBase_1.CommandBase {
                 }
                 updatedContent += `//# sourceMappingURL=${filename}`;
             }
-            await (0, fs_extra_1.writeFile)(dest, updatedContent);
+            await writeFile(dest, updatedContent);
             this.log.debug(`Created ${mapFile} from ${src}`);
         }
         catch (error) {
@@ -562,15 +551,15 @@ class RunCommandBase extends CommandBase_1.CommandBase {
     }
     async createIdentitySourcemap(filename) {
         // thanks to https://github.com/gulp-sourcemaps/identity-map/blob/251b51598d02e5aedaea8f1a475dfc42103a2727/lib/generate.js [MIT]
-        const generator = new source_map_1.SourceMapGenerator({ file: filename });
-        const fileContent = await (0, fs_extra_1.readFile)(filename, { encoding: 'utf-8' });
-        const tokenizer = acorn_1.default.tokenizer(fileContent, {
+        const generator = new SourceMapGenerator({ file: filename });
+        const fileContent = await readFile(filename, { encoding: 'utf-8' });
+        const tok = tokenizer(fileContent, {
             ecmaVersion: 'latest',
             allowHashBang: true,
             locations: true,
         });
         while (true) {
-            const token = tokenizer.getToken();
+            const token = tok.getToken();
             if (token.type.label === 'eof' || !token.loc) {
                 break;
             }
@@ -595,7 +584,6 @@ class RunCommandBase extends CommandBase_1.CommandBase {
         return patterns;
     }
     async findFiles(extension, excludeAdmin) {
-        return await (0, fast_glob_1.default)(this.getFilePatterns(extension, excludeAdmin), { cwd: this.rootDir });
+        return await fg(this.getFilePatterns(extension, excludeAdmin), { cwd: this.rootPath });
     }
 }
-exports.RunCommandBase = RunCommandBase;

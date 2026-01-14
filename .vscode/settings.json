@@ -23,5 +23,5 @@
         "editor.tabSize": 4,
         "editor.insertSpaces": true
     },
-    "cSpell.words": ["alcalzone", "iobroker"]
+    "cSpell.words": ["alcalzone", "iobroker", "Pids"]
 }

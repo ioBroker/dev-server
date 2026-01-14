@@ -2,19 +2,23 @@
 
 import axios from 'axios';
 import chalk from 'chalk';
-import { prompt } from 'enquirer';
-import { existsSync, mkdir, readdir, readJson, rename } from 'fs-extra';
+import enquirer from 'enquirer';
+import { existsSync } from 'node:fs';
+import { mkdir, readdir, rename } from 'node:fs/promises';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { gt } from 'semver';
 import yargs from 'yargs/yargs';
-import { Backup } from './commands/Backup';
-import { Debug } from './commands/Debug';
-import { Run } from './commands/Run';
-import { Setup } from './commands/Setup';
-import { Update } from './commands/Update';
-import { Upload } from './commands/Upload';
-import { Watch } from './commands/Watch';
-import { Logger } from './logger';
+import { Backup } from './commands/Backup.js';
+import { Debug } from './commands/Debug.js';
+import { Run } from './commands/Run.js';
+import { Setup } from './commands/Setup.js';
+import { SetupRemote } from './commands/SetupRemote.js';
+import { Update } from './commands/Update.js';
+import { Upload } from './commands/Upload.js';
+import { readJson } from './commands/utils.js';
+import { Watch } from './commands/Watch.js';
+import { Logger } from './logger.js';
 
 const DEFAULT_TEMP_DIR_NAME = '.dev-server';
 const CORE_MODULE = 'iobroker.js-controller';
@@ -37,15 +41,15 @@ export interface DevServerConfig {
 }
 
 export type CoreDependency = 'iobroker.js-controller' | 'iobroker.admin';
-export type DependencyVersions = Partial<Record<CoreDependency | string, string>>;
+export type DependencyVersions = Partial<Record<CoreDependency, string>>;
 
 export class DevServer {
     public log!: Logger;
-    public rootDir!: string;
+    public rootPath!: string;
     public adapterName!: string;
-    public tempDir!: string;
+    public tempPath!: string;
     public profileName!: string;
-    public profileDir!: string;
+    public profilePath!: string;
     public config?: DevServerConfig;
 
     constructor() {
@@ -83,8 +87,7 @@ export class DevServer {
                     },
                     remote: {
                         type: 'boolean',
-                        alias: 'r',
-                        description: 'Run ioBroker and the adapter on a remote host',
+                        description: 'Install dev-server on a remote host and connect via SSH',
                     },
                     force: { type: 'boolean', hidden: true },
                     symlinks: {
@@ -201,6 +204,7 @@ export class DevServer {
             .middleware(async argv => await this.setDirectories(argv))
             .middleware(async () => await this.parseConfig())
             .wrap(Math.min(100, parser.terminalWidth()))
+            .showHelpOnFail(false)
             .help().argv;
     }
 
@@ -217,7 +221,7 @@ export class DevServer {
             } = await axios.get(`https://registry.npmjs.org/${name}/latest`, { timeout: 1000 });
             if (gt(releaseVersion, localVersion)) {
                 this.log.debug(`Found update from ${localVersion} to ${releaseVersion}`);
-                const response = await prompt<{ update: boolean }>({
+                const response = await enquirer.prompt<{ update: boolean }>({
                     name: 'update',
                     type: 'confirm',
                     message: `Version ${releaseVersion} of ${name} is available.\nWould you like to exit and update?`,
@@ -238,7 +242,8 @@ export class DevServer {
     }
 
     public async readMyPackageJson(): Promise<any> {
-        return readJson(path.join(__dirname, '..', 'package.json'));
+        const dirname = path.dirname(fileURLToPath(import.meta.url));
+        return readJson(path.join(dirname, '..', 'package.json'));
     }
 
     private async setDirectories(argv: {
@@ -247,15 +252,15 @@ export class DevServer {
         temp: string;
         profile?: string;
     }): Promise<void> {
-        this.rootDir = path.resolve(argv.root);
-        this.tempDir = path.resolve(this.rootDir, argv.temp);
-        if (existsSync(path.join(this.tempDir, 'package.json'))) {
+        this.rootPath = path.resolve(argv.root);
+        this.tempPath = path.resolve(this.rootPath, argv.temp);
+        if (existsSync(path.join(this.tempPath, 'package.json'))) {
             // we are still in the old directory structure (no profiles), let's move it
-            const intermediateDir = path.join(this.rootDir, `${DEFAULT_TEMP_DIR_NAME}-temp`);
-            const defaultProfileDir = path.join(this.tempDir, DEFAULT_PROFILE_NAME);
-            this.log.debug(`Moving temporary data from ${this.tempDir} to ${defaultProfileDir}`);
-            await rename(this.tempDir, intermediateDir);
-            await mkdir(this.tempDir);
+            const intermediateDir = path.join(this.rootPath, `${DEFAULT_TEMP_DIR_NAME}-temp`);
+            const defaultProfileDir = path.join(this.tempPath, DEFAULT_PROFILE_NAME);
+            this.log.debug(`Moving temporary data from ${this.tempPath} to ${defaultProfileDir}`);
+            await rename(this.tempPath, intermediateDir);
+            await mkdir(this.tempPath);
             await rename(intermediateDir, defaultProfileDir);
         }
 
@@ -288,7 +293,7 @@ export class DevServer {
                                 `> dev-server ${process.argv.slice(2).join(' ')} ${profileNames[profileNames.length - 1]} `,
                         ),
                     );
-                    const response = await prompt<{ profile: string }>({
+                    const response = await enquirer.prompt<{ profile: string }>({
                         name: 'profile',
                         type: 'select',
                         message: 'Please choose a profile',
@@ -308,14 +313,14 @@ export class DevServer {
 
         this.profileName = profileName;
         this.log.debug(`Using profile name "${this.profileName}"`);
-        this.profileDir = path.join(this.tempDir, profileName);
+        this.profilePath = path.join(this.tempPath, profileName);
         this.adapterName = await this.findAdapterName();
     }
 
     private async parseConfig(): Promise<void> {
         let pkg: Record<string, any>;
         try {
-            pkg = await readJson(path.join(this.profileDir, 'package.json'));
+            pkg = await readJson(path.join(this.profilePath, 'package.json'));
         } catch {
             // not all commands need the config
             return;
@@ -326,7 +331,7 @@ export class DevServer {
 
     private async findAdapterName(): Promise<string> {
         try {
-            const ioPackage = await readJson(path.join(this.rootDir, 'io-package.json'));
+            const ioPackage = await readJson(path.join(this.rootPath, 'io-package.json'));
             const adapterName = ioPackage.common.name;
             this.log.debug(`Using adapter name "${adapterName}"`);
             return adapterName;
@@ -347,19 +352,24 @@ export class DevServer {
         force: boolean,
         useSymlinks: boolean,
     ): Promise<void> {
-        const setup = new Setup(this, adminPort, dependencies, backupFile, force, useSymlinks);
+        let setup: Setup;
+        if (remote) {
+            setup = new SetupRemote(this, adminPort, dependencies, backupFile, force);
+        } else {
+            setup = new Setup(this, adminPort, dependencies, backupFile, force, useSymlinks);
+        }
         await setup.run();
     }
 
     private async update(): Promise<void> {
-        await this.checkSetup();
+        this.checkSetup();
 
         const update = new Update(this);
         await update.run();
     }
 
     async run(useBrowserSync = true): Promise<void> {
-        await this.checkSetup();
+        this.checkSetup();
 
         const run = new Run(this, useBrowserSync);
         await run.run();
@@ -378,30 +388,30 @@ export class DevServer {
             doNotWatchArr = doNotWatch;
         }
 
-        await this.checkSetup();
+        this.checkSetup();
 
         const watch = new Watch(this, noInstall, startAdapter, doNotWatchArr, useBrowserSync);
         await watch.run();
     }
 
     async debug(wait: boolean, noInstall: boolean): Promise<void> {
-        await this.checkSetup();
+        this.checkSetup();
 
         const debug = new Debug(this, wait, noInstall);
         await debug.run();
     }
 
     async upload(): Promise<void> {
-        await this.checkSetup();
+        this.checkSetup();
 
         const upload = new Upload(this);
         await upload.run();
 
-        this.log.box(`The latest content of iobroker.${this.adapterName} was uploaded to ${this.profileDir}.`);
+        this.log.box(`The latest content of iobroker.${this.adapterName} was uploaded to ${this.profilePath}.`);
     }
 
     async backup(filename: string): Promise<void> {
-        await this.checkSetup();
+        this.checkSetup();
 
         this.log.notice('Creating backup');
 
@@ -429,22 +439,22 @@ export class DevServer {
             chalk.bold('js-controller'),
             chalk.bold('admin'),
         ]);
-        this.log.info(`The following profiles exist in ${this.tempDir}`);
+        this.log.info(`The following profiles exist in ${this.tempPath}`);
         this.log.table(table.filter(r => !!r) as any);
     }
 
     ////////////////// Command Helper Methods //////////////////
 
     async getProfiles(): Promise<Record<string, any>> {
-        if (!existsSync(this.tempDir)) {
+        if (!existsSync(this.tempPath)) {
             return {};
         }
 
-        const entries = await readdir(this.tempDir);
+        const entries = await readdir(this.tempPath);
         const pkgs = await Promise.all(
             entries.map(async e => {
                 try {
-                    const pkg = await readJson(path.join(this.tempDir, e, 'package.json'));
+                    const pkg = await readJson(path.join(this.tempPath, e, 'package.json'));
                     const infos = pkg['dev-server'];
                     const dependencies = pkg.dependencies;
                     if (infos?.adminPort && dependencies) {
@@ -461,19 +471,17 @@ export class DevServer {
         );
     }
 
-    async checkSetup(): Promise<void> {
+    private checkSetup(): void {
         if (!this.isSetUp()) {
             this.log.error(
-                `dev-server is not set up in ${this.profileDir}.\nPlease use the command "setup" first to set up dev-server.`,
+                `dev-server is not set up in ${this.profilePath}.\nPlease use the command "setup" first to set up dev-server.`,
             );
             return process.exit(-1);
         }
     }
 
     public isSetUp(): boolean {
-        const jsControllerDir = path.join(this.profileDir, 'node_modules', CORE_MODULE);
+        const jsControllerDir = path.join(this.profilePath, 'node_modules', CORE_MODULE);
         return existsSync(jsControllerDir);
     }
 }
-
-(() => new DevServer())();

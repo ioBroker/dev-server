@@ -10,12 +10,12 @@
         "allowJs": true,
         "checkJs": true,
 
-        "skipLibCheck": true, // Don't report errors in 3rd party definitions
+        "skipLibCheck": true,
         "noEmitOnError": true,
         "outDir": "./dist/",
         "removeComments": false,
-        "module": "commonjs",
-        "moduleResolution": "node",
+        "module": "node16",
+        "moduleResolution": "node16",
         "esModuleInterop": true,
         // this is necessary for the automatic typing of the adapter config
         "resolveJsonModule": true,
@@ -34,7 +34,7 @@
         // "noUnusedParameters": true,
 
         // Consider targetting es2019 or higher if you only support Node.js 12+
-        "target": "es2018",
+        "target": "ES2022",
         "types": ["@iobroker/types"],
 
         "sourceMap": false,

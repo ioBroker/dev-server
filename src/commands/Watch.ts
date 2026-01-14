@@ -1,11 +1,12 @@
 import chokidar from 'chokidar';
 import fg from 'fast-glob';
-import { copyFile, existsSync, unlinkSync } from 'fs-extra';
+import { existsSync, unlinkSync } from 'node:fs';
+import { copyFile } from 'node:fs/promises';
 import path from 'node:path';
 import nodemon from 'nodemon';
-import type { DevServer } from '../DevServer';
-import { RunCommandBase } from './RunCommandBase';
-import { delay } from './utils';
+import type { DevServer } from '../DevServer.js';
+import { RunCommandBase } from './RunCommandBase.js';
+import { delay } from './utils.js';
 
 export class Watch extends RunCommandBase {
     constructor(
@@ -49,7 +50,7 @@ export class Watch extends RunCommandBase {
         const mainFileSuffix = pkg.main.split('.').pop();
 
         // start sync
-        const adapterRunDir = path.join(this.profileDir, 'node_modules', `iobroker.${this.adapterName}`);
+        const adapterRunDir = path.join(this.profilePath, 'node_modules', `iobroker.${this.adapterName}`);
         if (!this.config?.useSymlinks) {
             this.log.notice('Starting file synchronization');
             // This is not necessary when using symlinks
@@ -66,7 +67,7 @@ export class Watch extends RunCommandBase {
             this.log.box(
                 `You can now start the adapter manually by running\n    ` +
                     `${runner} node_modules/iobroker.${this.adapterName}/${pkg.main} --debug 0\nfrom within\n    ${
-                        this.profileDir
+                        this.profilePath
                     }`,
             );
         }
@@ -75,14 +76,14 @@ export class Watch extends RunCommandBase {
     private async startTscWatch(): Promise<void> {
         this.log.notice('Starting tsc --watch');
         this.log.debug('Waiting for first successful tsc build...');
-        await this.spawnAndAwaitOutput('npm', ['run', 'watch:ts'], this.rootDir, /watching (files )?for/i, {
+        await this.rootDir.spawnAndAwaitOutput('npm', ['run', 'watch:ts'], /watching (files )?for/i, {
             shell: true,
         });
     }
 
     private startFileSync(destinationDir: string, mainFileSuffix: string): Promise<void> {
-        this.log.notice(`Starting file system sync from ${this.rootDir}`);
-        const inSrc = (filename: string): string => path.join(this.rootDir, filename);
+        this.log.notice(`Starting file system sync from ${this.rootPath}`);
+        const inSrc = (filename: string): string => path.join(this.rootPath, filename);
         const inDest = (filename: string): string => path.join(destinationDir, filename);
         return new Promise<void>((resolve, reject) => {
             const patternList = ['js', 'map'];
@@ -91,7 +92,7 @@ export class Watch extends RunCommandBase {
             }
             const patterns = this.getFilePatterns(patternList, true);
             const ignoreFiles = [] as string[];
-            const watcher = chokidar.watch(fg.sync(patterns), { cwd: this.rootDir });
+            const watcher = chokidar.watch(fg.sync(patterns), { cwd: this.rootPath });
             let ready = false;
             let initialEventPromises: Promise<void>[] = [];
             watcher.on('error', reject);

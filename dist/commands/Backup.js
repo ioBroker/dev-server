@@ -1,14 +1,11 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Backup = void 0;
-const CommandBase_1 = require("./CommandBase");
-class Backup extends CommandBase_1.CommandBase {
+import { CommandBase, IOBROKER_COMMAND } from './CommandBase.js';
+export class Backup extends CommandBase {
+    filename;
     constructor(owner, filename) {
         super(owner);
         this.filename = filename;
     }
     async run() {
-        this.execSync(`${CommandBase_1.IOBROKER_COMMAND} backup "${this.filename}"`, this.profileDir);
+        await this.profileDir.exec(`${IOBROKER_COMMAND} backup "${this.filename}"`);
     }
 }
-exports.Backup = Backup;

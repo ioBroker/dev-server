@@ -1,18 +1,19 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Setup = void 0;
-const chalk_1 = __importDefault(require("chalk"));
-const enquirer_1 = require("enquirer");
-const fs_extra_1 = require("fs-extra");
-const node_os_1 = require("node:os");
-const node_path_1 = __importDefault(require("node:path"));
-const rimraf_1 = require("rimraf");
-const CommandBase_1 = require("./CommandBase");
-const utils_1 = require("./utils");
-class Setup extends CommandBase_1.CommandBase {
+import { DBConnection } from '@iobroker/testing/build/tests/integration/lib/dbConnection.js';
+import chalk from 'chalk';
+import enquirer from 'enquirer';
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { EOL, hostname } from 'node:os';
+import path from 'node:path';
+import { rimraf } from 'rimraf';
+import { CommandBase, HIDDEN_ADMIN_PORT_OFFSET, IOBROKER_COMMAND, OBJECTS_DB_PORT_OFFSET, STATES_DB_PORT_OFFSET, } from './CommandBase.js';
+import { escapeStringRegexp, writeJson } from './utils.js';
+export class Setup extends CommandBase {
+    adminPort;
+    dependencies;
+    backupFile;
+    force;
+    useSymlinks;
     constructor(owner, adminPort, dependencies, backupFile, force, useSymlinks) {
         super(owner);
         this.adminPort = adminPort;
@@ -23,11 +24,11 @@ class Setup extends CommandBase_1.CommandBase {
     }
     async run() {
         if (this.force) {
-            this.log.notice(`Deleting ${this.profileDir}`);
-            await (0, rimraf_1.rimraf)(this.profileDir);
+            this.log.notice(`Deleting ${this.profilePath}`);
+            await rimraf(this.profilePath);
         }
         if (this.owner.isSetUp()) {
-            this.log.error(`dev-server is already set up in "${this.profileDir}".`);
+            this.log.error(`dev-server is already set up in "${this.profilePath}".`);
             this.log.debug(`Use --force to set it up from scratch (all data will be lost).`);
             return;
         }
@@ -36,23 +37,23 @@ class Setup extends CommandBase_1.CommandBase {
             useSymlinks: this.useSymlinks,
         };
         await this.buildLocalAdapter();
-        this.log.notice(`Setting up in ${this.profileDir}`);
+        this.log.notice(`Setting up in ${this.profilePath}`);
         await this.setupDevServer();
         const commands = ['run', 'watch', 'debug'];
-        this.log.box(`dev-server was successfully set up in\n${this.profileDir}.\n\n` +
+        this.log.box(`dev-server was successfully set up in\n${this.profilePath}.\n\n` +
             `You may now execute one of the following commands\n\n${commands
                 .map(command => `dev-server ${command} ${this.profileName}`)
                 .join('\n')}\n\nto use dev-server.`);
     }
     async setupDevServer() {
         // create the data directory
-        const dataDir = node_path_1.default.join(this.profileDir, 'iobroker-data');
-        await (0, fs_extra_1.mkdirp)(dataDir);
+        const dataDir = path.join(this.profilePath, 'iobroker-data');
+        await mkdir(dataDir, { recursive: true });
         // create the configuration
         const config = {
             system: {
                 memoryLimitMB: 0,
-                hostname: `dev-${this.adapterName}-${(0, node_os_1.hostname)()}`,
+                hostname: `dev-${this.adapterName}-${hostname()}`,
                 instanceStartInterval: 2000,
                 compact: false,
                 allowShellCommands: false,
@@ -71,7 +72,7 @@ class Setup extends CommandBase_1.CommandBase {
             objects: {
                 type: 'jsonl',
                 host: '127.0.0.1',
-                port: this.getPort(CommandBase_1.OBJECTS_DB_PORT_OFFSET),
+                port: this.getPort(OBJECTS_DB_PORT_OFFSET),
                 noFileCache: false,
                 maxQueue: 1000,
                 connectTimeout: 2000,
@@ -88,7 +89,7 @@ class Setup extends CommandBase_1.CommandBase {
             states: {
                 type: 'jsonl',
                 host: '127.0.0.1',
-                port: this.getPort(CommandBase_1.STATES_DB_PORT_OFFSET),
+                port: this.getPort(STATES_DB_PORT_OFFSET),
                 connectTimeout: 2000,
                 writeFileInterval: 30000,
                 dataDir: '',
@@ -118,7 +119,7 @@ class Setup extends CommandBase_1.CommandBase {
             plugins: {},
             dataDir: '../../iobroker-data/',
         };
-        await (0, fs_extra_1.writeJson)(node_path_1.default.join(dataDir, 'iobroker.json'), config, { spaces: 2 });
+        await writeJson(path.join(dataDir, 'iobroker.json'), config);
         // create the package file
         if (this.isJSController()) {
             // if this dev-server is used to debug JS-Controller, don't install a published version
@@ -136,18 +137,18 @@ class Setup extends CommandBase_1.CommandBase {
             dependencies: this.dependencies,
             'dev-server': this.config,
         };
-        await (0, fs_extra_1.writeJson)(node_path_1.default.join(this.profileDir, 'package.json'), pkg, { spaces: 2 });
+        await writeJson(path.join(this.profilePath, 'package.json'), pkg);
         // Tell npm to link the local adapter folder instead of creating a copy
         if (this.config.useSymlinks) {
-            await (0, fs_extra_1.writeFile)(node_path_1.default.join(this.profileDir, '.npmrc'), 'install-links=false', 'utf8');
+            await writeFile(path.join(this.profilePath, '.npmrc'), 'install-links=false', 'utf8');
         }
         await this.verifyIgnoreFiles();
         this.log.notice('Installing js-controller and admin...');
         await this.installDependencies();
         if (this.backupFile) {
-            const fullPath = node_path_1.default.resolve(this.backupFile);
+            const fullPath = path.resolve(this.backupFile);
             this.log.notice(`Restoring backup from ${fullPath}`);
-            this.execSync(`${CommandBase_1.IOBROKER_COMMAND} restore "${fullPath}"`, this.profileDir);
+            await this.profileDir.exec(`${IOBROKER_COMMAND} restore "${fullPath}"`);
         }
         if (this.isJSController()) {
             await this.installLocalAdapter();
@@ -156,7 +157,7 @@ class Setup extends CommandBase_1.CommandBase {
         // reconfigure admin instance (only listen to local IP address)
         this.log.notice('Configure admin.0');
         await this.updateObject('system.adapter.admin.0', admin => {
-            admin.native.port = this.getPort(CommandBase_1.HIDDEN_ADMIN_PORT_OFFSET);
+            admin.native.port = this.getPort(HIDDEN_ADMIN_PORT_OFFSET);
             admin.native.bind = '127.0.0.1';
             return admin;
         });
@@ -173,7 +174,7 @@ class Setup extends CommandBase_1.CommandBase {
             this.log.debug(`Found ${adapterDeps.length} adapter dependencies`);
             for (const adapter of adapterDeps) {
                 try {
-                    this.installRepoAdapter(adapter);
+                    await this.installRepoAdapter(adapter);
                 }
                 catch (error) {
                     this.log.debug(`Couldn't install iobroker.${adapter}: ${error}`);
@@ -203,11 +204,11 @@ class Setup extends CommandBase_1.CommandBase {
         });
     }
     async installDependencies() {
-        this.execSync('npm install --loglevel error --production', this.profileDir);
+        await this.profileDir.exec('npm install --loglevel error --production');
     }
     async verifyIgnoreFiles() {
         this.log.notice(`Verifying .npmignore and .gitignore`);
-        let relative = node_path_1.default.relative(this.rootDir, this.owner.tempDir).replace('\\', '/');
+        let relative = path.relative(this.rootPath, this.owner.tempPath).replace('\\', '/');
         if (relative.startsWith('..')) {
             // the temporary directory is outside the root, so no worries!
             return;
@@ -215,14 +216,14 @@ class Setup extends CommandBase_1.CommandBase {
         if (!relative.endsWith('/')) {
             relative += '/';
         }
-        const tempDirRegex = new RegExp(`\\s${(0, utils_1.escapeStringRegexp)(relative)
+        const tempDirRegex = new RegExp(`\\s${escapeStringRegexp(relative)
             .replace(/[\\/]$/, '')
             .replace(/(\\\\|\/)/g, '[\\/]')}`);
         const verifyFile = async (fileName, command, allowStar) => {
             try {
-                const { stdout, stderr } = await this.getExecOutput(command, this.rootDir);
+                const { stdout, stderr } = await this.rootDir.getExecOutput(command);
                 if (stdout.match(tempDirRegex) || stderr.match(tempDirRegex)) {
-                    this.log.error(chalk_1.default.bold(`Your ${fileName} doesn't exclude the temporary directory "${relative}"`));
+                    this.log.error(chalk.bold(`Your ${fileName} doesn't exclude the temporary directory "${relative}"`));
                     const choices = [];
                     if (allowStar) {
                         choices.push({
@@ -239,7 +240,7 @@ class Setup extends CommandBase_1.CommandBase {
                     });
                     let action;
                     try {
-                        const result = await (0, enquirer_1.prompt)({
+                        const result = await enquirer.prompt({
                             name: 'action',
                             type: 'select',
                             message: 'What would you like to do?',
@@ -247,25 +248,25 @@ class Setup extends CommandBase_1.CommandBase {
                         });
                         action = result.action;
                     }
-                    catch (_a) {
+                    catch {
                         action = 'abort';
                     }
                     if (action === 'abort') {
                         return this.exit(-1);
                     }
-                    const filepath = node_path_1.default.resolve(this.rootDir, fileName);
+                    const filepath = path.resolve(this.rootPath, fileName);
                     let content = '';
-                    if ((0, fs_extra_1.existsSync)(filepath)) {
-                        content = await (0, fs_extra_1.readFile)(filepath, { encoding: 'utf-8' });
+                    if (existsSync(filepath)) {
+                        content = await readFile(filepath, { encoding: 'utf-8' });
                     }
-                    const eol = content.match(/\r\n/) ? '\r\n' : content.match(/\n/) ? '\n' : node_os_1.EOL;
+                    const eol = content.match(/\r\n/) ? '\r\n' : content.match(/\n/) ? '\n' : EOL;
                     if (action === 'add-star') {
                         content = `# exclude all dot-files and directories${eol}.*${eol}${eol}${content}`;
                     }
                     else {
                         content = `${content}${eol}${eol}# ioBroker dev-server${eol}${relative}${eol}`;
                     }
-                    await (0, fs_extra_1.writeFile)(filepath, content);
+                    await writeFile(filepath, content);
                 }
             }
             catch (error) {
@@ -274,7 +275,7 @@ class Setup extends CommandBase_1.CommandBase {
         };
         await verifyFile('.npmignore', 'npm pack --dry-run', true);
         // Only verify .gitignore if we're in a git repository
-        if ((0, fs_extra_1.existsSync)(node_path_1.default.join(this.rootDir, '.git'))) {
+        if (existsSync(path.join(this.rootPath, '.git'))) {
             await verifyFile('.gitignore', 'git status --short --untracked-files=all', false);
         }
         else {
@@ -283,19 +284,21 @@ class Setup extends CommandBase_1.CommandBase {
     }
     async uploadAndAddAdapter(name) {
         // upload the already installed adapter
-        this.uploadAdapter(name);
-        if (await this.withDb(async (db) => {
-            const instance = await db.getObject(`system.adapter.${name}.0`);
-            if (instance) {
-                this.log.info(`Instance ${name}.0 already exists, not adding it again`);
-                return false;
-            }
-            return true;
-        })) {
+        await this.uploadAdapter(name);
+        if (await this.hasAdapterInstance(name)) {
+            this.log.info(`Instance ${name}.0 already exists, not adding it again`);
+        }
+        else {
             // create an instance
             this.log.notice(`Add ${name}.0`);
-            this.execSync(`${CommandBase_1.IOBROKER_COMMAND} add ${name} 0`, this.profileDir);
+            await this.profileDir.exec(`${IOBROKER_COMMAND} add ${name} 0`);
         }
+    }
+    async hasAdapterInstance(name) {
+        return await this.withDb(async (db) => {
+            const instance = await db.getObject(`system.adapter.${name}.0`);
+            return !!instance;
+        });
     }
     /**
      * This method is largely borrowed from ioBroker.js-controller/lib/tools.js
@@ -328,9 +331,27 @@ class Setup extends CommandBase_1.CommandBase {
         }
         return adapters.filter(a => a !== 'js-controller');
     }
-    installRepoAdapter(adapterName) {
+    async installRepoAdapter(adapterName) {
         this.log.notice(`Install iobroker.${adapterName}`);
-        this.execSync(`${CommandBase_1.IOBROKER_COMMAND} install ${adapterName}`, this.profileDir);
+        await this.profileDir.exec(`${IOBROKER_COMMAND} install ${adapterName}`);
+    }
+    async withDb(method) {
+        const db = new DBConnection('iobroker', this.profilePath, this.log);
+        await db.start();
+        try {
+            return await method(db);
+        }
+        finally {
+            await db.stop();
+        }
+    }
+    async updateObject(id, method) {
+        await this.withDb(async (db) => {
+            const obj = await db.getObject(id);
+            if (obj) {
+                // @ts-expect-error fix later
+                await db.setObject(id, method(obj));
+            }
+        });
     }
 }
-exports.Setup = Setup;
