@@ -54,7 +54,7 @@ export class Setup extends CommandBase {
         this.log.box(
             `dev-server was successfully set up in\n${this.profilePath}.\n\n` +
                 `You may now execute one of the following commands\n\n${commands
-                    .map(command => `dev-server ${command} ${this.profileName}`)
+                    .map(command => `dev-server ${command} ${this.owner.profileName}`)
                     .join('\n')}\n\nto use dev-server.`,
         );
     }

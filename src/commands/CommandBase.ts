@@ -40,10 +40,6 @@ export abstract class CommandBase {
         return this.owner.profilePath;
     }
 
-    protected get profileName(): string {
-        return this.owner.profileName;
-    }
-
     protected get adapterName(): string {
         return this.owner.adapterName;
     }
