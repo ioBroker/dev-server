@@ -23,6 +23,8 @@ import {
 import { RemoteConnection } from './RemoteConnection.js';
 import { checkPort, delay, readJson, writeJson } from './utils.js';
 
+const CONTROLLER_DEBUGGER_PORT = 9228;
+
 export abstract class RunCommandBase extends CommandBase {
     private websocket?: WebSocket;
 
@@ -34,6 +36,7 @@ export abstract class RunCommandBase extends CommandBase {
             await this.profileDir.tunnelPort(this.getPort(HIDDEN_ADMIN_PORT_OFFSET));
             await this.profileDir.tunnelPort(this.getPort(STATES_DB_PORT_OFFSET));
             await this.profileDir.tunnelPort(this.getPort(OBJECTS_DB_PORT_OFFSET));
+            await this.profileDir.tunnelPort(CONTROLLER_DEBUGGER_PORT);
         }
     }
 
@@ -50,7 +53,12 @@ export abstract class RunCommandBase extends CommandBase {
     protected async startJsController(): Promise<void> {
         await this.profileDir.spawn(
             'node',
-            ['--inspect=127.0.0.1:9228', '--preserve-symlinks', '--preserve-symlinks-main', IOBROKER_CONTROLLER],
+            [
+                `--inspect=127.0.0.1:${CONTROLLER_DEBUGGER_PORT}`,
+                '--preserve-symlinks',
+                '--preserve-symlinks-main',
+                IOBROKER_CONTROLLER,
+            ],
             async code => {
                 console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
                 return this.exit(-1, 'SIGKILL');
