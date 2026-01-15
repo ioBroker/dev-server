@@ -34,10 +34,13 @@ export function checkPort(port: number, host = '127.0.0.1', timeout = 1000): Pro
         socket.setTimeout(timeout);
         socket.once('error', onError);
         socket.once('timeout', onError);
+        socket.once('close', onError);
 
         socket.connect(port, host, () => {
-            socket.end();
-            resolve();
+            setTimeout(() => {
+                resolve();
+                socket.end();
+            }, 100); // slight delay to ensure port is ready
         });
     });
 }
