@@ -16,9 +16,11 @@ import {
     CommandBase,
     HIDDEN_ADMIN_PORT_OFFSET,
     HIDDEN_BROWSER_SYNC_PORT_OFFSET,
+    IOBROKER_CONTROLLER,
     OBJECTS_DB_PORT_OFFSET,
     STATES_DB_PORT_OFFSET,
 } from './CommandBase.js';
+import { RemoteConnection } from './RemoteConnection.js';
 import { checkPort, delay, readJson, writeJson } from './utils.js';
 
 export abstract class RunCommandBase extends CommandBase {
@@ -26,15 +28,29 @@ export abstract class RunCommandBase extends CommandBase {
 
     protected readonly socketEvents = new EventEmitter();
 
+    protected override async prepare(): Promise<void> {
+        await super.prepare();
+        if (this.profileDir instanceof RemoteConnection) {
+            await this.profileDir.tunnelPort(this.getPort(HIDDEN_ADMIN_PORT_OFFSET));
+            await this.profileDir.tunnelPort(this.getPort(STATES_DB_PORT_OFFSET));
+            await this.profileDir.tunnelPort(this.getPort(OBJECTS_DB_PORT_OFFSET));
+        }
+    }
+
+    protected override teardown(): Promise<void> {
+        // do not close remote connection here (do it in exit() instead)
+        return Promise.resolve();
+    }
+
+    protected override async exit(exitCode: number, signal = 'SIGINT'): Promise<never> {
+        await super.teardown();
+        return super.exit(exitCode, signal);
+    }
+
     protected async startJsController(): Promise<void> {
         await this.profileDir.spawn(
             'node',
-            [
-                '--inspect=127.0.0.1:9228',
-                '--preserve-symlinks',
-                '--preserve-symlinks-main',
-                'node_modules/iobroker.js-controller/controller.js',
-            ],
+            ['--inspect=127.0.0.1:9228', '--preserve-symlinks', '--preserve-symlinks-main', IOBROKER_CONTROLLER],
             async code => {
                 console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
                 return this.exit(-1, 'SIGKILL');
@@ -45,23 +61,26 @@ export abstract class RunCommandBase extends CommandBase {
     }
 
     protected async waitForJsController(): Promise<void> {
-        if (!(await this.waitForPort(OBJECTS_DB_PORT_OFFSET)) || !(await this.waitForPort(STATES_DB_PORT_OFFSET))) {
+        if (
+            !(await this.waitForPort(OBJECTS_DB_PORT_OFFSET, 'objects DB')) ||
+            !(await this.waitForPort(STATES_DB_PORT_OFFSET, 'states DB'))
+        ) {
             throw new Error(`Couldn't start js-controller`);
         }
     }
 
-    private async waitForPort(offset: number): Promise<boolean> {
+    private async waitForPort(offset: number, name: string, timeout = 30): Promise<boolean> {
         const port = this.getPort(offset);
-        this.log.debug(`Waiting for port ${port} to be available...`);
+        this.log.debug(`Waiting for port ${port} (${name}) to be available...`);
         let tries = 0;
         while (true) {
             try {
                 await checkPort(port);
-                this.log.debug(`Port ${port} is available...`);
+                this.log.debug(`Port ${port} (${name}) is available...`);
                 return true;
             } catch {
-                if (tries++ > 30) {
-                    this.log.error(`Port ${port} is not available after 30 seconds.`);
+                if (tries++ > timeout) {
+                    this.log.error(`Port ${port} (${name}) is not available after ${timeout} seconds.`);
                     return false;
                 }
                 await delay(1000);
@@ -70,11 +89,10 @@ export abstract class RunCommandBase extends CommandBase {
     }
 
     protected async startServer(useBrowserSync = true): Promise<void> {
-        this.log.notice(`Running inside ${this.profilePath}`);
-
-        await this.waitForPort(HIDDEN_ADMIN_PORT_OFFSET);
+        await this.waitForPort(HIDDEN_ADMIN_PORT_OFFSET, 'admin', 90);
 
         const app = express();
+
         const hiddenAdminPort = this.getPort(HIDDEN_ADMIN_PORT_OFFSET);
         if (this.isJSController()) {
             // simply forward admin as-is
@@ -102,7 +120,7 @@ export abstract class RunCommandBase extends CommandBase {
 
         // start express
         this.log.notice(`Starting web server on port ${this.config.adminPort}`);
-        const server = app.listen(this.config.adminPort);
+        const server = app.listen(this.config.adminPort, '127.0.0.1');
 
         let exiting = false;
         process.on('SIGINT', (): void => {

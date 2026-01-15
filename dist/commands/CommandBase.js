@@ -5,6 +5,7 @@ import { RemoteConnection } from './RemoteConnection.js';
 import { getChildProcesses, readJson } from './utils.js';
 export const IOBROKER_CLI = 'node_modules/iobroker.js-controller/iobroker.js';
 export const IOBROKER_COMMAND = `node ${IOBROKER_CLI}`;
+export const IOBROKER_CONTROLLER = 'node_modules/iobroker.js-controller/controller.js';
 export const HIDDEN_ADMIN_PORT_OFFSET = 12345;
 export const HIDDEN_BROWSER_SYNC_PORT_OFFSET = 14345;
 export const STATES_DB_PORT_OFFSET = 16345;
@@ -31,9 +32,6 @@ export class CommandBase {
     }
     get profilePath() {
         return this.owner.profilePath;
-    }
-    get profileName() {
-        return this.owner.profileName;
     }
     get adapterName() {
         return this.owner.adapterName;

@@ -12,18 +12,30 @@ import path from 'node:path';
 import { SourceMapGenerator } from 'source-map';
 import WebSocket from 'ws';
 import { injectCode } from '../jsonConfig.js';
-import { CommandBase, HIDDEN_ADMIN_PORT_OFFSET, HIDDEN_BROWSER_SYNC_PORT_OFFSET, OBJECTS_DB_PORT_OFFSET, STATES_DB_PORT_OFFSET, } from './CommandBase.js';
+import { CommandBase, HIDDEN_ADMIN_PORT_OFFSET, HIDDEN_BROWSER_SYNC_PORT_OFFSET, IOBROKER_CONTROLLER, OBJECTS_DB_PORT_OFFSET, STATES_DB_PORT_OFFSET, } from './CommandBase.js';
+import { RemoteConnection } from './RemoteConnection.js';
 import { checkPort, delay, readJson, writeJson } from './utils.js';
 export class RunCommandBase extends CommandBase {
     websocket;
     socketEvents = new EventEmitter();
+    async prepare() {
+        await super.prepare();
+        if (this.profileDir instanceof RemoteConnection) {
+            await this.profileDir.tunnelPort(this.getPort(HIDDEN_ADMIN_PORT_OFFSET));
+            await this.profileDir.tunnelPort(this.getPort(STATES_DB_PORT_OFFSET));
+            await this.profileDir.tunnelPort(this.getPort(OBJECTS_DB_PORT_OFFSET));
+        }
+    }
+    teardown() {
+        // do not close remote connection here (do it in exit() instead)
+        return Promise.resolve();
+    }
+    async exit(exitCode, signal = 'SIGINT') {
+        await super.teardown();
+        return super.exit(exitCode, signal);
+    }
     async startJsController() {
-        await this.profileDir.spawn('node', [
-            '--inspect=127.0.0.1:9228',
-            '--preserve-symlinks',
-            '--preserve-symlinks-main',
-            'node_modules/iobroker.js-controller/controller.js',
-        ], async (code) => {
+        await this.profileDir.spawn('node', ['--inspect=127.0.0.1:9228', '--preserve-symlinks', '--preserve-symlinks-main', IOBROKER_CONTROLLER], async (code) => {
             console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
             return this.exit(-1, 'SIGKILL');
         });
@@ -31,23 +43,24 @@ export class RunCommandBase extends CommandBase {
         await this.waitForJsController();
     }
     async waitForJsController() {
-        if (!(await this.waitForPort(OBJECTS_DB_PORT_OFFSET)) || !(await this.waitForPort(STATES_DB_PORT_OFFSET))) {
+        if (!(await this.waitForPort(OBJECTS_DB_PORT_OFFSET, 'objects DB')) ||
+            !(await this.waitForPort(STATES_DB_PORT_OFFSET, 'states DB'))) {
             throw new Error(`Couldn't start js-controller`);
         }
     }
-    async waitForPort(offset) {
+    async waitForPort(offset, name, timeout = 30) {
         const port = this.getPort(offset);
-        this.log.debug(`Waiting for port ${port} to be available...`);
+        this.log.debug(`Waiting for port ${port} (${name}) to be available...`);
         let tries = 0;
         while (true) {
             try {
                 await checkPort(port);
-                this.log.debug(`Port ${port} is available...`);
+                this.log.debug(`Port ${port} (${name}) is available...`);
                 return true;
             }
             catch {
-                if (tries++ > 30) {
-                    this.log.error(`Port ${port} is not available after 30 seconds.`);
+                if (tries++ > timeout) {
+                    this.log.error(`Port ${port} (${name}) is not available after ${timeout} seconds.`);
                     return false;
                 }
                 await delay(1000);
@@ -55,8 +68,7 @@ export class RunCommandBase extends CommandBase {
         }
     }
     async startServer(useBrowserSync = true) {
-        this.log.notice(`Running inside ${this.profilePath}`);
-        await this.waitForPort(HIDDEN_ADMIN_PORT_OFFSET);
+        await this.waitForPort(HIDDEN_ADMIN_PORT_OFFSET, 'admin', 90);
         const app = express();
         const hiddenAdminPort = this.getPort(HIDDEN_ADMIN_PORT_OFFSET);
         if (this.isJSController()) {
@@ -84,7 +96,7 @@ export class RunCommandBase extends CommandBase {
         }
         // start express
         this.log.notice(`Starting web server on port ${this.config.adminPort}`);
-        const server = app.listen(this.config.adminPort);
+        const server = app.listen(this.config.adminPort, '127.0.0.1');
         let exiting = false;
         process.on('SIGINT', () => {
             this.log.notice('dev-server is exiting...');

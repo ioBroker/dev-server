@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import type { DevServer } from '../DevServer.js';
-import { IOBROKER_CLI } from './CommandBase.js';
+import { IOBROKER_CLI, IOBROKER_CONTROLLER } from './CommandBase.js';
 import { RunCommandBase } from './RunCommandBase.js';
 
 export class Debug extends RunCommandBase {
@@ -33,11 +33,7 @@ export class Debug extends RunCommandBase {
     private async startJsControllerDebug(): Promise<void> {
         this.log.notice(`Starting debugger for ${this.adapterName}`);
 
-        const nodeArgs = [
-            '--preserve-symlinks',
-            '--preserve-symlinks-main',
-            'node_modules/iobroker.js-controller/controller.js',
-        ];
+        const nodeArgs = ['--preserve-symlinks', '--preserve-symlinks-main', IOBROKER_CONTROLLER];
         if (this.wait) {
             nodeArgs.unshift('--inspect-brk');
         } else {
