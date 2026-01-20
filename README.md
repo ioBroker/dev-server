@@ -325,16 +325,29 @@ When the adapter is ready, you will see a message like the following:
 ╰──────────────────────────────────────────────────╯
 ```
 
-You can now attach the Visual Studio Code debugger to the given process ID:
+You can now attach the Visual Studio Code debugger.
 
-- Open the Command Palette (Ctrl-Shift-P)
-- Choose "Debug: Attach to Node Process (legacy)"
-- Select the right process, it usually looks like follows:
+Create (or extend) a file called `.vscode/launch.json`:
 
+```json
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "node",
+            "request": "attach",
+            "name": "Attach to remote",
+            "address": "127.0.0.1",
+            "port": 9229,
+            "outFiles": []
+        }
+    ]
+}
 ```
-node  --inspect <path to your dev-server directory>/node_modules/...
-process id: 1234, debug port: 9229
-```
+
+Note: It is important to set `"outFiles"` at least to an empty array, otherwise breakpoints will not work.
+
+Go to `Run and debug` (Ctrl-Shift-D), select `Attach to remote` and click on the green "play" button.
 
 Now you can set breakpoints (or they are hit if you set them before) and inspect your adapter while running.
 
