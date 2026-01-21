@@ -1,7 +1,6 @@
 import chokidar from 'chokidar';
 import fg from 'fast-glob';
-import { existsSync, unlinkSync } from 'node:fs';
-import { copyFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import nodemon from 'nodemon';
 import type { DevServer } from '../DevServer.js';
@@ -11,10 +10,10 @@ import { delay } from './utils.js';
 export class Watch extends RunCommandBase {
     constructor(
         owner: DevServer,
-        private readonly startAdapter: boolean,
-        private readonly noInstall: boolean,
-        private readonly doNotWatch: string[],
-        private readonly useBrowserSync: boolean,
+        protected readonly startAdapter: boolean,
+        protected readonly noInstall: boolean,
+        protected readonly doNotWatch: string[],
+        protected readonly useBrowserSync: boolean,
     ) {
         super(owner);
     }
@@ -50,7 +49,7 @@ export class Watch extends RunCommandBase {
         const mainFileSuffix = pkg.main.split('.').pop();
 
         // start sync
-        const adapterRunDir = path.join(this.profilePath, 'node_modules', `iobroker.${this.adapterName}`);
+        const adapterRunDir = path.join('node_modules', `iobroker.${this.adapterName}`);
         if (!this.config.useSymlinks) {
             this.log.notice('Starting file synchronization');
             // This is not necessary when using symlinks
@@ -60,8 +59,7 @@ export class Watch extends RunCommandBase {
 
         if (this.startAdapter) {
             await delay(3000);
-            this.log.notice('Starting Nodemon');
-            await this.startNodemon(adapterRunDir, pkg.main, this.doNotWatch);
+            await this.startNodemon(adapterRunDir, pkg.main);
         } else {
             const runner = isTypeScriptMain ? 'node -r @alcalzone/esbuild-register' : 'node';
             this.log.box(
@@ -82,7 +80,7 @@ export class Watch extends RunCommandBase {
     }
 
     private startFileSync(destinationDir: string, mainFileSuffix: string): Promise<void> {
-        this.log.notice(`Starting file system sync from ${this.rootPath}`);
+        this.log.debug(`Starting file system sync from ${this.rootPath} to ${destinationDir}`);
         const inSrc = (filename: string): string => path.join(this.rootPath, filename);
         const inDest = (filename: string): string => path.join(destinationDir, filename);
         return new Promise<void>((resolve, reject) => {
@@ -117,17 +115,18 @@ export class Watch extends RunCommandBase {
                         // copy file and add sourcemap
                         await this.addSourcemap(src, dest, true);
                     } else {
-                        await copyFile(src, dest);
+                        await this.profileDir.copyFileTo(src, dest);
                     }
                 } catch {
                     this.log.warn(`Couldn't sync ${filename}`);
                 }
             };
-            watcher.on('add', (filename: string) => {
+            watcher.on('add', async (filename: string) => {
                 if (ready) {
-                    void syncFile(filename);
-                } else if (!filename.endsWith('map') && !existsSync(inDest(filename))) {
+                    await syncFile(filename);
+                } else if (!filename.endsWith('map') && !(await this.profileDir.exists(inDest(filename)))) {
                     // ignore files during initial sync if they don't exist in the target directory (except for sourcemaps)
+                    this.log.silly(`Ignoring file ${filename}`);
                     ignoreFiles.push(filename);
                 } else {
                     initialEventPromises.push(syncFile(filename));
@@ -141,18 +140,19 @@ export class Watch extends RunCommandBase {
                     }
                 }
             });
-            watcher.on('unlink', (filename: string) => {
-                unlinkSync(inDest(filename));
+            watcher.on('unlink', async (filename: string) => {
+                await this.profileDir.unlink(inDest(filename));
                 const map = inDest(`${filename}.map`);
-                if (existsSync(map)) {
-                    unlinkSync(map);
+                if (await this.profileDir.exists(map)) {
+                    await this.profileDir.unlink(map);
                 }
             });
         });
     }
 
-    private startNodemon(baseDir: string, scriptName: string, doNotWatch: string[]): Promise<void> {
-        const script = path.resolve(baseDir, scriptName);
+    protected startNodemon(baseDir: string, scriptName: string): Promise<void> {
+        const fullBaseDir = path.resolve(this.profilePath, baseDir);
+        const script = path.resolve(fullBaseDir, scriptName);
         this.log.notice(`Starting nodemon for ${script}`);
 
         let isExiting = false;
@@ -160,39 +160,7 @@ export class Watch extends RunCommandBase {
             isExiting = true;
         });
 
-        const args = this.isJSController() ? [] : ['--debug', '0'];
-
-        const ignoreList = [
-            path.join(baseDir, 'admin'),
-            // avoid recursively following symlinks
-            path.join(baseDir, '.dev-server'),
-        ];
-        if (doNotWatch.length > 0) {
-            doNotWatch.forEach(entry => ignoreList.push(path.join(baseDir, entry)));
-        }
-
-        // Determine the appropriate execMap
-        const execMap: Record<string, string> = {
-            js: 'node --inspect --preserve-symlinks --preserve-symlinks-main',
-            mjs: 'node --inspect --preserve-symlinks --preserve-symlinks-main',
-            ts: 'node --inspect --preserve-symlinks --preserve-symlinks-main -r @alcalzone/esbuild-register',
-        };
-
-        nodemon({
-            script,
-            cwd: baseDir,
-            stdin: false,
-            verbose: true,
-            // dump: true, // this will output the entire config and not do anything
-            colours: false,
-            watch: [baseDir],
-            ignore: ignoreList,
-            ignoreRoot: [],
-            delay: 2000,
-            execMap,
-            signal: 'SIGINT' as any, // wrong type definition: signal is of type "string?"
-            args,
-        });
+        nodemon(this.createNodemonConfig(script, fullBaseDir));
 
         nodemon
             .on('log', (msg: { type: 'log' | 'info' | 'status' | 'detail' | 'fail' | 'error'; message: string }) => {
@@ -246,7 +214,43 @@ export class Watch extends RunCommandBase {
         return Promise.resolve();
     }
 
-    async handleNodemonDetailMsg(message: string): Promise<void> {
+    protected createNodemonConfig(script: string, fullBaseDir: string): nodemon.NodemonSettings {
+        const args = this.isJSController() ? [] : ['--debug', '0'];
+
+        const ignoreList = [
+            path.join(fullBaseDir, 'admin'),
+            // avoid recursively following symlinks
+            path.join(fullBaseDir, '.dev-server'),
+        ];
+        if (this.doNotWatch.length > 0) {
+            this.doNotWatch.forEach(entry => ignoreList.push(path.join(fullBaseDir, entry)));
+        }
+
+        // Determine the appropriate execMap
+        const execMap: Record<string, string> = {
+            js: 'node --inspect --preserve-symlinks --preserve-symlinks-main',
+            mjs: 'node --inspect --preserve-symlinks --preserve-symlinks-main',
+            ts: 'node --inspect --preserve-symlinks --preserve-symlinks-main -r @alcalzone/esbuild-register',
+        };
+
+        return {
+            script,
+            cwd: fullBaseDir,
+            stdin: false,
+            verbose: true,
+            // dump: true, // this will output the entire config and not do anything
+            colours: false,
+            watch: [fullBaseDir],
+            ignore: ignoreList,
+            ignoreRoot: [],
+            delay: 2000,
+            execMap,
+            signal: 'SIGINT',
+            args,
+        };
+    }
+
+    private async handleNodemonDetailMsg(message: string): Promise<void> {
         const match = message.match(/child pid: (\d+)/);
         if (!match) {
             return;

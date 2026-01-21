@@ -81,6 +81,38 @@ export class RemoteConnection {
         this.connectState = 'disconnected';
         this.client.end();
     }
+    async readFile(relPath) {
+        const remotePath = await this.getFullRemotePath(relPath);
+        const sftp = await this.getSftp();
+        const buffer = await sftp.readFile(remotePath);
+        return buffer.toString();
+    }
+    async writeFile(relPath, data) {
+        const remotePath = await this.getFullRemotePath(relPath);
+        const sftp = await this.getSftp();
+        await sftp.writeFile(remotePath, data);
+    }
+    async readJson(relPath) {
+        const content = await this.readFile(relPath);
+        return JSON.parse(content);
+    }
+    async writeJson(relPath, data) {
+        const content = JSON.stringify(data, null, 2);
+        return this.writeFile(relPath, content);
+    }
+    async copyFileTo(src, dest) {
+        await this.upload(src, dest);
+    }
+    async exists(relPath) {
+        const remotePath = await this.getFullRemotePath(relPath);
+        const sftp = await this.getSftp();
+        return sftp.exists(remotePath);
+    }
+    async unlink(relPath) {
+        const remotePath = await this.getFullRemotePath(relPath);
+        const sftp = await this.getSftp();
+        await sftp.unlink(remotePath);
+    }
     async spawn(command, args, onExit) {
         const basePath = this.getBasePath();
         this.log.debug(`${this.config.user}@${this.config.host}:${basePath}> ${command}`);
@@ -136,8 +168,7 @@ export class RemoteConnection {
     }
     async execWithNewFile(localPath, commandBuilder) {
         const filename = path.basename(localPath);
-        const homeDir = await this.getHomeDir();
-        const remotePath = `${this.getBasePath(homeDir)}/${filename}`;
+        const remotePath = await this.getFullRemotePath(filename);
         await this.exec(commandBuilder(remotePath));
         const sftp = await this.getSftp();
         await sftp.get(remotePath, localPath);
@@ -212,11 +243,14 @@ export class RemoteConnection {
         });
     }
     async upload(localPath, relPath) {
-        const homeDir = await this.getHomeDir();
-        const remotePath = `${this.getBasePath(homeDir)}/${relPath}`;
+        const remotePath = await this.getFullRemotePath(relPath);
         const sftp = await this.getSftp();
         await sftp.put(localPath, remotePath);
         return remotePath;
+    }
+    async getFullRemotePath(relPath) {
+        const homeDir = await this.getHomeDir();
+        return `${this.getBasePath(homeDir)}/${relPath}`;
     }
     getBasePath(home = '~') {
         return `${home}/.dev-server/${this.config.id}`;
@@ -249,10 +283,9 @@ class SftpConnection {
         this.sftp = sftp;
         this.log = log;
     }
-    async get(remotePath, localPath) {
-        await this.currentOperation;
-        this.log.notice(`Transferring ${remotePath} from remote host...`);
-        this.currentOperation = new Promise((resolve, reject) => {
+    get(remotePath, localPath) {
+        return this.run((resolve, reject) => {
+            this.log.notice(`Transferring ${remotePath} from remote host...`);
             this.log.silly(`${remotePath} -> ${localPath}`);
             this.sftp.fastGet(remotePath, localPath, {}, putErr => {
                 if (putErr) {
@@ -261,12 +294,10 @@ class SftpConnection {
                 resolve();
             });
         });
-        return this.currentOperation;
     }
-    async put(localPath, remotePath) {
-        await this.currentOperation;
-        this.log.notice(`Transferring ${localPath} to remote host...`);
-        this.currentOperation = new Promise((resolve, reject) => {
+    put(localPath, remotePath) {
+        return this.run((resolve, reject) => {
+            this.log.notice(`Transferring ${localPath} to remote host...`);
             this.log.silly(`${localPath} -> ${remotePath}`);
             this.sftp.fastPut(localPath, remotePath, {}, putErr => {
                 if (putErr) {
@@ -275,6 +306,53 @@ class SftpConnection {
                 resolve();
             });
         });
-        return this.currentOperation;
+    }
+    readFile(remotePath) {
+        return this.run((resolve, reject) => {
+            this.log.debug(`Reading ${remotePath} from remote host...`);
+            this.sftp.readFile(remotePath, { encoding: 'utf8' }, (err, data) => {
+                if (err) {
+                    return reject(err);
+                }
+                resolve(data);
+            });
+        });
+    }
+    writeFile(remotePath, data) {
+        return this.run((resolve, reject) => {
+            this.log.debug(`Writing ${remotePath} to remote host...`);
+            this.sftp.writeFile(remotePath, data, { encoding: 'utf8' }, err => {
+                if (err) {
+                    return reject(err);
+                }
+                resolve();
+            });
+        });
+    }
+    exists(remotePath) {
+        return this.run(resolve => {
+            this.log.silly(`Checking existence of remote file ${remotePath}...`);
+            this.sftp.exists(remotePath, exists => {
+                this.log.silly(`Remote file ${remotePath} exists: ${exists}`);
+                resolve(exists);
+            });
+        });
+    }
+    async unlink(remotePath) {
+        return this.run((resolve, reject) => {
+            this.log.notice(`Deleting remote file ${remotePath}...`);
+            this.sftp.unlink(remotePath, err => {
+                if (err) {
+                    return reject(err);
+                }
+                resolve();
+            });
+        });
+    }
+    async run(executor) {
+        await this.currentOperation;
+        const operation = new Promise(executor);
+        this.currentOperation = operation;
+        return operation;
     }
 }

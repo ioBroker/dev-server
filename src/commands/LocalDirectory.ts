@@ -1,8 +1,10 @@
 import * as cp from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { copyFile, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Logger } from '../logger.js';
 import type { IEnvironment } from './IEnvironment.js';
-import { delay, getChildProcesses, readJson } from './utils.js';
+import { delay, getChildProcesses, readJson, writeJson } from './utils.js';
 
 export class LocalDirectory implements IEnvironment {
     protected readonly childProcesses: cp.ChildProcess[] = [];
@@ -12,8 +14,33 @@ export class LocalDirectory implements IEnvironment {
         private readonly log: Logger,
     ) {}
 
+    public readFile(relPath: string): Promise<string> {
+        return readFile(path.join(this.directory, relPath), { encoding: 'utf-8' });
+    }
+
+    public writeFile(relPath: string, data: string): Promise<void> {
+        return writeFile(path.join(this.directory, relPath), data, { encoding: 'utf-8' });
+    }
+
     public readJson<T = any>(relPath: string): Promise<T> {
         return readJson<T>(path.join(this.directory, relPath));
+    }
+
+    public async writeJson(relPath: string, data: any): Promise<void> {
+        return writeJson(path.join(this.directory, relPath), data);
+    }
+
+    public async copyFileTo(src: string, dest: string): Promise<void> {
+        await copyFile(src, path.join(this.directory, dest));
+    }
+
+    public exists(relPath: string): Promise<boolean> {
+        return Promise.resolve(existsSync(path.join(this.directory, relPath)));
+    }
+
+    public async unlink(relPath: string): Promise<void> {
+        const fullPath = path.join(this.directory, relPath);
+        await unlink(fullPath);
     }
 
     public exec(command: string): Promise<void> {

@@ -23,8 +23,8 @@ export class SetupRemote extends Setup {
     }
 
     protected override async setupDevServer(): Promise<void> {
-        const { name, version } = await this.owner.readMyPackageJson();
-        this.dependencies[name] = version;
+        const { dependencies } = await this.owner.readMyPackageJson();
+        this.dependencies.nodemon = dependencies.nodemon || 'latest';
         try {
             await this.setupRemoteSsh();
 

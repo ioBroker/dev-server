@@ -13,8 +13,8 @@ export class SetupRemote extends Setup {
         super(owner, adminPort, dependencies, backupFile, force, false);
     }
     async setupDevServer() {
-        const { name, version } = await this.owner.readMyPackageJson();
-        this.dependencies[name] = version;
+        const { dependencies } = await this.owner.readMyPackageJson();
+        this.dependencies.nodemon = dependencies.nodemon || 'latest';
         try {
             await this.setupRemoteSsh();
             await super.setupDevServer();

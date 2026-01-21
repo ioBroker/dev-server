@@ -3,9 +3,7 @@ import path from 'node:path';
 import type { DevServer } from '../DevServer.js';
 import { IOBROKER_CLI, IOBROKER_CONTROLLER } from './CommandBase.js';
 import { RemoteConnection } from './RemoteConnection.js';
-import { RunCommandBase } from './RunCommandBase.js';
-
-const DEBUGGER_PORT = 9229;
+import { ADAPTER_DEBUGGER_PORT, RunCommandBase } from './RunCommandBase.js';
 
 export class Debug extends RunCommandBase {
     constructor(
@@ -19,7 +17,7 @@ export class Debug extends RunCommandBase {
     protected override async prepare(): Promise<void> {
         await super.prepare();
         if (this.profileDir instanceof RemoteConnection) {
-            await this.profileDir.tunnelPort(DEBUGGER_PORT);
+            await this.profileDir.tunnelPort(ADAPTER_DEBUGGER_PORT);
         }
     }
 
@@ -42,7 +40,7 @@ export class Debug extends RunCommandBase {
     }
 
     private async copySourcemaps(): Promise<void> {
-        const outDir = path.join(this.profilePath, 'node_modules', `iobroker.${this.adapterName}`);
+        const outDir = path.join('node_modules', `iobroker.${this.adapterName}`);
         this.log.notice(`Creating or patching sourcemaps in ${outDir}`);
         const sourcemaps = await this.findFiles('map', true);
         if (sourcemaps.length === 0) {
@@ -100,7 +98,7 @@ export class Debug extends RunCommandBase {
             `${this.adapterName}.0`,
         ];
         if (this.config.remote) {
-            args.unshift(`--inspect=127.0.0.1:${DEBUGGER_PORT}`);
+            args.unshift(`--inspect=127.0.0.1:${ADAPTER_DEBUGGER_PORT}`);
         }
         if (this.wait) {
             args.push('--wait');
@@ -115,7 +113,7 @@ export class Debug extends RunCommandBase {
             const debugPid = await this.waitForNodeChildProcess(pid);
             debugTarget = `process id ${debugPid}`;
         } else {
-            debugTarget = `port 127.0.0.1:${DEBUGGER_PORT}`;
+            debugTarget = `port 127.0.0.1:${ADAPTER_DEBUGGER_PORT}`;
         }
 
         this.log.box(`Debugger is now ${this.wait ? 'waiting' : 'available'} on ${debugTarget}`);

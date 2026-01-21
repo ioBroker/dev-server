@@ -17,6 +17,7 @@ import { Update } from './commands/Update.js';
 import { Upload } from './commands/Upload.js';
 import { readJson } from './commands/utils.js';
 import { Watch } from './commands/Watch.js';
+import { WatchRemote } from './commands/WatchRemote.js';
 import { Logger } from './logger.js';
 const DEFAULT_TEMP_DIR_NAME = '.dev-server';
 const CORE_MODULE = 'iobroker.js-controller';
@@ -281,7 +282,13 @@ export class DevServer {
             doNotWatchArr = doNotWatch;
         }
         this.checkSetup();
-        const watch = new Watch(this, noInstall, startAdapter, doNotWatchArr, useBrowserSync);
+        let watch;
+        if (this.config?.remote) {
+            watch = new WatchRemote(this, startAdapter, noInstall, doNotWatchArr, useBrowserSync);
+        }
+        else {
+            watch = new Watch(this, startAdapter, noInstall, doNotWatchArr, useBrowserSync);
+        }
         await watch.run();
     }
     async debug(wait, noInstall) {

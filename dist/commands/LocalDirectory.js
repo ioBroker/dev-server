@@ -1,6 +1,8 @@
 import * as cp from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { copyFile, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { delay, getChildProcesses, readJson } from './utils.js';
+import { delay, getChildProcesses, readJson, writeJson } from './utils.js';
 export class LocalDirectory {
     directory;
     log;
@@ -9,8 +11,27 @@ export class LocalDirectory {
         this.directory = directory;
         this.log = log;
     }
+    readFile(relPath) {
+        return readFile(path.join(this.directory, relPath), { encoding: 'utf-8' });
+    }
+    writeFile(relPath, data) {
+        return writeFile(path.join(this.directory, relPath), data, { encoding: 'utf-8' });
+    }
     readJson(relPath) {
         return readJson(path.join(this.directory, relPath));
+    }
+    async writeJson(relPath, data) {
+        return writeJson(path.join(this.directory, relPath), data);
+    }
+    async copyFileTo(src, dest) {
+        await copyFile(src, path.join(this.directory, dest));
+    }
+    exists(relPath) {
+        return Promise.resolve(existsSync(path.join(this.directory, relPath)));
+    }
+    async unlink(relPath) {
+        const fullPath = path.join(this.directory, relPath);
+        await unlink(fullPath);
     }
     exec(command) {
         this.log.debug(`${this.directory}> ${command}`);

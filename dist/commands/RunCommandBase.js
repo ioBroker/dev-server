@@ -7,15 +7,16 @@ import fg from 'fast-glob';
 import { legacyCreateProxyMiddleware as createProxyMiddleware } from 'http-proxy-middleware';
 import EventEmitter from 'node:events';
 import { existsSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { SourceMapGenerator } from 'source-map';
 import WebSocket from 'ws';
 import { injectCode } from '../jsonConfig.js';
 import { CommandBase, HIDDEN_ADMIN_PORT_OFFSET, HIDDEN_BROWSER_SYNC_PORT_OFFSET, IOBROKER_CONTROLLER, OBJECTS_DB_PORT_OFFSET, STATES_DB_PORT_OFFSET, } from './CommandBase.js';
 import { RemoteConnection } from './RemoteConnection.js';
-import { checkPort, delay, readJson, writeJson } from './utils.js';
+import { checkPort, delay, readJson } from './utils.js';
 const CONTROLLER_DEBUGGER_PORT = 9228;
+export const ADAPTER_DEBUGGER_PORT = 9229;
 export class RunCommandBase extends CommandBase {
     websocket;
     socketEvents = new EventEmitter();
@@ -492,7 +493,7 @@ export class RunCommandBase extends CommandBase {
      * Patch an existing sourcemap file.
      *
      * @param src The path to the original sourcemap file to patch and copy.
-     * @param dest The path to the sourcemap file that is created.
+     * @param dest The relative path to the sourcemap file that is created.
      */
     async patchSourcemap(src, dest) {
         try {
@@ -501,7 +502,7 @@ export class RunCommandBase extends CommandBase {
                 throw new Error(`Unsupported sourcemap version: ${data.version}`);
             }
             data.sourceRoot = path.dirname(src).replace(/\\/g, '/');
-            await writeJson(dest, data);
+            await this.profileDir.writeJson(dest, data);
             this.log.debug(`Patched ${dest} from ${src}`);
         }
         catch (error) {
@@ -512,16 +513,18 @@ export class RunCommandBase extends CommandBase {
      * Create an identity sourcemap to point to a different source file.
      *
      * @param src The path to the original JavaScript file.
-     * @param dest The path to the JavaScript file which will get a sourcemap attached.
+     * @param dest The relative path to the JavaScript file which will get a sourcemap attached.
      * @param copyFromSrc Set to true to copy the JavaScript file from src to dest (not just modify dest).
      */
     async addSourcemap(src, dest, copyFromSrc) {
         try {
             const mapFile = `${dest}.map`;
             const data = await this.createIdentitySourcemap(src.replace(/\\/g, '/'));
-            await writeJson(mapFile, data);
+            await this.profileDir.writeJson(mapFile, data);
             // append the sourcemap reference comment to the bottom of the file
-            const fileContent = await readFile(copyFromSrc ? src : dest, { encoding: 'utf-8' });
+            const fileContent = copyFromSrc
+                ? await readFile(src, { encoding: 'utf-8' })
+                : await this.profileDir.readFile(dest);
             const filename = path.basename(mapFile);
             let updatedContent = fileContent.replace(/(\/\/# sourceMappingURL=).+/, `$1${filename}`);
             if (updatedContent === fileContent) {
@@ -535,7 +538,7 @@ export class RunCommandBase extends CommandBase {
                 }
                 updatedContent += `//# sourceMappingURL=${filename}`;
             }
-            await writeFile(dest, updatedContent);
+            await this.profileDir.writeFile(dest, updatedContent);
             this.log.debug(`Created ${mapFile} from ${src}`);
         }
         catch (error) {

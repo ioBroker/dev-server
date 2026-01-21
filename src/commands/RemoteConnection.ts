@@ -100,6 +100,45 @@ export class RemoteConnection implements IEnvironment {
         this.client.end();
     }
 
+    public async readFile(relPath: string): Promise<string> {
+        const remotePath = await this.getFullRemotePath(relPath);
+        const sftp = await this.getSftp();
+        const buffer = await sftp.readFile(remotePath);
+        return buffer.toString();
+    }
+
+    public async writeFile(relPath: string, data: string): Promise<void> {
+        const remotePath = await this.getFullRemotePath(relPath);
+        const sftp = await this.getSftp();
+        await sftp.writeFile(remotePath, data);
+    }
+
+    public async readJson<T = any>(relPath: string): Promise<T> {
+        const content = await this.readFile(relPath);
+        return JSON.parse(content) as T;
+    }
+
+    public async writeJson(relPath: string, data: any): Promise<void> {
+        const content = JSON.stringify(data, null, 2);
+        return this.writeFile(relPath, content);
+    }
+
+    public async copyFileTo(src: string, dest: string): Promise<void> {
+        await this.upload(src, dest);
+    }
+
+    public async exists(relPath: string): Promise<boolean> {
+        const remotePath = await this.getFullRemotePath(relPath);
+        const sftp = await this.getSftp();
+        return sftp.exists(remotePath);
+    }
+
+    public async unlink(relPath: string): Promise<void> {
+        const remotePath = await this.getFullRemotePath(relPath);
+        const sftp = await this.getSftp();
+        await sftp.unlink(remotePath);
+    }
+
     public async spawn(
         command: string,
         args: ReadonlyArray<string>,
@@ -171,8 +210,7 @@ export class RemoteConnection implements IEnvironment {
 
     public async execWithNewFile(localPath: string, commandBuilder: (remotePath: string) => string): Promise<void> {
         const filename = path.basename(localPath);
-        const homeDir = await this.getHomeDir();
-        const remotePath = `${this.getBasePath(homeDir)}/${filename}`;
+        const remotePath = await this.getFullRemotePath(filename);
         await this.exec(commandBuilder(remotePath));
 
         const sftp = await this.getSftp();
@@ -257,13 +295,17 @@ export class RemoteConnection implements IEnvironment {
     }
 
     public async upload(localPath: string, relPath: string): Promise<string> {
-        const homeDir = await this.getHomeDir();
-        const remotePath = `${this.getBasePath(homeDir)}/${relPath}`;
+        const remotePath = await this.getFullRemotePath(relPath);
 
         const sftp = await this.getSftp();
         await sftp.put(localPath, remotePath);
 
         return remotePath;
+    }
+
+    private async getFullRemotePath(relPath: string): Promise<string> {
+        const homeDir = await this.getHomeDir();
+        return `${this.getBasePath(homeDir)}/${relPath}`;
     }
 
     private getBasePath(home = '~'): string {
@@ -293,18 +335,16 @@ export class RemoteConnection implements IEnvironment {
 }
 
 class SftpConnection {
-    private currentOperation?: Promise<void>;
+    private currentOperation?: Promise<any>;
 
     constructor(
         private sftp: SFTPWrapper,
         private log: Logger,
     ) {}
 
-    public async get(remotePath: string, localPath: string): Promise<void> {
-        await this.currentOperation;
-
-        this.log.notice(`Transferring ${remotePath} from remote host...`);
-        this.currentOperation = new Promise<void>((resolve, reject) => {
+    public get(remotePath: string, localPath: string): Promise<void> {
+        return this.run((resolve, reject) => {
+            this.log.notice(`Transferring ${remotePath} from remote host...`);
             this.log.silly(`${remotePath} -> ${localPath}`);
             this.sftp.fastGet(remotePath, localPath, {}, putErr => {
                 if (putErr) {
@@ -313,14 +353,11 @@ class SftpConnection {
                 resolve();
             });
         });
-        return this.currentOperation;
     }
 
-    public async put(localPath: string, remotePath: string): Promise<void> {
-        await this.currentOperation;
-
-        this.log.notice(`Transferring ${localPath} to remote host...`);
-        this.currentOperation = new Promise<void>((resolve, reject) => {
+    public put(localPath: string, remotePath: string): Promise<void> {
+        return this.run((resolve, reject) => {
+            this.log.notice(`Transferring ${localPath} to remote host...`);
             this.log.silly(`${localPath} -> ${remotePath}`);
             this.sftp.fastPut(localPath, remotePath, {}, putErr => {
                 if (putErr) {
@@ -329,6 +366,63 @@ class SftpConnection {
                 resolve();
             });
         });
-        return this.currentOperation;
+    }
+
+    public readFile(remotePath: string): Promise<Buffer> {
+        return this.run<Buffer>((resolve, reject) => {
+            this.log.debug(`Reading ${remotePath} from remote host...`);
+            this.sftp.readFile(remotePath, { encoding: 'utf8' }, (err, data) => {
+                if (err) {
+                    return reject(err);
+                }
+                resolve(data);
+            });
+        });
+    }
+
+    public writeFile(remotePath: string, data: Buffer | string): Promise<void> {
+        return this.run((resolve, reject) => {
+            this.log.debug(`Writing ${remotePath} to remote host...`);
+            this.sftp.writeFile(remotePath, data, { encoding: 'utf8' }, err => {
+                if (err) {
+                    return reject(err);
+                }
+                resolve();
+            });
+        });
+    }
+
+    public exists(remotePath: string): Promise<boolean> {
+        return this.run<boolean>(resolve => {
+            this.log.silly(`Checking existence of remote file ${remotePath}...`);
+
+            this.sftp.exists(remotePath, exists => {
+                this.log.silly(`Remote file ${remotePath} exists: ${exists}`);
+                resolve(exists);
+            });
+        });
+    }
+
+    public async unlink(remotePath: string): Promise<void> {
+        return this.run((resolve, reject) => {
+            this.log.notice(`Deleting remote file ${remotePath}...`);
+            this.sftp.unlink(remotePath, err => {
+                if (err) {
+                    return reject(err);
+                }
+                resolve();
+            });
+        });
+    }
+
+    private async run<T = void>(
+        executor: (resolve: (value: T) => void, reject: (reason?: any) => void) => void,
+    ): Promise<T> {
+        await this.currentOperation;
+
+        const operation = new Promise<T>(executor);
+        this.currentOperation = operation;
+
+        return operation;
     }
 }
