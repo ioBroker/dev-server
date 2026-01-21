@@ -7,6 +7,7 @@ import { exec as ssh2ExecAsync } from 'ssh2-exec/promises';
 import type { RemoteConfig } from '../DevServer.js';
 import { type Logger } from '../logger.js';
 import type { IEnvironment } from './IEnvironment.js';
+import { delay } from './utils.js';
 
 type ConnectState = 'disconnected' | 'connecting' | 'connected';
 
@@ -205,14 +206,15 @@ export class RemoteConnection implements IEnvironment {
             this.childProcesses.length = 0;
             for (const pid of pids) {
                 try {
-                    await this.exec(`kill -s ${signal} ${pid}`);
+                    await this.getExecOutput(`kill -s ${signal} ${pid}`);
                 } catch (err: any) {
                     this.log.silly(`Failed to send ${signal} to remote process ${pid}: ${err}`);
                 }
             }
 
-            // wait forever, hoping the remote processes will exit and close the connection
-            return new Promise<void>(() => {});
+            // first try SIGINT and give it 5s to exit itself before killing the processes left
+            await delay(5000);
+            await this.exitChildProcesses('SIGKILL');
         }
     }
 

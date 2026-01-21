@@ -33,7 +33,6 @@ export class RunCommandBase extends CommandBase {
         return Promise.resolve();
     }
     async exit(exitCode, signal = 'SIGINT') {
-        await super.teardown();
         return super.exit(exitCode, signal);
     }
     async startJsController() {

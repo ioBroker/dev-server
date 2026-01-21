@@ -4,6 +4,7 @@ import { createServer } from 'node:net';
 import path from 'node:path';
 import { Client as SSHClient } from 'ssh2';
 import { exec as ssh2ExecAsync } from 'ssh2-exec/promises';
+import { delay } from './utils.js';
 export class RemoteConnection {
     config;
     log;
@@ -166,14 +167,15 @@ export class RemoteConnection {
             this.childProcesses.length = 0;
             for (const pid of pids) {
                 try {
-                    await this.exec(`kill -s ${signal} ${pid}`);
+                    await this.getExecOutput(`kill -s ${signal} ${pid}`);
                 }
                 catch (err) {
                     this.log.silly(`Failed to send ${signal} to remote process ${pid}: ${err}`);
                 }
             }
-            // wait forever, hoping the remote processes will exit and close the connection
-            return new Promise(() => { });
+            // first try SIGINT and give it 5s to exit itself before killing the processes left
+            await delay(5000);
+            await this.exitChildProcesses('SIGKILL');
         }
     }
     sendSigIntToChildProcesses() {

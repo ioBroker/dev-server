@@ -46,7 +46,6 @@ export abstract class RunCommandBase extends CommandBase {
     }
 
     protected override async exit(exitCode: number, signal = 'SIGINT'): Promise<never> {
-        await super.teardown();
         return super.exit(exitCode, signal);
     }
 
