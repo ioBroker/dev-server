@@ -594,37 +594,6 @@ export abstract class RunCommandBase extends CommandBase {
         );
     }
 
-    protected async copySourcemaps(): Promise<void> {
-        const outDir = path.join(this.profilePath, 'node_modules', `iobroker.${this.adapterName}`);
-        this.log.notice(`Creating or patching sourcemaps in ${outDir}`);
-        const sourcemaps = await this.findFiles('map', true);
-        if (sourcemaps.length === 0) {
-            this.log.debug(`Couldn't find any sourcemaps in ${this.rootPath},\nwill try to reverse map .js files`);
-
-            // search all .js files that exist in the node module in the temp directory as well as in the root directory and
-            // create sourcemap files for each of them
-            const jsFiles = await this.findFiles('js', true);
-            await Promise.all(
-                jsFiles.map(async js => {
-                    const src = path.join(this.rootPath, js);
-                    const dest = path.join(outDir, js);
-                    await this.addSourcemap(src, dest, false);
-                }),
-            );
-            return;
-        }
-
-        // copy all *.map files to the node module in the temp directory and
-        // change their sourceRoot so they can be found in the development directory
-        await Promise.all(
-            sourcemaps.map(async sourcemap => {
-                const src = path.join(this.rootPath, sourcemap);
-                const dest = path.join(outDir, sourcemap);
-                await this.patchSourcemap(src, dest);
-            }),
-        );
-    }
-
     /**
      * Patch an existing sourcemap file.
      *
@@ -677,7 +646,7 @@ export abstract class RunCommandBase extends CommandBase {
             await writeFile(dest, updatedContent);
             this.log.debug(`Created ${mapFile} from ${src}`);
         } catch (error) {
-            this.log.warn(`Couldn't reverse map for ${src}: ${error as Error}`);
+            this.log.warn(`Couldn't create reverse map for ${src}: ${error as Error}`);
         }
     }
 
@@ -720,7 +689,7 @@ export abstract class RunCommandBase extends CommandBase {
         return patterns;
     }
 
-    private async findFiles(extension: string, excludeAdmin: boolean): Promise<string[]> {
+    protected async findFiles(extension: string, excludeAdmin: boolean): Promise<string[]> {
         return await fg(this.getFilePatterns(extension, excludeAdmin), { cwd: this.rootPath });
     }
 }
