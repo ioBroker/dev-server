@@ -2,7 +2,7 @@ import enquirer from 'enquirer';
 import { readFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:net';
 import path from 'node:path';
-import { type ConnectConfig, Client as SSHClient } from 'ssh2';
+import { type ConnectConfig, type SFTPWrapper, Client as SSHClient } from 'ssh2';
 import { exec as ssh2ExecAsync } from 'ssh2-exec/promises';
 import type { RemoteConfig } from '../DevServer.js';
 import { type Logger } from '../logger.js';
@@ -13,7 +13,9 @@ type ConnectState = 'disconnected' | 'connecting' | 'connected';
 export class RemoteConnection implements IEnvironment {
     private client = new SSHClient();
     private connectState: ConnectState = 'disconnected';
+    private readonly childProcesses: number[] = [];
     private readonly tunnelServers: Server[] = [];
+    private connectSftp?: Promise<SftpConnection>;
     private homeDir?: string;
 
     constructor(
@@ -72,7 +74,13 @@ export class RemoteConnection implements IEnvironment {
 
         this.log.debug('Remote SSH connection established');
 
-        process.on('SIGINT', (): void => this.close());
+        process.on(
+            'SIGINT',
+            (): void =>
+                void this.exitChildProcesses('SIGINT').catch(e =>
+                    this.log.silly(`Couldn't exit child processes: ${e.message}`),
+                ),
+        );
     }
 
     public close(): void {
@@ -99,7 +107,9 @@ export class RemoteConnection implements IEnvironment {
         const basePath = this.getBasePath();
         this.log.debug(`${this.config.user}@${this.config.host}:${basePath}> ${command}`);
 
-        command = this.asBashCommand(`cd ${basePath} ; ${command} ${args.map(a => `"${a}"`).join(' ')}`);
+        command = this.asBashCommand(
+            `cd ${basePath} ; echo "PID=>$$<" ; exec ${command} ${args.map(a => `"${a}"`).join(' ')}`,
+        );
 
         return new Promise((resolve, reject) => {
             this.client.exec(command, { pty: true }, (err, stream) => {
@@ -107,6 +117,15 @@ export class RemoteConnection implements IEnvironment {
                     return reject(err);
                 }
                 resolve(null);
+
+                stream.once('data', (data: Buffer) => {
+                    const match = data.toString().match(/PID=>(\d+)</);
+                    if (match) {
+                        const pid = parseInt(match[1], 10);
+                        this.log.silly(`Spawned remote process with PID ${pid}`);
+                        this.childProcesses.push(pid);
+                    }
+                });
 
                 stream.on('close', (code: number | undefined) => {
                     onExit(code ?? 1)?.catch((e: any) => this.log.error(`Error in onExit handler: ${e.message}`));
@@ -147,7 +166,6 @@ export class RemoteConnection implements IEnvironment {
         const filename = path.basename(fullPath);
         const remotePath = await this.upload(fullPath, filename);
         await this.exec(commandBuilder(remotePath));
-        await this.exec(`rm -f "${remotePath}"`);
     }
 
     public async execWithNewFile(localPath: string, commandBuilder: (remotePath: string) => string): Promise<void> {
@@ -156,21 +174,8 @@ export class RemoteConnection implements IEnvironment {
         const remotePath = `${this.getBasePath(homeDir)}/${filename}`;
         await this.exec(commandBuilder(remotePath));
 
-        this.log.notice(`Transferring ${remotePath} from remote host...`);
-        await new Promise<void>((resolve, reject) => {
-            this.client.sftp((err, sftp) => {
-                if (err) {
-                    return reject(err);
-                }
-                this.log.silly(`${remotePath} -> ${localPath}`);
-                sftp.fastGet(remotePath, localPath, {}, putErr => {
-                    if (putErr) {
-                        return reject(putErr);
-                    }
-                    resolve();
-                });
-            });
-        });
+        const sftp = await this.getSftp();
+        await sftp.get(remotePath, localPath);
 
         await this.exec(`rm -f "${remotePath}"`);
     }
@@ -192,12 +197,27 @@ export class RemoteConnection implements IEnvironment {
         return command;
     }
 
-    public exitChildProcesses(_signal: string): Promise<void> {
-        this.close();
-        return Promise.resolve();
+    public async exitChildProcesses(signal: string): Promise<void> {
+        if (signal === 'SIGKILL') {
+            this.close();
+        } else if (this.childProcesses.length > 0) {
+            const pids = [...this.childProcesses];
+            this.childProcesses.length = 0;
+            for (const pid of pids) {
+                try {
+                    await this.exec(`kill -s ${signal} ${pid}`);
+                } catch (err: any) {
+                    this.log.silly(`Failed to send ${signal} to remote process ${pid}: ${err}`);
+                }
+            }
+
+            // wait forever, hoping the remote processes will exit and close the connection
+            return new Promise<void>(() => {});
+        }
     }
 
     public sendSigIntToChildProcesses(): void {
+        // this method is only used locally when there is no TTY
         this.close();
     }
 
@@ -235,23 +255,11 @@ export class RemoteConnection implements IEnvironment {
     }
 
     public async upload(localPath: string, relPath: string): Promise<string> {
-        this.log.notice(`Transferring ${relPath} to remote host...`);
         const homeDir = await this.getHomeDir();
         const remotePath = `${this.getBasePath(homeDir)}/${relPath}`;
-        await new Promise<void>((resolve, reject) => {
-            this.client.sftp((err, sftp) => {
-                if (err) {
-                    return reject(err);
-                }
-                this.log.silly(`${localPath} -> ${remotePath}`);
-                sftp.fastPut(localPath, remotePath, {}, putErr => {
-                    if (putErr) {
-                        return reject(putErr);
-                    }
-                    resolve();
-                });
-            });
-        });
+
+        const sftp = await this.getSftp();
+        await sftp.put(localPath, remotePath);
 
         return remotePath;
     }
@@ -260,10 +268,65 @@ export class RemoteConnection implements IEnvironment {
         return `${home}/.dev-server/${this.config.id}`;
     }
 
+    private getSftp(): Promise<SftpConnection> {
+        if (!this.connectSftp) {
+            this.connectSftp = new Promise<SftpConnection>((resolve, reject) => {
+                this.client.sftp((err, sftp) => {
+                    if (err) {
+                        return reject(err);
+                    }
+                    resolve(new SftpConnection(sftp, this.log));
+                });
+            });
+        }
+        return this.connectSftp;
+    }
+
     private async getHomeDir(): Promise<string> {
         if (!this.homeDir) {
             this.homeDir = (await this.getExecOutput('echo $HOME')).trim();
         }
         return this.homeDir;
+    }
+}
+
+class SftpConnection {
+    private currentOperation?: Promise<void>;
+
+    constructor(
+        private sftp: SFTPWrapper,
+        private log: Logger,
+    ) {}
+
+    public async get(remotePath: string, localPath: string): Promise<void> {
+        await this.currentOperation;
+
+        this.log.notice(`Transferring ${remotePath} from remote host...`);
+        this.currentOperation = new Promise<void>((resolve, reject) => {
+            this.log.silly(`${remotePath} -> ${localPath}`);
+            this.sftp.fastGet(remotePath, localPath, {}, putErr => {
+                if (putErr) {
+                    return reject(putErr);
+                }
+                resolve();
+            });
+        });
+        return this.currentOperation;
+    }
+
+    public async put(localPath: string, remotePath: string): Promise<void> {
+        await this.currentOperation;
+
+        this.log.notice(`Transferring ${localPath} to remote host...`);
+        this.currentOperation = new Promise<void>((resolve, reject) => {
+            this.log.silly(`${localPath} -> ${remotePath}`);
+            this.sftp.fastPut(localPath, remotePath, {}, putErr => {
+                if (putErr) {
+                    return reject(putErr);
+                }
+                resolve();
+            });
+        });
+        return this.currentOperation;
     }
 }

@@ -9,7 +9,9 @@ export class RemoteConnection {
     log;
     client = new SSHClient();
     connectState = 'disconnected';
+    childProcesses = [];
     tunnelServers = [];
+    connectSftp;
     homeDir;
     constructor(config, log) {
         this.config = config;
@@ -63,7 +65,7 @@ export class RemoteConnection {
             this.client.connect(connectConfig);
         });
         this.log.debug('Remote SSH connection established');
-        process.on('SIGINT', () => this.close());
+        process.on('SIGINT', () => void this.exitChildProcesses('SIGINT').catch(e => this.log.silly(`Couldn't exit child processes: ${e.message}`)));
     }
     close() {
         if (this.connectState !== 'connected') {
@@ -81,13 +83,21 @@ export class RemoteConnection {
     async spawn(command, args, onExit) {
         const basePath = this.getBasePath();
         this.log.debug(`${this.config.user}@${this.config.host}:${basePath}> ${command}`);
-        command = this.asBashCommand(`cd ${basePath} ; ${command} ${args.map(a => `"${a}"`).join(' ')}`);
+        command = this.asBashCommand(`cd ${basePath} ; echo "PID=>$$<" ; exec ${command} ${args.map(a => `"${a}"`).join(' ')}`);
         return new Promise((resolve, reject) => {
             this.client.exec(command, { pty: true }, (err, stream) => {
                 if (err) {
                     return reject(err);
                 }
                 resolve(null);
+                stream.once('data', (data) => {
+                    const match = data.toString().match(/PID=>(\d+)</);
+                    if (match) {
+                        const pid = parseInt(match[1], 10);
+                        this.log.silly(`Spawned remote process with PID ${pid}`);
+                        this.childProcesses.push(pid);
+                    }
+                });
                 stream.on('close', (code) => {
                     onExit(code ?? 1)?.catch((e) => this.log.error(`Error in onExit handler: ${e.message}`));
                 });
@@ -122,28 +132,14 @@ export class RemoteConnection {
         const filename = path.basename(fullPath);
         const remotePath = await this.upload(fullPath, filename);
         await this.exec(commandBuilder(remotePath));
-        await this.exec(`rm -f "${remotePath}"`);
     }
     async execWithNewFile(localPath, commandBuilder) {
         const filename = path.basename(localPath);
         const homeDir = await this.getHomeDir();
         const remotePath = `${this.getBasePath(homeDir)}/${filename}`;
         await this.exec(commandBuilder(remotePath));
-        this.log.notice(`Transferring ${remotePath} from remote host...`);
-        await new Promise((resolve, reject) => {
-            this.client.sftp((err, sftp) => {
-                if (err) {
-                    return reject(err);
-                }
-                this.log.silly(`${remotePath} -> ${localPath}`);
-                sftp.fastGet(remotePath, localPath, {}, putErr => {
-                    if (putErr) {
-                        return reject(putErr);
-                    }
-                    resolve();
-                });
-            });
-        });
+        const sftp = await this.getSftp();
+        await sftp.get(remotePath, localPath);
         await this.exec(`rm -f "${remotePath}"`);
     }
     async getExecOutput(command) {
@@ -161,11 +157,27 @@ export class RemoteConnection {
         this.log.silly(`Remote command: ${command}`);
         return command;
     }
-    exitChildProcesses(_signal) {
-        this.close();
-        return Promise.resolve();
+    async exitChildProcesses(signal) {
+        if (signal === 'SIGKILL') {
+            this.close();
+        }
+        else if (this.childProcesses.length > 0) {
+            const pids = [...this.childProcesses];
+            this.childProcesses.length = 0;
+            for (const pid of pids) {
+                try {
+                    await this.exec(`kill -s ${signal} ${pid}`);
+                }
+                catch (err) {
+                    this.log.silly(`Failed to send ${signal} to remote process ${pid}: ${err}`);
+                }
+            }
+            // wait forever, hoping the remote processes will exit and close the connection
+            return new Promise(() => { });
+        }
     }
     sendSigIntToChildProcesses() {
+        // this method is only used locally when there is no TTY
         this.close();
     }
     async tunnelPort(port) {
@@ -198,32 +210,69 @@ export class RemoteConnection {
         });
     }
     async upload(localPath, relPath) {
-        this.log.notice(`Transferring ${relPath} to remote host...`);
         const homeDir = await this.getHomeDir();
         const remotePath = `${this.getBasePath(homeDir)}/${relPath}`;
-        await new Promise((resolve, reject) => {
-            this.client.sftp((err, sftp) => {
-                if (err) {
-                    return reject(err);
-                }
-                this.log.silly(`${localPath} -> ${remotePath}`);
-                sftp.fastPut(localPath, remotePath, {}, putErr => {
-                    if (putErr) {
-                        return reject(putErr);
-                    }
-                    resolve();
-                });
-            });
-        });
+        const sftp = await this.getSftp();
+        await sftp.put(localPath, remotePath);
         return remotePath;
     }
     getBasePath(home = '~') {
         return `${home}/.dev-server/${this.config.id}`;
+    }
+    getSftp() {
+        if (!this.connectSftp) {
+            this.connectSftp = new Promise((resolve, reject) => {
+                this.client.sftp((err, sftp) => {
+                    if (err) {
+                        return reject(err);
+                    }
+                    resolve(new SftpConnection(sftp, this.log));
+                });
+            });
+        }
+        return this.connectSftp;
     }
     async getHomeDir() {
         if (!this.homeDir) {
             this.homeDir = (await this.getExecOutput('echo $HOME')).trim();
         }
         return this.homeDir;
+    }
+}
+class SftpConnection {
+    sftp;
+    log;
+    currentOperation;
+    constructor(sftp, log) {
+        this.sftp = sftp;
+        this.log = log;
+    }
+    async get(remotePath, localPath) {
+        await this.currentOperation;
+        this.log.notice(`Transferring ${remotePath} from remote host...`);
+        this.currentOperation = new Promise((resolve, reject) => {
+            this.log.silly(`${remotePath} -> ${localPath}`);
+            this.sftp.fastGet(remotePath, localPath, {}, putErr => {
+                if (putErr) {
+                    return reject(putErr);
+                }
+                resolve();
+            });
+        });
+        return this.currentOperation;
+    }
+    async put(localPath, remotePath) {
+        await this.currentOperation;
+        this.log.notice(`Transferring ${localPath} to remote host...`);
+        this.currentOperation = new Promise((resolve, reject) => {
+            this.log.silly(`${localPath} -> ${remotePath}`);
+            this.sftp.fastPut(localPath, remotePath, {}, putErr => {
+                if (putErr) {
+                    return reject(putErr);
+                }
+                resolve();
+            });
+        });
+        return this.currentOperation;
     }
 }

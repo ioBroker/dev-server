@@ -95,10 +95,13 @@ export class CommandBase {
             const { stdout } = await this.rootDir.getExecOutput('npm pack');
             const filename = stdout.trim();
             this.log.info(`Packed to ${filename}`);
+            const fullPath = path.join(this.rootPath, filename);
             if (doInstall) {
-                const fullPath = path.join(this.rootPath, filename);
                 await this.profileDir.execWithExistingFile(fullPath, f => `npm install "${f}"`);
                 await rimraf(fullPath);
+            }
+            else {
+                await this.profileDir.execWithExistingFile(fullPath, f => `ls -la "${f}"`);
             }
         }
     }
