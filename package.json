@@ -17,10 +17,10 @@
         "node": ">=20.19.0 <22.0.0 || >=22.13.0"
     },
     "scripts": {
-        "test": "mocha test/*.test.js --exit",
-        "test:js": "mocha test/js-adapters.test.js --exit",
-        "test:ts": "mocha test/ts-adapters.test.js --exit",
-        "test:pure-ts": "mocha test/pure-ts-adapters.test.js --exit",
+        "test": "mocha test/*.test.mjs --exit",
+        "test:js": "mocha test/js-adapters.test.mjs --exit",
+        "test:ts": "mocha test/ts-adapters.test.mjs --exit",
+        "test:pure-ts": "mocha test/pure-ts-adapters.test.mjs --exit",
         "prebuild": "rimraf ./dist",
         "build": "tsc -p tsconfig.build.json",
         "watch": "tsc -p tsconfig.build.json --watch",

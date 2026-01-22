@@ -1,22 +1,23 @@
-const { describe, it, before, after } = require('mocha');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const path = require('node:path');
-const { 
-    runCommand, 
-    runCommandWithSignal,
-    runCommandWithFileChange,
-    setupTestAdapter, 
+import { after, before, describe, it } from 'mocha';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
     cleanupTestAdapter,
+    runCommandWithFileChange,
+    runCommandWithSignal,
+    runDevServerSetupTest,
+    setupTestAdapter,
     validateIoPackageJson,
     validatePackageJson,
-    validateTypeScriptConfig,
-    runDevServerSetupTest,
     validateRunTestOutput,
+    validateWatchRestartOutput,
     validateWatchTestOutput,
-    validateWatchRestartOutput
-} = require('./test-utils');
+} from './test-utils.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const DEV_SERVER_ROOT = path.resolve(__dirname, '..');
 const TEST_DIR = __dirname;
 const ADAPTERS_DIR = path.join(TEST_DIR, 'adapters');
@@ -38,7 +39,7 @@ describe('dev-server integration tests', function () {
             configFile: JS_ADAPTER_CONFIG,
             adapterDir: JS_ADAPTER_DIR,
             adaptersDir: ADAPTERS_DIR,
-            needsTypeScriptPatching: false
+            needsTypeScriptPatching: false,
         });
     });
 

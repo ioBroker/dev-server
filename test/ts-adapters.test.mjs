@@ -1,24 +1,25 @@
-const { describe, it, before, after } = require('mocha');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const path = require('node:path');
-const { 
-    runCommand, 
-    runCommandWithSignal,
+import { after, before, describe, it } from 'mocha';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+    cleanupTestAdapter,
     runCommandWithFileChange,
     runCommandWithJsonConfigChange,
-    setupTestAdapter, 
-    cleanupTestAdapter,
-    validateIoPackageJson,
-    validatePackageJson,
-    validateTypeScriptConfig,
+    runCommandWithSignal,
     runDevServerSetupTest,
+    setupTestAdapter,
+    validateIoPackageJson,
+    validateJsonConfigChangeDetection,
     validateRunTestOutput,
-    validateWatchTestOutput,
+    validateTypeScriptConfig,
     validateWatchRestartOutput,
-    validateJsonConfigChangeDetection
-} = require('./test-utils');
+    validateWatchTestOutput,
+} from './test-utils.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const DEV_SERVER_ROOT = path.resolve(__dirname, '..');
 const TEST_DIR = __dirname;
 const ADAPTERS_DIR = path.join(TEST_DIR, 'adapters');
@@ -40,7 +41,7 @@ describe('dev-server integration tests', function () {
             configFile: TS_ADAPTER_CONFIG,
             adapterDir: TS_ADAPTER_DIR,
             adaptersDir: ADAPTERS_DIR,
-            needsTypeScriptPatching: true
+            needsTypeScriptPatching: true,
         });
     });
 
@@ -127,7 +128,10 @@ describe('dev-server integration tests', function () {
             const jsonConfigFile = path.join(TS_ADAPTER_DIR, 'admin', 'jsonConfig.json');
 
             // Fail test if jsonConfig file doesn't exist (test setup issue)
-            assert.ok(fs.existsSync(jsonConfigFile), 'jsonConfig.json file must exist for this test (test setup issue)');
+            assert.ok(
+                fs.existsSync(jsonConfigFile),
+                'jsonConfig.json file must exist for this test (test setup issue)',
+            );
 
             // Backup original jsonConfig
             const jsonConfigBackup = fs.readFileSync(jsonConfigFile, 'utf8');
