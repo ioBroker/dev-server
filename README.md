@@ -216,6 +216,8 @@ The following options are available:
 
 `--admin <version>` Define which version of admin to be used (default: "latest").
 
+`--remote` Set up dev-server on a remote host using SSH. You will be prompted for connection details.
+
 `--backupFile <filename>` Provide an ioBroker backup file to restore in this dev-server. Use this option to populate the dev-server with data (and possibly other adapters).
 
 `--symlinks` Use symlinks instead of packing and installing the current adapter for a smoother dev experience. Requires JS-Controller 5+.
