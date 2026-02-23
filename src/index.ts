@@ -1,16 +1,35 @@
 #!/usr/bin/env node
 
-import yargs from 'yargs/yargs';
-import { DBConnection } from '@iobroker/testing/build/tests/integration/lib/dbConnection';
+// x@ts-expect-error deep import has no types
+import { DBConnection } from '@iobroker/testing/build/tests/integration/lib/dbConnection.js';
+import * as acorn from 'acorn';
 import axios from 'axios';
 import browserSync from 'browser-sync';
 import chalk from 'chalk';
-import * as cp from 'node:child_process';
 import chokidar from 'chokidar';
-import { prompt } from 'enquirer';
+import enquirer from 'enquirer';
 import express, { type Application } from 'express';
 import fg from 'fast-glob';
-import {
+import fsExtra from 'fs-extra';
+import { legacyCreateProxyMiddleware as createProxyMiddleware } from 'http-proxy-middleware';
+import * as cp from 'node:child_process';
+import EventEmitter from 'node:events';
+import { Socket } from 'node:net';
+import { EOL, hostname } from 'node:os';
+import * as path from 'node:path';
+import nodemon from 'nodemon';
+import psTree from 'ps-tree';
+import { rimraf } from 'rimraf';
+import { gt } from 'semver';
+import { type RawSourceMap, SourceMapGenerator } from 'source-map';
+import WebSocket from 'ws';
+import yargs from 'yargs/yargs';
+import { injectCode } from './jsonConfig.js';
+import { Logger } from './logger.js';
+
+const { prompt } = enquirer;
+
+const {
     copyFile,
     existsSync,
     mkdir,
@@ -23,21 +42,7 @@ import {
     unlinkSync,
     writeFile,
     writeJson,
-} from 'fs-extra';
-import { legacyCreateProxyMiddleware as createProxyMiddleware } from 'http-proxy-middleware';
-import { Socket } from 'node:net';
-import nodemon from 'nodemon';
-import { EOL, hostname } from 'node:os';
-import * as path from 'node:path';
-import psTree from 'ps-tree';
-import { rimraf } from 'rimraf';
-import { gt } from 'semver';
-import { type RawSourceMap, SourceMapGenerator } from 'source-map';
-import WebSocket from 'ws';
-import { injectCode } from './jsonConfig';
-import { Logger } from './logger';
-import acorn from 'acorn';
-import EventEmitter from 'node:events';
+} = fsExtra;
 
 const DEFAULT_TEMP_DIR_NAME = '.dev-server';
 const CORE_MODULE = 'iobroker.js-controller';
@@ -162,13 +167,25 @@ class DevServer {
                         description:
                             'Do not watch the given files or directories for changes (provide paths relative to the adapter base directory.',
                     },
+                    doVisdebug: {
+                        type: 'boolean',
+                        alias: 'v',
+                        description: 'Do not start visdebug for uploading for vis1.',
+                    },
                     noBrowserSync: {
                         type: 'boolean',
                         alias: 'b',
                         description: 'Do not use BrowserSync for hot-reload (serve static files instead)',
                     },
                 },
-                async args => await this.watch(!args.noStart, !!args.noInstall, args.doNotWatch, !args.noBrowserSync),
+                async args =>
+                    await this.watch(
+                        !args.noStart,
+                        !!args.noInstall,
+                        args.doNotWatch,
+                        !args.noBrowserSync,
+                        !!args.noVisdebug,
+                    ),
             )
             .command(
                 ['debug [profile]', 'd'],
@@ -517,6 +534,7 @@ class DevServer {
         noInstall: boolean,
         doNotWatch: string | string[] | undefined,
         useBrowserSync = true,
+        noVisdebug: boolean,
     ): Promise<void> {
         let doNotWatchArr: string[] = [];
         if (typeof doNotWatch === 'string') {
@@ -532,12 +550,12 @@ class DevServer {
         }
         if (this.isJSController()) {
             // this watches actually js-controller
-            await this.startAdapterWatch(startAdapter, doNotWatchArr);
+            await this.startAdapterWatch(startAdapter, doNotWatchArr, noVisdebug);
             await this.startServer(useBrowserSync);
         } else {
             await this.startJsController();
             await this.startServer(useBrowserSync);
-            await this.startAdapterWatch(startAdapter, doNotWatchArr);
+            await this.startAdapterWatch(startAdapter, doNotWatchArr, noVisdebug);
         }
     }
 
@@ -1015,7 +1033,9 @@ class DevServer {
      *
      * @param app Express application instance
      * @param config Dev server configuration
-     * @param uiCapabilities Object containing configType and tabType detected from io-package.json
+     * @param uiCapabilities UI capability detection result from io-package.json
+     * @param uiCapabilities.configType Type of config UI ('json' | 'html' | 'none')
+     * @param uiCapabilities.tabType Type of tab UI ('json' | 'html' | 'none')
      * @param useBrowserSync Whether to use BrowserSync for hot-reload (default: true)
      */
     private async createCombinedConfigProxy(
@@ -1363,7 +1383,7 @@ class DevServer {
         );
     }
 
-    private async startAdapterWatch(startAdapter: boolean, doNotWatch: string[]): Promise<void> {
+    private async startAdapterWatch(startAdapter: boolean, doNotWatch: string[], noVisdebug: boolean): Promise<void> {
         // figure out if we need to watch for TypeScript changes
         const pkg = await this.readPackageJson();
         const scripts = pkg.scripts;
@@ -1381,7 +1401,7 @@ class DevServer {
         if (!this.config?.useSymlinks) {
             this.log.notice('Starting file synchronization');
             // This is not necessary when using symlinks
-            await this.startFileSync(adapterRunDir, mainFileSuffix);
+            await this.startFileSync(adapterRunDir, mainFileSuffix, noVisdebug);
             this.log.notice('File synchronization ready');
         }
 
@@ -1408,18 +1428,21 @@ class DevServer {
         });
     }
 
-    private startFileSync(destinationDir: string, mainFileSuffix: string): Promise<void> {
+    private startFileSync(destinationDir: string, mainFileSuffix: string, noVisdebug: boolean): Promise<void> {
         this.log.notice(`Starting file system sync from ${this.rootDir}`);
         const inSrc = (filename: string): string => path.join(this.rootDir, filename);
         const inDest = (filename: string): string => path.join(destinationDir, filename);
         return new Promise<void>((resolve, reject) => {
-            const patternList = ['js', 'map'];
+            const patternList = ['js', 'map', 'css', 'html', 'png', 'jpg'];
             if (!patternList.includes(mainFileSuffix)) {
                 patternList.push(mainFileSuffix);
             }
             const patterns = this.getFilePatterns(patternList, true);
             const ignoreFiles = [] as string[];
             const watcher = chokidar.watch(fg.sync(patterns), { cwd: this.rootDir });
+            let isWidgetDir = false;
+            const widgetDelay = 500;
+            let widgetTimerID: NodeJS.Timeout | undefined;
             let ready = false;
             let initialEventPromises: Promise<void>[] = [];
             watcher.on('error', reject);
@@ -1440,7 +1463,7 @@ class DevServer {
                     const dest = inDest(filename);
                     if (filename.endsWith('.map')) {
                         await this.patchSourcemap(src, dest);
-                    } else if (!existsSync(inSrc(`${filename}.map`))) {
+                    } else if (filename.endsWith('.js') && !existsSync(inSrc(`${filename}.map`))) {
                         // copy file and add sourcemap
                         await this.addSourcemap(src, dest, true);
                     } else {
@@ -1450,8 +1473,27 @@ class DevServer {
                     this.log.warn(`Couldn't sync ${filename}`);
                 }
             };
+            const vis1debug = (): void => {
+                try {
+                    this.log.debug(`Start visdebug ${isWidgetDir}`);
+                    clearTimeout(widgetTimerID);
+                    if (isWidgetDir) {
+                        this.visDebugAdapter(this.adapterName);
+                        this.visUploadAdapter(this.adapterName);
+                        isWidgetDir = false;
+                    }
+                } catch (error: any) {
+                    this.log.error(`Error calling visdebug: ${error}`);
+                }
+            };
             watcher.on('add', (filename: string) => {
                 if (ready) {
+                    if (filename.startsWith('widgets') && !noVisdebug) {
+                        this.log.debug(`request visdebug ${filename}`);
+                        isWidgetDir = true;
+                        clearTimeout(widgetTimerID);
+                        widgetTimerID = setTimeout(vis1debug, widgetDelay);
+                    }
                     void syncFile(filename);
                 } else if (!filename.endsWith('map') && !existsSync(inDest(filename))) {
                     // ignore files during initial sync if they don't exist in the target directory (except for sourcemaps)
@@ -1466,6 +1508,12 @@ class DevServer {
                     if (!ready) {
                         initialEventPromises.push(resPromise);
                     }
+                    if (filename.startsWith('widgets') && !noVisdebug) {
+                        this.log.debug(`request visdebug ${filename}`);
+                        isWidgetDir = true;
+                        clearTimeout(widgetTimerID);
+                        widgetTimerID = setTimeout(vis1debug, widgetDelay);
+                    }
                 }
             });
             watcher.on('unlink', (filename: string) => {
@@ -1473,6 +1521,11 @@ class DevServer {
                 const map = inDest(`${filename}.map`);
                 if (existsSync(map)) {
                     unlinkSync(map);
+                }
+                if (filename.startsWith('widgets') && !noVisdebug) {
+                    isWidgetDir = true;
+                    clearTimeout(widgetTimerID);
+                    widgetTimerID = setTimeout(vis1debug, widgetDelay);
                 }
             });
         });
@@ -1882,6 +1935,16 @@ class DevServer {
 
     private uploadAdapter(name: string): void {
         this.log.notice(`Upload iobroker.${name}`);
+        this.execSync(`${IOBROKER_COMMAND} upload ${name}`, this.profileDir);
+    }
+
+    private visDebugAdapter(name: string): void {
+        this.log.notice(`Visdebug iobroker.${name}`);
+        this.execSync(`${IOBROKER_COMMAND} visdebug ${name}`, this.profileDir);
+    }
+
+    private visUploadAdapter(name: string): void {
+        this.log.notice(`upload iobroker.${name}`);
         this.execSync(`${IOBROKER_COMMAND} upload ${name}`, this.profileDir);
     }
 

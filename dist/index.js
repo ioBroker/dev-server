@@ -1,67 +1,32 @@
 #!/usr/bin/env node
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const yargs_1 = __importDefault(require("yargs/yargs"));
-const dbConnection_1 = require("@iobroker/testing/build/tests/integration/lib/dbConnection");
-const axios_1 = __importDefault(require("axios"));
-const browser_sync_1 = __importDefault(require("browser-sync"));
-const chalk_1 = __importDefault(require("chalk"));
-const cp = __importStar(require("node:child_process"));
-const chokidar_1 = __importDefault(require("chokidar"));
-const enquirer_1 = require("enquirer");
-const express_1 = __importDefault(require("express"));
-const fast_glob_1 = __importDefault(require("fast-glob"));
-const fs_extra_1 = require("fs-extra");
-const http_proxy_middleware_1 = require("http-proxy-middleware");
-const node_net_1 = require("node:net");
-const nodemon_1 = __importDefault(require("nodemon"));
-const node_os_1 = require("node:os");
-const path = __importStar(require("node:path"));
-const ps_tree_1 = __importDefault(require("ps-tree"));
-const rimraf_1 = require("rimraf");
-const semver_1 = require("semver");
-const source_map_1 = require("source-map");
-const ws_1 = __importDefault(require("ws"));
-const jsonConfig_1 = require("./jsonConfig");
-const logger_1 = require("./logger");
-const acorn_1 = __importDefault(require("acorn"));
-const node_events_1 = __importDefault(require("node:events"));
+// x@ts-expect-error deep import has no types
+import { DBConnection } from '@iobroker/testing/build/tests/integration/lib/dbConnection.js';
+import * as acorn from 'acorn';
+import axios from 'axios';
+import browserSync from 'browser-sync';
+import chalk from 'chalk';
+import chokidar from 'chokidar';
+import enquirer from 'enquirer';
+import express, {} from 'express';
+import fg from 'fast-glob';
+import fsExtra from 'fs-extra';
+import { legacyCreateProxyMiddleware as createProxyMiddleware } from 'http-proxy-middleware';
+import * as cp from 'node:child_process';
+import EventEmitter from 'node:events';
+import { Socket } from 'node:net';
+import { EOL, hostname } from 'node:os';
+import * as path from 'node:path';
+import nodemon from 'nodemon';
+import psTree from 'ps-tree';
+import { rimraf } from 'rimraf';
+import { gt } from 'semver';
+import { SourceMapGenerator } from 'source-map';
+import WebSocket from 'ws';
+import yargs from 'yargs/yargs';
+import { injectCode } from './jsonConfig.js';
+import { Logger } from './logger.js';
+const { prompt } = enquirer;
+const { copyFile, existsSync, mkdir, mkdirp, readFile, readFileSync, readJson, readdir, rename, unlinkSync, writeFile, writeJson, } = fsExtra;
 const DEFAULT_TEMP_DIR_NAME = '.dev-server';
 const CORE_MODULE = 'iobroker.js-controller';
 const IOBROKER_CLI = 'node_modules/iobroker.js-controller/iobroker.js';
@@ -74,9 +39,9 @@ const OBJECTS_DB_PORT_OFFSET = 18345;
 const DEFAULT_PROFILE_NAME = 'default';
 class DevServer {
     constructor() {
-        this.socketEvents = new node_events_1.default();
+        this.socketEvents = new EventEmitter();
         this.childProcesses = [];
-        const parser = (0, yargs_1.default)(process.argv.slice(2));
+        const parser = yargs(process.argv.slice(2));
         void parser
             .usage('Usage: $0 <command> [options] [profile]\n   or: $0 <command> --help   to see available options for a command')
             .command(['setup [profile]', 's'], 'Set up dev-server in the current directory. This should always be called in the directory where the io-package.json file of your adapter is located.', {
@@ -135,12 +100,17 @@ class DevServer {
                 alias: 'w',
                 description: 'Do not watch the given files or directories for changes (provide paths relative to the adapter base directory.',
             },
+            doVisdebug: {
+                type: 'boolean',
+                alias: 'v',
+                description: 'Do not start visdebug for uploading for vis1.',
+            },
             noBrowserSync: {
                 type: 'boolean',
                 alias: 'b',
                 description: 'Do not use BrowserSync for hot-reload (serve static files instead)',
             },
-        }, async (args) => await this.watch(!args.noStart, !!args.noInstall, args.doNotWatch, !args.noBrowserSync))
+        }, async (args) => await this.watch(!args.noStart, !!args.noInstall, args.doNotWatch, !args.noBrowserSync, !!args.noVisdebug))
             .command(['debug [profile]', 'd'], 'Run ioBroker dev-server and start the adapter from ioBroker in "debug" mode. You may attach a debugger to the running adapter.', {
             wait: {
                 type: 'boolean',
@@ -174,16 +144,16 @@ class DevServer {
             .help().argv;
     }
     setLogger(argv) {
-        this.log = new logger_1.Logger(argv.verbose ? 'silly' : 'debug');
+        this.log = new Logger(argv.verbose ? 'silly' : 'debug');
         return Promise.resolve();
     }
     async checkVersion() {
         try {
-            const { name, version: localVersion } = JSON.parse((0, fs_extra_1.readFileSync)(path.join(__dirname, '..', 'package.json')).toString());
-            const { data: { version: releaseVersion }, } = await axios_1.default.get(`https://registry.npmjs.org/${name}/latest`, { timeout: 1000 });
-            if ((0, semver_1.gt)(releaseVersion, localVersion)) {
+            const { name, version: localVersion } = JSON.parse(readFileSync(path.join(__dirname, '..', 'package.json')).toString());
+            const { data: { version: releaseVersion }, } = await axios.get(`https://registry.npmjs.org/${name}/latest`, { timeout: 1000 });
+            if (gt(releaseVersion, localVersion)) {
                 this.log.debug(`Found update from ${localVersion} to ${releaseVersion}`);
-                const response = await (0, enquirer_1.prompt)({
+                const response = await prompt({
                     name: 'update',
                     type: 'confirm',
                     message: `Version ${releaseVersion} of ${name} is available.\nWould you like to exit and update?`,
@@ -204,14 +174,14 @@ class DevServer {
     async setDirectories(argv) {
         this.rootDir = path.resolve(argv.root);
         this.tempDir = path.resolve(this.rootDir, argv.temp);
-        if ((0, fs_extra_1.existsSync)(path.join(this.tempDir, 'package.json'))) {
+        if (existsSync(path.join(this.tempDir, 'package.json'))) {
             // we are still in the old directory structure (no profiles), let's move it
             const intermediateDir = path.join(this.rootDir, `${DEFAULT_TEMP_DIR_NAME}-temp`);
             const defaultProfileDir = path.join(this.tempDir, DEFAULT_PROFILE_NAME);
             this.log.debug(`Moving temporary data from ${this.tempDir} to ${defaultProfileDir}`);
-            await (0, fs_extra_1.rename)(this.tempDir, intermediateDir);
-            await (0, fs_extra_1.mkdir)(this.tempDir);
-            await (0, fs_extra_1.rename)(intermediateDir, defaultProfileDir);
+            await rename(this.tempDir, intermediateDir);
+            await mkdir(this.tempDir);
+            await rename(intermediateDir, defaultProfileDir);
         }
         let profileName = argv.profile;
         const profiles = await this.getProfiles();
@@ -239,16 +209,16 @@ class DevServer {
                     this.log.debug(`Using profile ${profileName}`);
                 }
                 else {
-                    this.log.box(chalk_1.default.yellow(`You didn't specify the profile name in the command line. ` +
+                    this.log.box(chalk.yellow(`You didn't specify the profile name in the command line. ` +
                         `You may do so the next time by appending the profile name to your command.\nExample:\n` +
                         `> dev-server ${process.argv.slice(2).join(' ')} ${profileNames[profileNames.length - 1]} `));
-                    const response = await (0, enquirer_1.prompt)({
+                    const response = await prompt({
                         name: 'profile',
                         type: 'select',
                         message: 'Please choose a profile',
                         choices: profileNames.map(p => ({
                             name: p,
-                            hint: chalk_1.default.gray(`(Admin Port: ${profiles[p]['dev-server'].adminPort})`),
+                            hint: chalk.gray(`(Admin Port: ${profiles[p]['dev-server'].adminPort})`),
                         })),
                     });
                     profileName = response.profile;
@@ -266,7 +236,7 @@ class DevServer {
     async parseConfig() {
         let pkg;
         try {
-            pkg = await (0, fs_extra_1.readJson)(path.join(this.profileDir, 'package.json'));
+            pkg = await readJson(path.join(this.profileDir, 'package.json'));
         }
         catch (_a) {
             // not all commands need the config
@@ -276,7 +246,7 @@ class DevServer {
     }
     async findAdapterName() {
         try {
-            const ioPackage = await (0, fs_extra_1.readJson)(path.join(this.rootDir, 'io-package.json'));
+            const ioPackage = await readJson(path.join(this.rootDir, 'io-package.json'));
             const adapterName = ioPackage.common.name;
             this.log.debug(`Using adapter name "${adapterName}"`);
             return adapterName;
@@ -291,7 +261,7 @@ class DevServer {
         return this.adapterName === 'js-controller';
     }
     readPackageJson() {
-        return (0, fs_extra_1.readJson)(path.join(this.rootDir, 'package.json'));
+        return readJson(path.join(this.rootDir, 'package.json'));
     }
     /**
      * Read and parse the io-package.json file from the adapter directory
@@ -299,7 +269,7 @@ class DevServer {
      * @returns Promise resolving to the parsed io-package.json content
      */
     async readIoPackageJson() {
-        return (0, fs_extra_1.readJson)(path.join(this.rootDir, 'io-package.json'));
+        return readJson(path.join(this.rootDir, 'io-package.json'));
     }
     /**
      * Detect adapter UI capabilities by reading io-package.json adminUi configuration
@@ -368,10 +338,10 @@ class DevServer {
     }
     getJsonConfigPath() {
         const jsonConfigPath = path.resolve(this.rootDir, 'admin/jsonConfig.json');
-        if ((0, fs_extra_1.existsSync)(jsonConfigPath)) {
+        if (existsSync(jsonConfigPath)) {
             return jsonConfigPath;
         }
-        if ((0, fs_extra_1.existsSync)(`${jsonConfigPath}5`)) {
+        if (existsSync(`${jsonConfigPath}5`)) {
             return `${jsonConfigPath}5`;
         }
         return '';
@@ -380,7 +350,7 @@ class DevServer {
     async setup(adminPort, dependencies, backupFile, force, useSymlinks = false) {
         if (force) {
             this.log.notice(`Deleting ${this.profileDir}`);
-            await (0, rimraf_1.rimraf)(this.profileDir);
+            await rimraf(this.profileDir);
         }
         if (this.isSetUp()) {
             this.log.error(`dev-server is already set up in "${this.profileDir}".`);
@@ -416,7 +386,7 @@ class DevServer {
         await this.startJsController();
         await this.startServer(useBrowserSync);
     }
-    async watch(startAdapter, noInstall, doNotWatch, useBrowserSync = true) {
+    async watch(startAdapter, noInstall, doNotWatch, useBrowserSync = true, noVisdebug) {
         let doNotWatchArr = [];
         if (typeof doNotWatch === 'string') {
             doNotWatchArr.push(doNotWatch);
@@ -431,13 +401,13 @@ class DevServer {
         }
         if (this.isJSController()) {
             // this watches actually js-controller
-            await this.startAdapterWatch(startAdapter, doNotWatchArr);
+            await this.startAdapterWatch(startAdapter, doNotWatchArr, noVisdebug);
             await this.startServer(useBrowserSync);
         }
         else {
             await this.startJsController();
             await this.startServer(useBrowserSync);
-            await this.startAdapterWatch(startAdapter, doNotWatchArr);
+            await this.startAdapterWatch(startAdapter, doNotWatchArr, noVisdebug);
         }
     }
     async debug(wait, noInstall) {
@@ -486,23 +456,23 @@ class DevServer {
             ];
         });
         table.unshift([
-            chalk_1.default.bold('Profile Name'),
-            chalk_1.default.bold('Admin URL'),
-            chalk_1.default.bold('js-controller'),
-            chalk_1.default.bold('admin'),
+            chalk.bold('Profile Name'),
+            chalk.bold('Admin URL'),
+            chalk.bold('js-controller'),
+            chalk.bold('admin'),
         ]);
         this.log.info(`The following profiles exist in ${this.tempDir}`);
         this.log.table(table.filter(r => !!r));
     }
     ////////////////// Command Helper Methods //////////////////
     async getProfiles() {
-        if (!(0, fs_extra_1.existsSync)(this.tempDir)) {
+        if (!existsSync(this.tempDir)) {
             return {};
         }
-        const entries = await (0, fs_extra_1.readdir)(this.tempDir);
+        const entries = await readdir(this.tempDir);
         const pkgs = await Promise.all(entries.map(async (e) => {
             try {
-                const pkg = await (0, fs_extra_1.readJson)(path.join(this.tempDir, e, 'package.json'));
+                const pkg = await readJson(path.join(this.tempDir, e, 'package.json'));
                 const infos = pkg['dev-server'];
                 const dependencies = pkg.dependencies;
                 if ((infos === null || infos === void 0 ? void 0 : infos.adminPort) && dependencies) {
@@ -523,11 +493,11 @@ class DevServer {
     }
     isSetUp() {
         const jsControllerDir = path.join(this.profileDir, 'node_modules', CORE_MODULE);
-        return (0, fs_extra_1.existsSync)(jsControllerDir);
+        return existsSync(jsControllerDir);
     }
     checkPort(port, host = '127.0.0.1', timeout = 1000) {
         return new Promise((resolve, reject) => {
-            const socket = new node_net_1.Socket();
+            const socket = new Socket();
             const onError = (error) => {
                 socket.destroy();
                 reject(new Error(error));
@@ -577,7 +547,7 @@ class DevServer {
             'node_modules/iobroker.js-controller/controller.js',
         ], this.profileDir);
         proc.on('exit', async (code) => {
-            console.error(chalk_1.default.yellow(`ioBroker controller exited with code ${code}`));
+            console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
             return this.exit(-1, 'SIGKILL');
         });
         this.log.notice('Waiting for js-controller to start...');
@@ -598,7 +568,7 @@ class DevServer {
         }
         const proc = await this.spawn('node', nodeArgs, this.profileDir);
         proc.on('exit', code => {
-            console.error(chalk_1.default.yellow(`ioBroker controller exited with code ${code}`));
+            console.error(chalk.yellow(`ioBroker controller exited with code ${code}`));
             return this.exit(-1);
         });
         await this.waitForJsController();
@@ -614,10 +584,10 @@ class DevServer {
         }
         const hiddenAdminPort = this.getPort(this.config.adminPort, HIDDEN_ADMIN_PORT_OFFSET);
         await this.waitForPort(hiddenAdminPort);
-        const app = (0, express_1.default)();
+        const app = express();
         if (this.isJSController()) {
             // simply forward admin as-is
-            app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)({
+            app.use(createProxyMiddleware({
                 target: `http://127.0.0.1:${hiddenAdminPort}`,
                 ws: true,
             }));
@@ -664,7 +634,7 @@ class DevServer {
                     return;
                 }
                 // TODO: replace this with @iobroker/socket-client
-                this.websocket = new ws_1.default(`ws://127.0.0.1:${hiddenAdminPort}/?sid=${Date.now()}&name=admin`);
+                this.websocket = new WebSocket(`ws://127.0.0.1:${hiddenAdminPort}/?sid=${Date.now()}&name=admin`);
                 this.websocket.on('open', () => this.log.silly('WebSocket open'));
                 this.websocket.on('close', () => {
                     this.log.silly('WebSocket closed');
@@ -709,14 +679,14 @@ class DevServer {
      * Uploads the file to ioBroker via WebSocket when changes are detected
      */
     setupJsonFileWatch(bs, filePath, fileName) {
-        if (!(0, fs_extra_1.existsSync)(filePath)) {
+        if (!existsSync(filePath)) {
             return;
         }
         bs.watch(filePath, undefined, async (e) => {
             var _a;
             if (e === 'change') {
                 this.log.info(`Detected change in ${fileName}, uploading to ioBroker...`);
-                const content = await (0, fs_extra_1.readFile)(filePath);
+                const content = await readFile(filePath);
                 (_a = this.websocket) === null || _a === void 0 ? void 0 : _a.send(JSON.stringify([
                     3,
                     46,
@@ -743,7 +713,7 @@ class DevServer {
         if (scripts['watch:react']) {
             await this.startReact('watch:react');
             hasReact = true;
-            if ((0, fs_extra_1.existsSync)(path.resolve(this.rootDir, 'admin/.watch'))) {
+            if (existsSync(path.resolve(this.rootDir, 'admin/.watch'))) {
                 // rewrite the build directory to the .watch directory,
                 // because "watch:react" no longer updates the build directory automatically
                 pathRewrite[`^/adapter/${this.adapterName}/build/`] = '/.watch/';
@@ -767,23 +737,23 @@ class DevServer {
             this.setupJsonFileWatch(bs, jsonConfigFile, path.basename(jsonConfigFile));
             // "proxy" for the main page which injects our script
             app.get('/', async (_req, res) => {
-                const { data } = await axios_1.default.get(adminUrl);
-                res.send((0, jsonConfig_1.injectCode)(data, this.adapterName, path.basename(jsonConfigFile)));
+                const { data } = await axios.get(adminUrl);
+                res.send(injectCode(data, this.adapterName, path.basename(jsonConfigFile)));
             });
             // browser-sync proxy
-            app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)(['/browser-sync/**'], {
+            app.use(createProxyMiddleware(['/browser-sync/**'], {
                 target: `http://127.0.0.1:${browserSyncPort}`,
                 // ws: true, // can't have two web-socket connections proxying to different locations
             }));
             // admin proxy
-            app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)({
+            app.use(createProxyMiddleware({
                 target: adminUrl,
                 ws: true,
             }));
         }
         else {
             // Serve without BrowserSync - just proxy admin directly
-            app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)({
+            app.use(createProxyMiddleware({
                 target: adminUrl,
                 ws: true,
             }));
@@ -801,13 +771,13 @@ class DevServer {
             this.startBrowserSync(browserSyncPort, hasReact);
             // browser-sync proxy
             pathRewrite[`^/adapter/${this.adapterName}/`] = '/';
-            app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)([adminPattern, '/browser-sync/**'], {
+            app.use(createProxyMiddleware([adminPattern, '/browser-sync/**'], {
                 target: `http://127.0.0.1:${browserSyncPort}`,
                 //ws: true, // can't have two web-socket connections proxying to different locations
                 pathRewrite,
             }));
             // admin proxy
-            app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)([`!${adminPattern}`, '!/browser-sync/**'], {
+            app.use(createProxyMiddleware([`!${adminPattern}`, '!/browser-sync/**'], {
                 target: `http://127.0.0.1:${this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET)}`,
                 ws: true,
             }));
@@ -816,9 +786,9 @@ class DevServer {
             // Serve without BrowserSync - serve admin files directly and proxy the rest
             const adminPath = path.resolve(this.rootDir, 'admin/');
             // serve static admin files
-            app.use(`/adapter/${this.adapterName}`, express_1.default.static(adminPath));
+            app.use(`/adapter/${this.adapterName}`, express.static(adminPath));
             // admin proxy for everything else
-            app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)([`!${adminPattern}`], {
+            app.use(createProxyMiddleware([`!${adminPattern}`], {
                 target: `http://127.0.0.1:${this.getPort(config.adminPort, HIDDEN_ADMIN_PORT_OFFSET)}`,
                 ws: true,
             }));
@@ -840,7 +810,9 @@ class DevServer {
      *
      * @param app Express application instance
      * @param config Dev server configuration
-     * @param uiCapabilities Object containing configType and tabType detected from io-package.json
+     * @param uiCapabilities UI capability detection result from io-package.json
+     * @param uiCapabilities.configType Type of config UI ('json' | 'html' | 'none')
+     * @param uiCapabilities.tabType Type of tab UI ('json' | 'html' | 'none')
      * @param useBrowserSync Whether to use BrowserSync for hot-reload (default: true)
      */
     async createCombinedConfigProxy(app, config, uiCapabilities, useBrowserSync = true) {
@@ -865,8 +837,8 @@ class DevServer {
             this.setupJsonFileWatch(bs, jsonConfigFile, path.basename(jsonConfigFile));
             // "proxy" for the main page which injects our script
             app.get('/', async (_req, res) => {
-                const { data } = await axios_1.default.get(adminUrl);
-                res.send((0, jsonConfig_1.injectCode)(data, this.adapterName, path.basename(jsonConfigFile)));
+                const { data } = await axios.get(adminUrl);
+                res.send(injectCode(data, this.adapterName, path.basename(jsonConfigFile)));
             });
         }
         // Handle tab file watching if present
@@ -881,7 +853,7 @@ class DevServer {
             if (uiCapabilities.tabType === 'html') {
                 // Watch HTML tab files
                 const tabHtmlPath = path.resolve(this.rootDir, 'admin/tab.html');
-                if ((0, fs_extra_1.existsSync)(tabHtmlPath)) {
+                if (existsSync(tabHtmlPath)) {
                     bs.watch(tabHtmlPath, undefined, (e) => {
                         if (e === 'change') {
                             this.log.info('Detected change in tab.html, reloading browser...');
@@ -897,25 +869,25 @@ class DevServer {
                 // browser-sync proxy for adapter files (for HTML config or HTML tabs)
                 const adminPattern = `/adapter/${this.adapterName}/**`;
                 pathRewrite[`^/adapter/${this.adapterName}/`] = '/';
-                app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)([adminPattern, '/browser-sync/**'], {
+                app.use(createProxyMiddleware([adminPattern, '/browser-sync/**'], {
                     target: `http://127.0.0.1:${browserSyncPort}`,
                     //ws: true, // can't have two web-socket connections proxying to different locations
                     pathRewrite,
                 }));
                 // admin proxy
-                app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)([`!${adminPattern}`, '!/browser-sync/**'], {
+                app.use(createProxyMiddleware([`!${adminPattern}`, '!/browser-sync/**'], {
                     target: adminUrl,
                     ws: true,
                 }));
             }
             else {
                 // browser-sync proxy (for JSON config only)
-                app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)(['/browser-sync/**'], {
+                app.use(createProxyMiddleware(['/browser-sync/**'], {
                     target: `http://127.0.0.1:${browserSyncPort}`,
                     // ws: true, // can't have two web-socket connections proxying to different locations
                 }));
                 // admin proxy
-                app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)({
+                app.use(createProxyMiddleware({
                     target: adminUrl,
                     ws: true,
                 }));
@@ -923,7 +895,7 @@ class DevServer {
         }
         else {
             // Direct admin proxy without browser-sync
-            app.use((0, http_proxy_middleware_1.legacyCreateProxyMiddleware)({
+            app.use(createProxyMiddleware({
                 target: adminUrl,
                 ws: true,
             }));
@@ -964,9 +936,9 @@ class DevServer {
         try {
             const mapFile = `${dest}.map`;
             const data = await this.createIdentitySourcemap(src.replace(/\\/g, '/'));
-            await (0, fs_extra_1.writeFile)(mapFile, JSON.stringify(data));
+            await writeFile(mapFile, JSON.stringify(data));
             // append the sourcemap reference comment to the bottom of the file
-            const fileContent = await (0, fs_extra_1.readFile)(copyFromSrc ? src : dest, { encoding: 'utf-8' });
+            const fileContent = await readFile(copyFromSrc ? src : dest, { encoding: 'utf-8' });
             const filename = path.basename(mapFile);
             let updatedContent = fileContent.replace(/(\/\/# sourceMappingURL=).+/, `$1${filename}`);
             if (updatedContent === fileContent) {
@@ -980,7 +952,7 @@ class DevServer {
                 }
                 updatedContent += `//# sourceMappingURL=${filename}`;
             }
-            await (0, fs_extra_1.writeFile)(dest, updatedContent);
+            await writeFile(dest, updatedContent);
             this.log.debug(`Created ${mapFile} from ${src}`);
         }
         catch (error) {
@@ -995,12 +967,12 @@ class DevServer {
      */
     async patchSourcemap(src, dest) {
         try {
-            const data = await (0, fs_extra_1.readJson)(src);
+            const data = await readJson(src);
             if (data.version !== 3) {
                 throw new Error(`Unsupported sourcemap version: ${data.version}`);
             }
             data.sourceRoot = path.dirname(src).replace(/\\/g, '/');
-            await (0, fs_extra_1.writeJson)(dest, data);
+            await writeJson(dest, data);
             this.log.debug(`Patched ${dest} from ${src}`);
         }
         catch (error) {
@@ -1019,13 +991,13 @@ class DevServer {
         return patterns;
     }
     async findFiles(extension, excludeAdmin) {
-        return await (0, fast_glob_1.default)(this.getFilePatterns(extension, excludeAdmin), { cwd: this.rootDir });
+        return await fg(this.getFilePatterns(extension, excludeAdmin), { cwd: this.rootDir });
     }
     async createIdentitySourcemap(filename) {
         // thanks to https://github.com/gulp-sourcemaps/identity-map/blob/251b51598d02e5aedaea8f1a475dfc42103a2727/lib/generate.js [MIT]
-        const generator = new source_map_1.SourceMapGenerator({ file: filename });
-        const fileContent = await (0, fs_extra_1.readFile)(filename, { encoding: 'utf-8' });
-        const tokenizer = acorn_1.default.tokenizer(fileContent, {
+        const generator = new SourceMapGenerator({ file: filename });
+        const fileContent = await readFile(filename, { encoding: 'utf-8' });
+        const tokenizer = acorn.tokenizer(fileContent, {
             ecmaVersion: 'latest',
             allowHashBang: true,
             locations: true,
@@ -1053,7 +1025,7 @@ class DevServer {
     }
     startBrowserSync(port, hasReact) {
         this.log.notice('Starting browser-sync');
-        const bs = browser_sync_1.default.create();
+        const bs = browserSync.create();
         const adminPath = path.resolve(this.rootDir, 'admin/');
         const config = {
             server: { baseDir: adminPath, directory: true },
@@ -1091,7 +1063,7 @@ class DevServer {
         }
         const proc = await this.spawn('node', args, this.profileDir);
         proc.on('exit', code => {
-            console.error(chalk_1.default.yellow(`Adapter debugging exited with code ${code}`));
+            console.error(chalk.yellow(`Adapter debugging exited with code ${code}`));
             return this.exit(-1);
         });
         if (!proc.pid) {
@@ -1113,7 +1085,7 @@ class DevServer {
         return parentPid;
     }
     getChildProcesses(parentPid) {
-        return new Promise((resolve, reject) => (0, ps_tree_1.default)(parentPid, (err, children) => {
+        return new Promise((resolve, reject) => psTree(parentPid, (err, children) => {
             if (err) {
                 reject(err);
             }
@@ -1128,7 +1100,7 @@ class DevServer {
             }
         }));
     }
-    async startAdapterWatch(startAdapter, doNotWatch) {
+    async startAdapterWatch(startAdapter, doNotWatch, noVisdebug) {
         var _a;
         // figure out if we need to watch for TypeScript changes
         const pkg = await this.readPackageJson();
@@ -1145,7 +1117,7 @@ class DevServer {
         if (!((_a = this.config) === null || _a === void 0 ? void 0 : _a.useSymlinks)) {
             this.log.notice('Starting file synchronization');
             // This is not necessary when using symlinks
-            await this.startFileSync(adapterRunDir, mainFileSuffix);
+            await this.startFileSync(adapterRunDir, mainFileSuffix, noVisdebug);
             this.log.notice('File synchronization ready');
         }
         if (startAdapter) {
@@ -1166,18 +1138,21 @@ class DevServer {
             shell: true,
         });
     }
-    startFileSync(destinationDir, mainFileSuffix) {
+    startFileSync(destinationDir, mainFileSuffix, noVisdebug) {
         this.log.notice(`Starting file system sync from ${this.rootDir}`);
         const inSrc = (filename) => path.join(this.rootDir, filename);
         const inDest = (filename) => path.join(destinationDir, filename);
         return new Promise((resolve, reject) => {
-            const patternList = ['js', 'map'];
+            const patternList = ['js', 'map', 'css', 'html', 'png', 'jpg'];
             if (!patternList.includes(mainFileSuffix)) {
                 patternList.push(mainFileSuffix);
             }
             const patterns = this.getFilePatterns(patternList, true);
             const ignoreFiles = [];
-            const watcher = chokidar_1.default.watch(fast_glob_1.default.sync(patterns), { cwd: this.rootDir });
+            const watcher = chokidar.watch(fg.sync(patterns), { cwd: this.rootDir });
+            let isWidgetDir = false;
+            const widgetDelay = 500;
+            let widgetTimerID;
             let ready = false;
             let initialEventPromises = [];
             watcher.on('error', reject);
@@ -1199,23 +1174,43 @@ class DevServer {
                     if (filename.endsWith('.map')) {
                         await this.patchSourcemap(src, dest);
                     }
-                    else if (!(0, fs_extra_1.existsSync)(inSrc(`${filename}.map`))) {
+                    else if (filename.endsWith('.js') && !existsSync(inSrc(`${filename}.map`))) {
                         // copy file and add sourcemap
                         await this.addSourcemap(src, dest, true);
                     }
                     else {
-                        await (0, fs_extra_1.copyFile)(src, dest);
+                        await copyFile(src, dest);
                     }
                 }
                 catch (_a) {
                     this.log.warn(`Couldn't sync ${filename}`);
                 }
             };
+            const vis1debug = () => {
+                try {
+                    this.log.debug(`Start visdebug ${isWidgetDir}`);
+                    clearTimeout(widgetTimerID);
+                    if (isWidgetDir) {
+                        this.visDebugAdapter(this.adapterName);
+                        this.visUploadAdapter(this.adapterName);
+                        isWidgetDir = false;
+                    }
+                }
+                catch (error) {
+                    this.log.error(`Error calling visdebug: ${error}`);
+                }
+            };
             watcher.on('add', (filename) => {
                 if (ready) {
+                    if (filename.startsWith('widgets') && !noVisdebug) {
+                        this.log.debug(`request visdebug ${filename}`);
+                        isWidgetDir = true;
+                        clearTimeout(widgetTimerID);
+                        widgetTimerID = setTimeout(vis1debug, widgetDelay);
+                    }
                     void syncFile(filename);
                 }
-                else if (!filename.endsWith('map') && !(0, fs_extra_1.existsSync)(inDest(filename))) {
+                else if (!filename.endsWith('map') && !existsSync(inDest(filename))) {
                     // ignore files during initial sync if they don't exist in the target directory (except for sourcemaps)
                     ignoreFiles.push(filename);
                 }
@@ -1229,13 +1224,24 @@ class DevServer {
                     if (!ready) {
                         initialEventPromises.push(resPromise);
                     }
+                    if (filename.startsWith('widgets') && !noVisdebug) {
+                        this.log.debug(`request visdebug ${filename}`);
+                        isWidgetDir = true;
+                        clearTimeout(widgetTimerID);
+                        widgetTimerID = setTimeout(vis1debug, widgetDelay);
+                    }
                 }
             });
             watcher.on('unlink', (filename) => {
-                (0, fs_extra_1.unlinkSync)(inDest(filename));
+                unlinkSync(inDest(filename));
                 const map = inDest(`${filename}.map`);
-                if ((0, fs_extra_1.existsSync)(map)) {
-                    (0, fs_extra_1.unlinkSync)(map);
+                if (existsSync(map)) {
+                    unlinkSync(map);
+                }
+                if (filename.startsWith('widgets') && !noVisdebug) {
+                    isWidgetDir = true;
+                    clearTimeout(widgetTimerID);
+                    widgetTimerID = setTimeout(vis1debug, widgetDelay);
                 }
             });
         });
@@ -1262,7 +1268,7 @@ class DevServer {
             mjs: 'node --inspect --preserve-symlinks --preserve-symlinks-main',
             ts: 'node --inspect --preserve-symlinks --preserve-symlinks-main -r @alcalzone/esbuild-register',
         };
-        (0, nodemon_1.default)({
+        nodemon({
             script,
             cwd: baseDir,
             stdin: false,
@@ -1277,7 +1283,7 @@ class DevServer {
             signal: 'SIGINT', // wrong type definition: signal is of type "string?"
             args,
         });
-        nodemon_1.default
+        nodemon
             .on('log', (msg) => {
             if (isExiting) {
                 return;
@@ -1319,7 +1325,7 @@ class DevServer {
             this.socketEvents.on('objectChange', (args) => {
                 if (Array.isArray(args) && args.length > 1 && args[0] === `system.adapter.${this.adapterName}.0`) {
                     this.log.notice('Adapter configuration changed, restarting nodemon...');
-                    nodemon_1.default.restart();
+                    nodemon.restart();
                 }
             });
         }
@@ -1342,12 +1348,12 @@ class DevServer {
         };
         // create the data directory
         const dataDir = path.join(this.profileDir, 'iobroker-data');
-        await (0, fs_extra_1.mkdirp)(dataDir);
+        await mkdirp(dataDir);
         // create the configuration
         const config = {
             system: {
                 memoryLimitMB: 0,
-                hostname: `dev-${this.adapterName}-${(0, node_os_1.hostname)()}`,
+                hostname: `dev-${this.adapterName}-${hostname()}`,
                 instanceStartInterval: 2000,
                 compact: false,
                 allowShellCommands: false,
@@ -1413,7 +1419,7 @@ class DevServer {
             plugins: {},
             dataDir: '../../iobroker-data/',
         };
-        await (0, fs_extra_1.writeJson)(path.join(dataDir, 'iobroker.json'), config, { spaces: 2 });
+        await writeJson(path.join(dataDir, 'iobroker.json'), config, { spaces: 2 });
         // create the package file
         if (this.isJSController()) {
             // if this dev-server is used to debug JS-Controller, don't install a published version
@@ -1434,10 +1440,10 @@ class DevServer {
                 useSymlinks,
             },
         };
-        await (0, fs_extra_1.writeJson)(path.join(this.profileDir, 'package.json'), pkg, { spaces: 2 });
+        await writeJson(path.join(this.profileDir, 'package.json'), pkg, { spaces: 2 });
         // Tell npm to link the local adapter folder instead of creating a copy
         if (useSymlinks) {
-            await (0, fs_extra_1.writeFile)(path.join(this.profileDir, '.npmrc'), 'install-links=false', 'utf8');
+            await writeFile(path.join(this.profileDir, '.npmrc'), 'install-links=false', 'utf8');
         }
         await this.verifyIgnoreFiles();
         this.log.notice('Installing js-controller and admin...');
@@ -1463,7 +1469,7 @@ class DevServer {
             await this.installLocalAdapter();
             await this.uploadAndAddAdapter(this.adapterName);
             // installing any dependencies
-            const { common } = await (0, fs_extra_1.readJson)(path.join(this.rootDir, 'io-package.json'));
+            const { common } = await readJson(path.join(this.rootDir, 'io-package.json'));
             const adapterDeps = [
                 ...this.getDependencies(common.dependencies),
                 ...this.getDependencies(common.globalDependencies),
@@ -1502,7 +1508,7 @@ class DevServer {
     }
     isGitRepository() {
         // Check if we're in a git repository by looking for .git directory
-        return (0, fs_extra_1.existsSync)(path.join(this.rootDir, '.git'));
+        return existsSync(path.join(this.rootDir, '.git'));
     }
     async verifyIgnoreFiles() {
         this.log.notice(`Verifying .npmignore and .gitignore`);
@@ -1521,7 +1527,7 @@ class DevServer {
             try {
                 const { stdout, stderr } = await this.getExecOutput(command, this.rootDir);
                 if (stdout.match(tempDirRegex) || stderr.match(tempDirRegex)) {
-                    this.log.error(chalk_1.default.bold(`Your ${fileName} doesn't exclude the temporary directory "${relative}"`));
+                    this.log.error(chalk.bold(`Your ${fileName} doesn't exclude the temporary directory "${relative}"`));
                     const choices = [];
                     if (allowStar) {
                         choices.push({
@@ -1538,7 +1544,7 @@ class DevServer {
                     });
                     let action;
                     try {
-                        const result = await (0, enquirer_1.prompt)({
+                        const result = await prompt({
                             name: 'action',
                             type: 'select',
                             message: 'What would you like to do?',
@@ -1554,17 +1560,17 @@ class DevServer {
                     }
                     const filepath = path.resolve(this.rootDir, fileName);
                     let content = '';
-                    if ((0, fs_extra_1.existsSync)(filepath)) {
-                        content = await (0, fs_extra_1.readFile)(filepath, { encoding: 'utf-8' });
+                    if (existsSync(filepath)) {
+                        content = await readFile(filepath, { encoding: 'utf-8' });
                     }
-                    const eol = content.match(/\r\n/) ? '\r\n' : content.match(/\n/) ? '\n' : node_os_1.EOL;
+                    const eol = content.match(/\r\n/) ? '\r\n' : content.match(/\n/) ? '\n' : EOL;
                     if (action === 'add-star') {
                         content = `# exclude all dot-files and directories${eol}.*${eol}${eol}${content}`;
                     }
                     else {
                         content = `${content}${eol}${eol}# ioBroker dev-server${eol}${relative}${eol}`;
                     }
-                    await (0, fs_extra_1.writeFile)(filepath, content);
+                    await writeFile(filepath, content);
                 }
             }
             catch (error) {
@@ -1600,6 +1606,14 @@ class DevServer {
         this.log.notice(`Upload iobroker.${name}`);
         this.execSync(`${IOBROKER_COMMAND} upload ${name}`, this.profileDir);
     }
+    visDebugAdapter(name) {
+        this.log.notice(`Visdebug iobroker.${name}`);
+        this.execSync(`${IOBROKER_COMMAND} visdebug ${name}`, this.profileDir);
+    }
+    visUploadAdapter(name) {
+        this.log.notice(`upload iobroker.${name}`);
+        this.execSync(`${IOBROKER_COMMAND} upload ${name}`, this.profileDir);
+    }
     async buildLocalAdapter() {
         var _a;
         const pkg = await this.readPackageJson();
@@ -1615,7 +1629,7 @@ class DevServer {
             // This is the expected relative path
             const relativePath = path.relative(this.profileDir, this.rootDir);
             // Check if it is already used in package.json
-            const tempPkg = await (0, fs_extra_1.readJson)(path.join(this.profileDir, 'package.json'));
+            const tempPkg = await readJson(path.join(this.profileDir, 'package.json'));
             const depPath = (_b = tempPkg.dependencies) === null || _b === void 0 ? void 0 : _b[`iobroker.${this.adapterName}`];
             // If not, install it
             if (depPath !== relativePath) {
@@ -1629,7 +1643,7 @@ class DevServer {
             if (doInstall) {
                 const fullPath = path.join(this.rootDir, filename);
                 this.execSync(`npm install "${fullPath}"`, this.profileDir);
-                await (0, rimraf_1.rimraf)(fullPath);
+                await rimraf(fullPath);
             }
         }
     }
@@ -1670,7 +1684,7 @@ class DevServer {
         return adapters.filter(a => a !== 'js-controller');
     }
     async withDb(method) {
-        const db = new dbConnection_1.DBConnection('iobroker', this.profileDir, this.log);
+        const db = new DBConnection('iobroker', this.profileDir, this.log);
         await db.start();
         try {
             return await method(db);

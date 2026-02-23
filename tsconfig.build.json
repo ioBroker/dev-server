@@ -1,11 +1,14 @@
-// Specialized tsconfig to only compile .ts-files in the src dir
 {
     "extends": "./tsconfig.json",
     "compilerOptions": {
+        "module": "Node16",
+        "moduleResolution": "Node16",
         "allowJs": false,
         "checkJs": false,
         "noEmit": false,
-        "declaration": false
+        "declaration": false,
+        "verbatimModuleSyntax": true,
+        "outDir": "./dist"
     },
     "include": ["src/**/*.ts"],
     "exclude": ["src/**/*.test.ts"]

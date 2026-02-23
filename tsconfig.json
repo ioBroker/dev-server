@@ -14,12 +14,11 @@
         "noEmitOnError": true,
         "outDir": "./dist/",
         "removeComments": false,
-        "module": "commonjs",
-        "moduleResolution": "node",
+        "module": "Node16",
+        "moduleResolution": "Node16",
         "esModuleInterop": true,
         // this is necessary for the automatic typing of the adapter config
         "resolveJsonModule": true,
-
         // Avoid conflicts with line endings in compiled files
         "newLine": "lf",
 
