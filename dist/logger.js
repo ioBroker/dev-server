@@ -35,3 +35,4 @@ export class Logger {
         console.log(table(items, userConfig));
     }
 }
+//# sourceMappingURL=logger.js.map

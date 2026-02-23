@@ -100,17 +100,12 @@ class DevServer {
                 alias: 'w',
                 description: 'Do not watch the given files or directories for changes (provide paths relative to the adapter base directory.',
             },
-            doVisdebug: {
-                type: 'boolean',
-                alias: 'v',
-                description: 'Do not start visdebug for uploading for vis1.',
-            },
             noBrowserSync: {
                 type: 'boolean',
                 alias: 'b',
                 description: 'Do not use BrowserSync for hot-reload (serve static files instead)',
             },
-        }, async (args) => await this.watch(!args.noStart, !!args.noInstall, args.doNotWatch, !args.noBrowserSync, !!args.noVisdebug))
+        }, async (args) => await this.watch(!args.noStart, !!args.noInstall, args.doNotWatch, !args.noBrowserSync))
             .command(['debug [profile]', 'd'], 'Run ioBroker dev-server and start the adapter from ioBroker in "debug" mode. You may attach a debugger to the running adapter.', {
             wait: {
                 type: 'boolean',
@@ -386,7 +381,7 @@ class DevServer {
         await this.startJsController();
         await this.startServer(useBrowserSync);
     }
-    async watch(startAdapter, noInstall, doNotWatch, useBrowserSync = true, noVisdebug) {
+    async watch(startAdapter, noInstall, doNotWatch, useBrowserSync = true) {
         let doNotWatchArr = [];
         if (typeof doNotWatch === 'string') {
             doNotWatchArr.push(doNotWatch);
@@ -401,13 +396,13 @@ class DevServer {
         }
         if (this.isJSController()) {
             // this watches actually js-controller
-            await this.startAdapterWatch(startAdapter, doNotWatchArr, noVisdebug);
+            await this.startAdapterWatch(startAdapter, doNotWatchArr);
             await this.startServer(useBrowserSync);
         }
         else {
             await this.startJsController();
             await this.startServer(useBrowserSync);
-            await this.startAdapterWatch(startAdapter, doNotWatchArr, noVisdebug);
+            await this.startAdapterWatch(startAdapter, doNotWatchArr);
         }
     }
     async debug(wait, noInstall) {
@@ -1100,7 +1095,7 @@ class DevServer {
             }
         }));
     }
-    async startAdapterWatch(startAdapter, doNotWatch, noVisdebug) {
+    async startAdapterWatch(startAdapter, doNotWatch) {
         var _a;
         // figure out if we need to watch for TypeScript changes
         const pkg = await this.readPackageJson();
@@ -1117,7 +1112,7 @@ class DevServer {
         if (!((_a = this.config) === null || _a === void 0 ? void 0 : _a.useSymlinks)) {
             this.log.notice('Starting file synchronization');
             // This is not necessary when using symlinks
-            await this.startFileSync(adapterRunDir, mainFileSuffix, noVisdebug);
+            await this.startFileSync(adapterRunDir, mainFileSuffix);
             this.log.notice('File synchronization ready');
         }
         if (startAdapter) {
@@ -1138,7 +1133,7 @@ class DevServer {
             shell: true,
         });
     }
-    startFileSync(destinationDir, mainFileSuffix, noVisdebug) {
+    startFileSync(destinationDir, mainFileSuffix) {
         this.log.notice(`Starting file system sync from ${this.rootDir}`);
         const inSrc = (filename) => path.join(this.rootDir, filename);
         const inDest = (filename) => path.join(destinationDir, filename);
@@ -1150,7 +1145,6 @@ class DevServer {
             const patterns = this.getFilePatterns(patternList, true);
             const ignoreFiles = [];
             const watcher = chokidar.watch(fg.sync(patterns), { cwd: this.rootDir });
-            let isWidgetDir = false;
             const widgetDelay = 500;
             let widgetTimerID;
             let ready = false;
@@ -1188,13 +1182,10 @@ class DevServer {
             };
             const vis1debug = () => {
                 try {
-                    this.log.debug(`Start visdebug ${isWidgetDir}`);
+                    this.log.debug(`Start visdebug`);
                     clearTimeout(widgetTimerID);
-                    if (isWidgetDir) {
-                        this.visDebugAdapter(this.adapterName);
-                        this.visUploadAdapter(this.adapterName);
-                        isWidgetDir = false;
-                    }
+                    this.visDebugAdapter(this.adapterName);
+                    this.visUploadAdapter(this.adapterName);
                 }
                 catch (error) {
                     this.log.error(`Error calling visdebug: ${error}`);
@@ -1202,9 +1193,8 @@ class DevServer {
             };
             watcher.on('add', (filename) => {
                 if (ready) {
-                    if (filename.startsWith('widgets') && !noVisdebug) {
-                        this.log.debug(`request visdebug ${filename}`);
-                        isWidgetDir = true;
+                    if (filename.startsWith('widgets')) {
+                        this.log.debug(`add request visdebug ${filename}`);
                         clearTimeout(widgetTimerID);
                         widgetTimerID = setTimeout(vis1debug, widgetDelay);
                     }
@@ -1224,9 +1214,8 @@ class DevServer {
                     if (!ready) {
                         initialEventPromises.push(resPromise);
                     }
-                    if (filename.startsWith('widgets') && !noVisdebug) {
-                        this.log.debug(`request visdebug ${filename}`);
-                        isWidgetDir = true;
+                    if (filename.startsWith('widgets')) {
+                        this.log.debug(`change request visdebug ${filename}`);
                         clearTimeout(widgetTimerID);
                         widgetTimerID = setTimeout(vis1debug, widgetDelay);
                     }
@@ -1238,8 +1227,8 @@ class DevServer {
                 if (existsSync(map)) {
                     unlinkSync(map);
                 }
-                if (filename.startsWith('widgets') && !noVisdebug) {
-                    isWidgetDir = true;
+                if (filename.startsWith('widgets')) {
+                    this.log.debug(`unlink request visdebug ${filename}`);
                     clearTimeout(widgetTimerID);
                     widgetTimerID = setTimeout(vis1debug, widgetDelay);
                 }
@@ -1816,3 +1805,4 @@ class DevServer {
     }
 }
 (() => new DevServer())();
+//# sourceMappingURL=index.js.map

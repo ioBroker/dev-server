@@ -8,7 +8,9 @@
         "noEmit": false,
         "declaration": false,
         "verbatimModuleSyntax": true,
-        "outDir": "./dist"
+        "outDir": "./dist",
+        "sourceMap": true,
+        "inlineSources": true
     },
     "include": ["src/**/*.ts"],
     "exclude": ["src/**/*.test.ts"]

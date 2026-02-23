@@ -43,3 +43,4 @@ setTimeout(async () => {
 </script>
 </head>`);
 }
+//# sourceMappingURL=jsonConfig.js.map
