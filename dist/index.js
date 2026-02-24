@@ -968,7 +968,7 @@ class DevServer {
             }
             data.sourceRoot = path.dirname(src).replace(/\\/g, '/');
             await writeJson(dest, data);
-            this.log.debug(`Patched ${dest} from ${src}`);
+            this.log.debug(`Patched sourcemap \nfrom ${src} \nto ${dest}`);
         }
         catch (error) {
             this.log.warn(`Couldn't patch ${dest}: ${error}`);
@@ -1145,8 +1145,6 @@ class DevServer {
             const patterns = this.getFilePatterns(patternList, true);
             const ignoreFiles = [];
             const watcher = chokidar.watch(fg.sync(patterns), { cwd: this.rootDir });
-            const widgetDelay = 500;
-            let widgetTimerID;
             let ready = false;
             let initialEventPromises = [];
             watcher.on('error', reject);
@@ -1155,14 +1153,12 @@ class DevServer {
                 ready = true;
                 await Promise.all(initialEventPromises);
                 initialEventPromises = [];
+                this.visDebugAdapter(this.adapterName);
                 resolve();
-            });
-            watcher.on('all', (event, path) => {
-                console.log(event, path);
             });
             const syncFile = async (filename) => {
                 try {
-                    this.log.debug(`Synchronizing ${filename}`);
+                    this.log.debug(`Copy to adapter ${filename}`);
                     const src = inSrc(filename);
                     const dest = inDest(filename);
                     if (filename.endsWith('.map')) {
@@ -1180,25 +1176,39 @@ class DevServer {
                     this.log.warn(`Couldn't sync ${filename}`);
                 }
             };
-            const vis1debug = () => {
+            const syncVisFile = async (filename) => {
+                var _a;
                 try {
-                    this.log.debug(`Start visdebug`);
-                    clearTimeout(widgetTimerID);
-                    this.visDebugAdapter(this.adapterName);
-                    this.visUploadAdapter(this.adapterName);
+                    this.log.debug(`Copy to vis ${filename}`);
+                    const filePath = inDest(filename);
+                    const content = await readFile(filePath);
+                    (_a = this.websocket) === null || _a === void 0 ? void 0 : _a.send(JSON.stringify([
+                        3,
+                        46,
+                        'writeFile',
+                        [`vis`, filename, Buffer.from(content).toString('base64')],
+                    ]));
                 }
-                catch (error) {
-                    this.log.error(`Error calling visdebug: ${error}`);
+                catch (_b) {
+                    this.log.warn(`Couldn't sync vis ${filename}`);
                 }
             };
-            watcher.on('add', (filename) => {
+            const unlinkVisFile = async (filename) => {
+                var _a;
+                try {
+                    this.log.debug(`unlink vis ${filename}`);
+                    (_a = this.websocket) === null || _a === void 0 ? void 0 : _a.send(JSON.stringify([3, 46, 'unlink', [`vis`, filename]]));
+                }
+                catch (_b) {
+                    this.log.warn(`Couldn't sync vis ${filename}`);
+                }
+            };
+            watcher.on('add', async (filename) => {
                 if (ready) {
-                    if (filename.startsWith('widgets')) {
-                        this.log.debug(`add request visdebug ${filename}`);
-                        clearTimeout(widgetTimerID);
-                        widgetTimerID = setTimeout(vis1debug, widgetDelay);
-                    }
                     void syncFile(filename);
+                    if (filename.startsWith('widgets')) {
+                        await syncVisFile(filename);
+                    }
                 }
                 else if (!filename.endsWith('map') && !existsSync(inDest(filename))) {
                     // ignore files during initial sync if they don't exist in the target directory (except for sourcemaps)
@@ -1208,29 +1218,33 @@ class DevServer {
                     initialEventPromises.push(syncFile(filename));
                 }
             });
-            watcher.on('change', (filename) => {
+            watcher.on('change', async (filename) => {
                 if (!ignoreFiles.includes(filename)) {
                     const resPromise = syncFile(filename);
                     if (!ready) {
                         initialEventPromises.push(resPromise);
                     }
+                    else {
+                        await resPromise;
+                    }
                     if (filename.startsWith('widgets')) {
-                        this.log.debug(`change request visdebug ${filename}`);
-                        clearTimeout(widgetTimerID);
-                        widgetTimerID = setTimeout(vis1debug, widgetDelay);
+                        await syncVisFile(filename);
                     }
                 }
             });
-            watcher.on('unlink', (filename) => {
-                unlinkSync(inDest(filename));
+            watcher.on('unlink', async (filename) => {
+                if (existsSync(inDest(filename))) {
+                    unlinkSync(inDest(filename));
+                    if (filename.startsWith('widgets')) {
+                        await unlinkVisFile(filename);
+                    }
+                }
                 const map = inDest(`${filename}.map`);
                 if (existsSync(map)) {
                     unlinkSync(map);
-                }
-                if (filename.startsWith('widgets')) {
-                    this.log.debug(`unlink request visdebug ${filename}`);
-                    clearTimeout(widgetTimerID);
-                    widgetTimerID = setTimeout(vis1debug, widgetDelay);
+                    if (filename.startsWith('widgets')) {
+                        await unlinkVisFile(`${filename}.map`);
+                    }
                 }
             });
         });
@@ -1598,10 +1612,6 @@ class DevServer {
     visDebugAdapter(name) {
         this.log.notice(`Visdebug iobroker.${name}`);
         this.execSync(`${IOBROKER_COMMAND} visdebug ${name}`, this.profileDir);
-    }
-    visUploadAdapter(name) {
-        this.log.notice(`upload iobroker.${name}`);
-        this.execSync(`${IOBROKER_COMMAND} upload ${name}`, this.profileDir);
     }
     async buildLocalAdapter() {
         var _a;
