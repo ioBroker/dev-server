@@ -1193,14 +1193,14 @@ class DevServer {
                     this.log.warn(`Couldn't sync vis ${filename}`);
                 }
             };
-            const unlinkVisFile = async (filename) => {
+            const unlinkVisFile = (filename) => {
                 var _a;
                 try {
                     this.log.debug(`unlink vis ${filename}`);
                     (_a = this.websocket) === null || _a === void 0 ? void 0 : _a.send(JSON.stringify([3, 46, 'unlink', [`vis`, filename]]));
                 }
                 catch (_b) {
-                    this.log.warn(`Couldn't sync vis ${filename}`);
+                    this.log.warn(`Couldn't unlink in vis ${filename}`);
                 }
             };
             watcher.on('add', async (filename) => {
@@ -1232,18 +1232,18 @@ class DevServer {
                     }
                 }
             });
-            watcher.on('unlink', async (filename) => {
+            watcher.on('unlink', (filename) => {
                 if (existsSync(inDest(filename))) {
                     unlinkSync(inDest(filename));
                     if (filename.startsWith('widgets')) {
-                        await unlinkVisFile(filename);
+                        unlinkVisFile(filename);
                     }
                 }
                 const map = inDest(`${filename}.map`);
                 if (existsSync(map)) {
                     unlinkSync(map);
                     if (filename.startsWith('widgets')) {
-                        await unlinkVisFile(`${filename}.map`);
+                        unlinkVisFile(`${filename}.map`);
                     }
                 }
             });
