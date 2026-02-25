@@ -6,7 +6,7 @@ export class Logger implements ioBroker.Logger {
     constructor(public level: ioBroker.LogLevel) {}
 
     public error(message: string): void {
-        console.log(chalk.redBright(message));
+        console.error(chalk.redBright(message));
     }
 
     public warn(message: string): void {
