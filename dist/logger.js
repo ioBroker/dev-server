@@ -6,7 +6,7 @@ export class Logger {
         this.level = level;
     }
     error(message) {
-        console.log(chalk.redBright(message));
+        console.error(chalk.redBright(message));
     }
     warn(message) {
         console.log(chalk.yellow(message));

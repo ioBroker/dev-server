@@ -1933,7 +1933,11 @@ class DevServer {
 
     private visDebugAdapter(name: string): void {
         this.log.notice(`Visdebug iobroker.${name}`);
-        this.execSync(`${IOBROKER_COMMAND} visdebug ${name}`, this.profileDir);
+        try {
+            this.execSync(`${IOBROKER_COMMAND} visdebug ${name}`, this.profileDir);
+        } catch {
+            this.log.error('ERROR: Execution of visdebug failed. Please install web and vis1 adapter.');
+        }
     }
 
     private async buildLocalAdapter(): Promise<void> {
