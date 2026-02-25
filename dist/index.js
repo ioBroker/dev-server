@@ -1153,7 +1153,9 @@ class DevServer {
                 ready = true;
                 await Promise.all(initialEventPromises);
                 initialEventPromises = [];
-                this.visDebugAdapter(this.adapterName);
+                if (existsSync(inSrc('widgets/'))) {
+                    this.visDebugAdapter(this.adapterName);
+                }
                 resolve();
             });
             const syncFile = async (filename) => {
