@@ -1615,7 +1615,7 @@ class DevServer {
             this.execSync(`${IOBROKER_COMMAND} visdebug ${name}`, this.profileDir);
         }
         catch (_a) {
-            this.log.error('ERROR: Execution of visdebug failed. Please install web and vis1 adapter.');
+            this.log.error('ERROR: Execution of visdebug failed. Please install web and vis1 adapter and restart dev-server.');
         }
     }
     async buildLocalAdapter() {
