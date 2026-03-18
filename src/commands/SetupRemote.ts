@@ -36,7 +36,7 @@ export class SetupRemote extends Setup {
     }
 
     private async setupRemoteSsh(): Promise<void> {
-        const { host, port, user, auth, ...other } = await enquirer.prompt<{
+        const { host, port, user, auth } = await enquirer.prompt<{
             host: string;
             port: number;
             user: string;
@@ -69,7 +69,6 @@ export class SetupRemote extends Setup {
         ]);
 
         let privateKeyPath: string | undefined = undefined;
-        console.log({ host, port, user, auth, ...other });
         if (auth === 'SSH Key') {
             const baseDir = path.join(homedir(), '.ssh');
             const files = await readdir(baseDir);

@@ -9,7 +9,7 @@
         "iobroker-dev-server": "dist/index.js"
     },
     "files": [
-        "dist/*.js",
+        "dist/**/*.js",
         "LICENSE",
         "README.md"
     ],
