@@ -1,5 +1,4 @@
 import chokidar from 'chokidar';
-import fg from 'fast-glob';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import nodemon from 'nodemon';
@@ -89,8 +88,10 @@ export class Watch extends RunCommandBase {
                 patternList.push(mainFileSuffix);
             }
             const patterns = this.getFilePatterns(patternList, true);
+            const positivePatterns = patterns.filter(p => !p.startsWith('!'));
+            const ignoredPatterns = patterns.filter(p => p.startsWith('!')).map(p => p.slice(1));
             const ignoreFiles = [] as string[];
-            const watcher = chokidar.watch(fg.sync(patterns), { cwd: this.rootPath });
+            const watcher = chokidar.watch(positivePatterns, { cwd: this.rootPath, ignored: ignoredPatterns });
             let ready = false;
             let initialEventPromises: Promise<void>[] = [];
             watcher.on('error', reject);
