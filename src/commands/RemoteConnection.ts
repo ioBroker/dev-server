@@ -145,11 +145,10 @@ export class RemoteConnection implements IEnvironment {
         onExit: (exitCode: number) => void | Promise<void>,
     ): Promise<number | null> {
         const basePath = this.getBasePath();
-        this.log.debug(`${this.config.user}@${this.config.host}:${basePath}> ${command}`);
+        const fullCommand = `${command} ${args.map(a => `"${a}"`).join(' ')}`;
+        this.log.debug(`${this.config.user}@${this.config.host}:${basePath}> ${fullCommand}`);
 
-        command = this.asBashCommand(
-            `cd ${basePath} ; echo "PID=>$$<" ; exec ${command} ${args.map(a => `"${a}"`).join(' ')}`,
-        );
+        command = this.asBashCommand(`cd ${basePath} ; echo "PID=>$$<" ; exec ${fullCommand}`);
 
         return new Promise((resolve, reject) => {
             this.client.exec(command, { pty: true }, (err, stream) => {
