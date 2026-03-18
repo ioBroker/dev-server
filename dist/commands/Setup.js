@@ -208,7 +208,7 @@ export class Setup extends CommandBase {
     }
     async verifyIgnoreFiles() {
         this.log.notice(`Verifying .npmignore and .gitignore`);
-        let relative = path.relative(this.rootPath, this.owner.tempPath).replace('\\', '/');
+        let relative = path.relative(this.rootPath, this.owner.tempPath).replace(/\\/g, '/');
         if (relative.startsWith('..')) {
             // the temporary directory is outside the root, so no worries!
             return;

@@ -91,9 +91,10 @@ export class Watch extends RunCommandBase {
                 initialEventPromises = [];
                 resolve();
             });
+            /* For debugging:
             watcher.on('all', (event, path) => {
                 console.log(event, path);
-            });
+            });*/
             const syncFile = async (filename) => {
                 try {
                     this.log.debug(`Synchronizing ${filename}`);
@@ -118,7 +119,7 @@ export class Watch extends RunCommandBase {
                 if (ready) {
                     await syncFile(filename);
                 }
-                else if (!filename.endsWith('map') && !(await this.profileDir.exists(inDest(filename)))) {
+                else if (!filename.endsWith('.map') && !(await this.profileDir.exists(inDest(filename)))) {
                     // ignore files during initial sync if they don't exist in the target directory (except for sourcemaps)
                     this.log.silly(`Ignoring file ${filename}`);
                     ignoreFiles.push(filename);

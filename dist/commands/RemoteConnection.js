@@ -115,8 +115,9 @@ export class RemoteConnection {
     }
     async spawn(command, args, onExit) {
         const basePath = this.getBasePath();
-        this.log.debug(`${this.config.user}@${this.config.host}:${basePath}> ${command}`);
-        command = this.asBashCommand(`cd ${basePath} ; echo "PID=>$$<" ; exec ${command} ${args.map(a => `"${a}"`).join(' ')}`);
+        const fullCommand = `${command} ${args.map(a => `"${a}"`).join(' ')}`;
+        this.log.debug(`${this.config.user}@${this.config.host}:${basePath}> ${fullCommand}`);
+        command = this.asBashCommand(`cd ${basePath} ; echo "PID=>$$<" ; exec ${fullCommand}`);
         return new Promise((resolve, reject) => {
             this.client.exec(command, { pty: true }, (err, stream) => {
                 if (err) {
