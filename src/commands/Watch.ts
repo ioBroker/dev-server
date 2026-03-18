@@ -1,5 +1,5 @@
 import chokidar from 'chokidar';
-import { existsSync } from 'node:fs';
+import { existsSync, type Stats } from 'node:fs';
 import path from 'node:path';
 import nodemon from 'nodemon';
 import type { DevServer } from '../DevServer.js';
@@ -87,11 +87,22 @@ export class Watch extends RunCommandBase {
             if (!patternList.includes(mainFileSuffix)) {
                 patternList.push(mainFileSuffix);
             }
-            const patterns = this.getFilePatterns(patternList, true);
-            const positivePatterns = patterns.filter(p => !p.startsWith('!'));
-            const ignoredPatterns = patterns.filter(p => p.startsWith('!')).map(p => p.slice(1));
+            const extensions = new Set(patternList.map(e => `.${e}`));
             const ignoreFiles = [] as string[];
-            const watcher = chokidar.watch(positivePatterns, { cwd: this.rootPath, ignored: ignoredPatterns });
+            const watcher = chokidar.watch('.', {
+                cwd: this.rootPath,
+                ignored: (filePath: string, stats?: Stats) => {
+                    // Normalize to a path relative to rootPath for segment-based checks
+                    const rel = path.isAbsolute(filePath) ? path.relative(this.rootPath, filePath) : filePath;
+                    const parts = rel === '.' ? [] : rel.split(path.sep).filter(p => p !== '.' && p !== '');
+                    // Ignore hidden directories (e.g. .git, .dev-server)
+                    if (parts.some(p => p.startsWith('.'))) return true;
+                    // Ignore node_modules anywhere and test/admin at the root level
+                    if (parts.includes('node_modules') || parts[0] === 'test' || parts[0] === 'admin') return true;
+                    // For files, only watch the relevant extensions
+                    return !!(stats?.isFile() && !extensions.has(path.extname(filePath)));
+                },
+            });
             let ready = false;
             let initialEventPromises: Promise<void>[] = [];
             watcher.on('error', reject);
