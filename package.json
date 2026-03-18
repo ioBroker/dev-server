@@ -1,84 +1,85 @@
 {
-  "name": "@iobroker/dev-server",
-  "version": "0.8.0",
-  "description": "Single package development server for ioBroker",
-  "main": "dist/index.js",
-  "bin": {
-    "dev-server": "dist/index.js",
-    "iobroker-dev-server": "dist/index.js"
-  },
-  "files": [
-    "dist/*.js",
-    "LICENSE",
-    "README.md"
-  ],
-  "engines": {
-    "node": ">=20.19.0 <22.0.0 || >=22.13.0"
-  },
-  "scripts": {
-    "test": "mocha test/*.test.js --exit",
-    "test:js": "mocha test/js-adapters.test.js --exit",
-    "test:ts": "mocha test/ts-adapters.test.js --exit",
-    "test:pure-ts": "mocha test/pure-ts-adapters.test.js --exit",
-    "prebuild": "rimraf ./dist",
-    "build": "tsc -p tsconfig.build.json",
-    "watch": "tsc -p tsconfig.build.json --watch",
-    "check": "tsc --noEmit",
-    "lint": "eslint -c eslint.config.mjs",
-    "release": "release-script",
-    "npm": "npm i",
-    "update-packages": "npx -y npm-check-updates --upgrade"
-  },
-  "author": "UncleSamSwiss",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/ioBroker/dev-server"
-  },
-  "homepage": "https://github.com/ioBroker/dev-server",
-  "bugs": {
-    "url": "https://github.com/ioBroker/dev-server/issues"
-  },
-  "readme": "README.md",
-  "devDependencies": {
-    "@alcalzone/release-script": "^5.0.0",
-    "@alcalzone/release-script-plugin-license": "^4.0.0",
-    "@iobroker/eslint-config": "^2.2.0",
-    "@iobroker/types": "^7.1.0",
-    "@types/browser-sync": "^2.29.1",
-    "@types/express": "^5.0.6",
-    "@types/fs-extra": "^11.0.4",
-    "@types/node": "^25.0.3",
-    "@types/ps-tree": "^1.1.6",
-    "@types/semver": "^7.7.1",
-    "@types/table": "^6.3.2",
-    "@types/ws": "^8.18.1",
-    "@types/yargs": "^17.0.35",
-    "mocha": "^11.7.5",
-    "source-map-support": "^0.5.21",
-    "typescript": "~5.9.3"
-  },
-  "dependencies": {
-    "@iobroker/testing": "^5.2.2",
-    "acorn": "^8.15.0",
-    "axios": "^1.13.2",
-    "boxen": "^8.0.1",
-    "browser-sync": "^3.0.4",
-    "bs-html-injector": "^3.0.3",
-    "chalk": "^4.1.2",
-    "chokidar": "^5.0.0",
-    "enquirer": "^2.4.1",
-    "express": "^5.2.1",
-    "fast-glob": "^3.3.3",
-    "fs-extra": "^11.3.3",
-    "http-proxy-middleware": "^3.0.5",
-    "nodemon": "^3.1.11",
-    "ps-tree": "^1.2.0",
-    "rimraf": "^6.1.2",
-    "semver": "^7.7.3",
-    "source-map": "^0.7.6",
-    "table": "^6.9.0",
-    "ws": "^8.18.3",
-    "yargs": "^18.0.0"
-  }
+    "name": "@iobroker/dev-server",
+    "version": "0.8.0",
+    "description": "Single package development server for ioBroker",
+    "main": "dist/index.js",
+    "type": "module",
+    "bin": {
+        "dev-server": "dist/index.js",
+        "iobroker-dev-server": "dist/index.js"
+    },
+    "files": [
+        "dist/**/*.js",
+        "LICENSE",
+        "README.md"
+    ],
+    "engines": {
+        "node": ">=20.19.0 <22.0.0 || >=22.13.0"
+    },
+    "scripts": {
+        "test": "mocha test/*.test.mjs --exit",
+        "test:js": "mocha test/js-adapters.test.mjs --exit",
+        "test:ts": "mocha test/ts-adapters.test.mjs --exit",
+        "test:pure-ts": "mocha test/pure-ts-adapters.test.mjs --exit",
+        "prebuild": "rimraf ./dist",
+        "build": "tsc -p tsconfig.build.json",
+        "watch": "tsc -p tsconfig.build.json --watch",
+        "check": "tsc --noEmit",
+        "lint": "eslint -c eslint.config.mjs",
+        "release": "release-script",
+        "npm": "npm i",
+        "update-packages": "npx -y npm-check-updates --upgrade"
+    },
+    "author": "UncleSamSwiss",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/ioBroker/dev-server"
+    },
+    "homepage": "https://github.com/ioBroker/dev-server",
+    "bugs": {
+        "url": "https://github.com/ioBroker/dev-server/issues"
+    },
+    "readme": "README.md",
+    "devDependencies": {
+        "@alcalzone/release-script": "^5.0.0",
+        "@alcalzone/release-script-plugin-license": "^4.0.0",
+        "@iobroker/eslint-config": "^2.2.0",
+        "@iobroker/types": "^7.1.0",
+        "@types/browser-sync": "^2.29.1",
+        "@types/express": "^5.0.6",
+        "@types/node": "^25.0.3",
+        "@types/ps-tree": "^1.1.6",
+        "@types/semver": "^7.7.1",
+        "@types/ssh2": "^1.15.5",
+        "@types/ws": "^8.18.1",
+        "@types/yargs": "^17.0.35",
+        "mocha": "^11.7.5",
+        "source-map-support": "^0.5.21",
+        "typescript": "~5.9.3"
+    },
+    "dependencies": {
+        "@iobroker/testing": "^5.2.2",
+        "acorn": "^8.15.0",
+        "axios": "^1.13.2",
+        "boxen": "^8.0.1",
+        "browser-sync": "^3.0.4",
+        "bs-html-injector": "^3.0.3",
+        "chalk": "^5.6.2",
+        "chokidar": "^5.0.0",
+        "enquirer": "^2.4.1",
+        "express": "^5.2.1",
+        "fast-glob": "^3.3.3",
+        "http-proxy-middleware": "^3.0.5",
+        "nodemon": "^3.1.11",
+        "ps-tree": "^1.2.0",
+        "rimraf": "^6.1.2",
+        "semver": "^7.7.3",
+        "source-map": "^0.7.6",
+        "ssh2": "^1.17.0",
+        "ssh2-exec": "^0.8.5",
+        "table": "^6.9.0",
+        "ws": "^8.18.3",
+        "yargs": "^18.0.0"
+    }
 }

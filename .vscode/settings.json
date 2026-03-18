@@ -8,7 +8,7 @@
     "editor.detectIndentation": false,
     "[typescript]": {
         "editor.codeActionsOnSave": {
-            "source.organizeImports": true
+            "source.organizeImports": "explicit"
         }
     },
     "[javascript]": {
@@ -22,5 +22,6 @@
     "[markdown]": {
         "editor.tabSize": 4,
         "editor.insertSpaces": true
-    }
+    },
+    "cSpell.words": ["alcalzone", "iobroker", "Pids"]
 }

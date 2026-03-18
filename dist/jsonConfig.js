@@ -1,7 +1,4 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.injectCode = injectCode;
-function injectCode(html, adapterName, jsonConfigFileName) {
+export function injectCode(html, adapterName, jsonConfigFileName) {
     return html.replace('</head>', `
 <script type="module">
 import { io } from "https://cdn.socket.io/4.4.1/socket.io.esm.min.js";

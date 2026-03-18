@@ -1,24 +1,24 @@
-const { spawn } = require('node:child_process');
-const path = require('node:path');
-const fs = require('node:fs');
-const assert = require('node:assert');
+import { spawn } from 'node:child_process';
+import path from 'node:path';
+import fs from 'node:fs';
+import assert from 'node:assert';
 
 /**
  * Run a command and return promise
  */
-function runCommand(command, args, options = {}) {
+export function runCommand(command, args, options = {}) {
     return new Promise((resolve, reject) => {
         console.log(`Running: ${command} ${args.join(' ')}`);
         const proc = spawn(command, args, {
             stdio: ['pipe', 'pipe', 'pipe'],
             env: options.env || process.env,
-            ...options
+            ...options,
         });
 
         let stdout = '';
         let stderr = '';
 
-        proc.stdout.on('data', (data) => {
+        proc.stdout.on('data', data => {
             const str = data.toString();
             stdout += str;
             if (options.verbose) {
@@ -26,7 +26,7 @@ function runCommand(command, args, options = {}) {
             }
         });
 
-        proc.stderr.on('data', (data) => {
+        proc.stderr.on('data', data => {
             const str = data.toString();
             stderr += str;
             if (options.verbose) {
@@ -36,14 +36,20 @@ function runCommand(command, args, options = {}) {
 
         let timeoutId;
         let rejectedOrResolved = false;
-        proc.on('close', (code) => {
+        proc.on('close', code => {
             if (rejectedOrResolved) return;
             if (timeoutId) clearTimeout(timeoutId);
             console.log(`Process exited with code ${code}`);
             if (code === 0 || code === 255) {
                 setTimeout(() => resolve({ stdout, stderr, code }), 5000);
             } else {
-                setTimeout(() => reject(new Error(`Command failed with exit code ${code}\nSTDOUT: ${stdout}\nSTDERR: ${stderr}`)), 5000);
+                setTimeout(
+                    () =>
+                        reject(
+                            new Error(`Command failed with exit code ${code}\nSTDOUT: ${stdout}\nSTDERR: ${stderr}`),
+                        ),
+                    5000,
+                );
             }
             rejectedOrResolved = true;
         });
@@ -67,7 +73,7 @@ function runCommand(command, args, options = {}) {
  * @param {object} options - Options including timeout, verbose, finalMessage, onStdout callback
  * @returns {Promise<{stdout: string, stderr: string, code: number, killed?: boolean}>}
  */
-function runCommandWithTimeout(command, args, options = {}) {
+export function runCommandWithTimeout(command, args, options = {}) {
     return new Promise((resolve, reject) => {
         const logPrefix = options.logPrefix || 'Running with signal handling';
         console.log(`${logPrefix}: ${command} ${args.join(' ')}`);
@@ -75,7 +81,7 @@ function runCommandWithTimeout(command, args, options = {}) {
             stdio: ['pipe', 'pipe', 'pipe'],
             timeout: options.timeout || 30000,
             env: options.env || process.env,
-            ...options
+            ...options,
         });
 
         let stdout = '';
@@ -109,9 +115,9 @@ function runCommandWithTimeout(command, args, options = {}) {
                     }
                 }, 5000);
             }, 10000);
-        }
+        };
 
-        proc.stdout.on('data', (data) => {
+        proc.stdout.on('data', data => {
             const str = data.toString();
             stdout += str;
             if (options.verbose) {
@@ -124,13 +130,19 @@ function runCommandWithTimeout(command, args, options = {}) {
             }
 
             // Default behavior: shutdown on final message
-            if (!options.onStdout && options.finalMessage && str.match(options.finalMessage) && !closed && !resolvedOrRejected) {
+            if (
+                !options.onStdout &&
+                options.finalMessage &&
+                str.match(options.finalMessage) &&
+                !closed &&
+                !resolvedOrRejected
+            ) {
                 console.log('Final message detected, shutting down...');
                 setTimeout(shutDown, 10000);
             }
         });
 
-        proc.stderr.on('data', (data) => {
+        proc.stderr.on('data', data => {
             const str = data.toString();
             stderr += str;
             if (options.verbose) {
@@ -138,7 +150,7 @@ function runCommandWithTimeout(command, args, options = {}) {
             }
         });
 
-        proc.on('close', (code) => {
+        proc.on('close', code => {
             closed = true;
             console.log(`Process exited with code ${code}`);
             clearTimeout(timeoutId);
@@ -146,15 +158,21 @@ function runCommandWithTimeout(command, args, options = {}) {
             resolvedOrRejected = true;
 
             if (killed) {
-                setTimeout( () => resolve({ stdout, stderr, code, killed: true }), 5000);
+                setTimeout(() => resolve({ stdout, stderr, code, killed: true }), 5000);
             } else if (code === 0 || code === 255) {
-                setTimeout( () => resolve({ stdout, stderr, code }), 5000);
+                setTimeout(() => resolve({ stdout, stderr, code }), 5000);
             } else {
-                setTimeout( () => reject(new Error(`Command failed with exit code ${code}\nSTDOUT: ${stdout}\nSTDERR: ${stderr}`)), 5000);
+                setTimeout(
+                    () =>
+                        reject(
+                            new Error(`Command failed with exit code ${code}\nSTDOUT: ${stdout}\nSTDERR: ${stderr}`),
+                        ),
+                    5000,
+                );
             }
         });
 
-        proc.on('error', (error) => {
+        proc.on('error', error => {
             console.log(`Process errored with error`, error);
             clearTimeout(timeoutId);
             if (resolvedOrRejected) return;
@@ -170,14 +188,14 @@ function runCommandWithTimeout(command, args, options = {}) {
 /**
  * Run a command with timeout and signal handling
  */
-function runCommandWithSignal(command, args, options = {}) {
+export function runCommandWithSignal(command, args, options = {}) {
     return runCommandWithTimeout(command, args, options);
 }
 
 /**
  * Create test adapter using @iobroker/create-adapter
  */
-async function createTestAdapter(configFile, targetDir) {
+export async function createTestAdapter(configFile, targetDir) {
     const configPath = path.resolve(configFile);
     const configData = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     const adapterName = configData.adapterName;
@@ -187,34 +205,40 @@ async function createTestAdapter(configFile, targetDir) {
 
     // Skip if adapter already exists
     if (fs.existsSync(expectedDir)) {
-        fs.rmSync(path.join(expectedDir, ".dev-server"), { recursive: true, force: true });
+        fs.rmSync(path.join(expectedDir, '.dev-server'), { recursive: true, force: true });
         console.log(`Test adapter "${adapterName}" already exists, skipping creation`);
         return;
     }
 
     try {
-        await runCommand('npx', [
-            '@iobroker/create-adapter@latest',
-            `--replay=${configPath}`,
-            `--target=${targetDir}`,
-            '--noInstall',  // Skip npm install to speed up creation
-            '--nonInteractive' // Run in non-interactive mode to fill in missing config details
-        ], {
-            cwd: targetDir,
-            timeout: 180000, // 3 minutes
-            env: { ...process.env, NODE_TLS_REJECT_UNAUTHORIZED: '0' } // Handle certificate issues in test environment
-        });
+        await runCommand(
+            'npx',
+            [
+                '@iobroker/create-adapter@latest',
+                `--replay=${configPath}`,
+                `--target=${targetDir}`,
+                '--noInstall', // Skip npm install to speed up creation
+                '--nonInteractive', // Run in non-interactive mode to fill in missing config details
+            ],
+            {
+                cwd: targetDir,
+                timeout: 180000, // 3 minutes
+                env: { ...process.env, NODE_TLS_REJECT_UNAUTHORIZED: '0' }, // Handle certificate issues in test environment
+            },
+        );
         console.log(`Test adapter "${adapterName}" created successfully`);
     } catch (error) {
         console.error(`Failed to create test adapter "${adapterName}":`, error.message);
-        throw new Error(`Test adapter creation failed. This might be due to network issues accessing the @iobroker/create-adapter tool. Error: ${error.message}`);
+        throw new Error(
+            `Test adapter creation failed. This might be due to network issues accessing the @iobroker/create-adapter tool. Error: ${error.message}`,
+        );
     }
 }
 
 /**
  * Common setup logging for test adapters
  */
-function logSetupInfo(testType, testDir, devServerRoot) {
+export function logSetupInfo(testType, testDir, devServerRoot) {
     console.log(`Setting up ${testType} test adapter...`);
     console.log('Test directory:', testDir);
     console.log('Dev-server root:', devServerRoot);
@@ -224,14 +248,8 @@ function logSetupInfo(testType, testDir, devServerRoot) {
 /**
  * Create and setup a test adapter with optional TypeScript patching
  */
-async function setupTestAdapter(config) {
-    const {
-        adapterName,
-        configFile,
-        adapterDir,
-        adaptersDir,
-        needsTypeScriptPatching = false
-    } = config;
+export async function setupTestAdapter(config) {
+    const { adapterName, configFile, adapterDir, adaptersDir, needsTypeScriptPatching = false } = config;
 
     logSetupInfo(adapterName, path.dirname(adaptersDir), path.dirname(path.dirname(adaptersDir)));
 
@@ -259,7 +277,7 @@ async function setupTestAdapter(config) {
 /**
  * Apply TypeScript compliance patches to main.ts file
  */
-async function applyTypeScriptPatches(adapterDir) {
+export async function applyTypeScriptPatches(adapterDir) {
     const mainTsPath = path.join(adapterDir, 'src', 'main.ts');
     let mainTsContent = fs.readFileSync(mainTsPath, 'utf8');
 
@@ -284,7 +302,7 @@ async function applyTypeScriptPatches(adapterDir) {
 /**
  * Install dependencies for a test adapter
  */
-async function installAdapterDependencies(adapterName, adapterDir) {
+export async function installAdapterDependencies(adapterName, adapterDir) {
     console.log(`Installing dependencies for ${adapterName} test adapter...`);
     try {
         await runCommand('npm', ['install', '--prefix', adapterDir], {
@@ -301,7 +319,7 @@ async function installAdapterDependencies(adapterName, adapterDir) {
 /**
  * Common cleanup for test adapters
  */
-function cleanupTestAdapter(adapterName, adapterDir) {
+export function cleanupTestAdapter(adapterName, adapterDir) {
     console.log(`Cleaning up ${adapterName} test adapter...`);
     try {
         fs.rmSync(adapterDir, { recursive: true, force: true });
@@ -313,9 +331,8 @@ function cleanupTestAdapter(adapterName, adapterDir) {
 /**
  * Common assertions for io-package.json validation
  */
-function validateIoPackageJson(adapterDir, expectedName, shouldHaveTypescript = false) {
+export function validateIoPackageJson(adapterDir, expectedName, shouldHaveTypescript = false) {
     const ioPackagePath = path.join(adapterDir, 'io-package.json');
-    const assert = require('node:assert');
 
     assert.ok(fs.existsSync(ioPackagePath), 'io-package.json not found');
 
@@ -332,9 +349,8 @@ function validateIoPackageJson(adapterDir, expectedName, shouldHaveTypescript = 
 /**
  * Common assertions for package.json validation
  */
-function validatePackageJson(adapterDir) {
+export function validatePackageJson(adapterDir) {
     const packagePath = path.join(adapterDir, 'package.json');
-    const assert = require('node:assert');
 
     assert.ok(fs.existsSync(packagePath), 'package.json not found');
 
@@ -348,9 +364,8 @@ function validatePackageJson(adapterDir) {
 /**
  * Validate TypeScript configuration files exist
  */
-function validateTypeScriptConfig(adapterDir) {
+export function validateTypeScriptConfig(adapterDir) {
     const tsconfigPath = path.join(adapterDir, 'tsconfig.json');
-    const assert = require('node:assert');
 
     assert.ok(fs.existsSync(tsconfigPath), 'tsconfig.json not found for TypeScript adapter');
 }
@@ -358,8 +373,7 @@ function validateTypeScriptConfig(adapterDir) {
 /**
  * Common dev-server setup test
  */
-async function runDevServerSetupTest(devServerRoot, adapterDir, setupTimeout) {
-    const assert = require('node:assert');
+export async function runDevServerSetupTest(devServerRoot, adapterDir, setupTimeout) {
     const devServerPath = path.join(devServerRoot, 'dist', 'index.js');
 
     await runCommand('node', [devServerPath, 'setup'], {
@@ -390,9 +404,7 @@ async function runDevServerSetupTest(devServerRoot, adapterDir, setupTimeout) {
 /**
  * Common dev-server run test assertions
  */
-function validateRunTestOutput(output, adapterPrefix) {
-    const assert = require('node:assert');
-
+export function validateRunTestOutput(output, adapterPrefix) {
     // Should see host logs
     assert.ok(output.includes('host.'), 'No host logs found in output');
 
@@ -400,7 +412,10 @@ function validateRunTestOutput(output, adapterPrefix) {
     assert.ok(output.includes('admin.0'), 'No admin.0 logs found in output');
 
     // Should NOT see adapter logs (adapter should not start in run mode)
-    assert.ok(!output.includes(`startInstance ${adapterPrefix}.0`), `${adapterPrefix}.0 adapter should not start in run mode`);
+    assert.ok(
+        !output.includes(`startInstance ${adapterPrefix}.0`),
+        `${adapterPrefix}.0 adapter should not start in run mode`,
+    );
 
     // Check for minimal error logs
     const errorLines = output.split('\n').filter(
@@ -422,9 +437,7 @@ function validateRunTestOutput(output, adapterPrefix) {
 /**
  * Common dev-server watch test assertions
  */
-function validateWatchTestOutput(output, adapterPrefix) {
-    const assert = require('node:assert');
-
+export function validateWatchTestOutput(output, adapterPrefix) {
     // Should see test adapter logs
     assert.ok(
         !output.includes(`startInstance ${adapterPrefix}.0`),
@@ -454,7 +467,7 @@ function validateWatchTestOutput(output, adapterPrefix) {
 /**
  * Run watch command with file change trigger to test adapter restart
  */
-function runCommandWithFileChange(command, args, options = {}) {
+export function runCommandWithFileChange(command, args, options = {}) {
     let fileChanged = false;
     let restartDetected = false;
 
@@ -495,39 +508,36 @@ function runCommandWithFileChange(command, args, options = {}) {
     return runCommandWithTimeout(command, args, {
         ...options,
         logPrefix: 'Running with file change trigger',
-        onStdout
+        onStdout,
     });
 }
 
 /**
  * Validate that adapter restart occurred in watch mode
  */
-function validateWatchRestartOutput(output, adapterPrefix) {
+export function validateWatchRestartOutput(output, adapterPrefix) {
     // Should see nodemon restart messages
-    assert.ok(
-        output.includes('restarting'),
-        'No nodemon restart message found in output'
-    );
+    assert.ok(output.includes('restarting'), 'No nodemon restart message found in output');
 
     // Should see adapter starting exactly twice (initial + after restart)
     const startingMatches = output.match(/starting\. Version 0\.0\.1/g);
     assert.ok(
         startingMatches && startingMatches.length === 2,
-        `Adapter should start exactly twice (initial + restart), but found ${startingMatches ? startingMatches.length : 0} instances`
+        `Adapter should start exactly twice (initial + restart), but found ${startingMatches ? startingMatches.length : 0} instances`,
     );
 
     // Should see the test variable deletion message exactly twice
     const testVarMatches = output.match(new RegExp(`state ${adapterPrefix}\\.0\\.testVariable deleted`, 'g'));
     assert.ok(
         testVarMatches && testVarMatches.length === 2,
-        `Should see testVariable deletion exactly twice (initial + restart), but found ${testVarMatches ? testVarMatches.length : 0} instances`
+        `Should see testVariable deletion exactly twice (initial + restart), but found ${testVarMatches ? testVarMatches.length : 0} instances`,
     );
 }
 
 /**
  * Run watch command with jsonConfig file change to test hot-reload
  */
-function runCommandWithJsonConfigChange(command, args, options = {}) {
+export function runCommandWithJsonConfigChange(command, args, options = {}) {
     let fileChanged = false;
 
     const onStdout = (str, shutDown) => {
@@ -544,7 +554,7 @@ function runCommandWithJsonConfigChange(command, args, options = {}) {
                         // Read the jsonConfig file and modify it
                         const content = fs.readFileSync(options.fileToChange, 'utf8');
                         const config = JSON.parse(content);
-                        
+
                         // Add/modify a timestamp field to trigger a change
                         if (!config.items) {
                             config.items = {};
@@ -552,9 +562,9 @@ function runCommandWithJsonConfigChange(command, args, options = {}) {
                         config.items._testTimestamp = {
                             type: 'text',
                             label: 'Test Timestamp',
-                            text: `Last modified: ${new Date().toISOString()}`
+                            text: `Last modified: ${new Date().toISOString()}`,
                         };
-                        
+
                         // Write back the modified config
                         fs.writeFileSync(options.fileToChange, JSON.stringify(config, null, 4));
                         console.log('jsonConfig file modified successfully');
@@ -575,44 +585,20 @@ function runCommandWithJsonConfigChange(command, args, options = {}) {
     return runCommandWithTimeout(command, args, {
         ...options,
         logPrefix: 'Running with jsonConfig change trigger',
-        onStdout
+        onStdout,
     });
 }
 
 /**
  * Validate that jsonConfig file change was detected
  */
-function validateJsonConfigChangeDetection(output) {
+export function validateJsonConfigChangeDetection(output) {
     // Should see the file change detection log message
     assert.ok(
         output.includes('Detected change in jsonConfig.json'),
-        'No jsonConfig.json change detection message found in output'
+        'No jsonConfig.json change detection message found in output',
     );
-    
-    // Verify upload message
-    assert.ok(
-        output.includes('uploading to ioBroker'),
-        'No upload message found after jsonConfig change'
-    );
-}
 
-module.exports = {
-    runCommand,
-    runCommandWithSignal,
-    runCommandWithFileChange,
-    runCommandWithJsonConfigChange,
-    createTestAdapter,
-    logSetupInfo,
-    setupTestAdapter,
-    applyTypeScriptPatches,
-    installAdapterDependencies,
-    cleanupTestAdapter,
-    validateIoPackageJson,
-    validatePackageJson,
-    validateTypeScriptConfig,
-    runDevServerSetupTest,
-    validateRunTestOutput,
-    validateWatchTestOutput,
-    validateWatchRestartOutput,
-    validateJsonConfigChangeDetection
-};
+    // Verify upload message
+    assert.ok(output.includes('uploading to ioBroker'), 'No upload message found after jsonConfig change');
+}

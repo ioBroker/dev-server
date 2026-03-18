@@ -1,22 +1,23 @@
-const { describe, it, before, after } = require('mocha');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const path = require('node:path');
-const {
-    runCommand,
-    runCommandWithSignal,
+import { after, before, describe, it } from 'mocha';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
     runCommandWithFileChange,
+    runCommandWithSignal,
+    runDevServerSetupTest,
     setupTestAdapter,
-    cleanupTestAdapter,
     validateIoPackageJson,
     validatePackageJson,
-    validateTypeScriptConfig,
-    runDevServerSetupTest,
     validateRunTestOutput,
+    validateTypeScriptConfig,
+    validateWatchRestartOutput,
     validateWatchTestOutput,
-    validateWatchRestartOutput
-} = require('./test-utils');
+} from './test-utils.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const DEV_SERVER_ROOT = path.resolve(__dirname, '..');
 const TEST_DIR = __dirname;
 const ADAPTERS_DIR = path.join(TEST_DIR, 'adapters');
@@ -37,7 +38,7 @@ describe('dev-server integration tests - Pure TypeScript', function () {
             adapterName: 'Pure TypeScript',
             configFile: PURE_TS_ADAPTER_CONFIG,
             adapterDir: PURE_TS_ADAPTER_DIR,
-            adaptersDir: ADAPTERS_DIR
+            adaptersDir: ADAPTERS_DIR,
         });
     });
 
@@ -61,7 +62,10 @@ describe('dev-server integration tests - Pure TypeScript', function () {
             assert.strictEqual(packageJson.main, 'src/main.ts', 'main field should point to src/main.ts');
 
             // Verify the build scripts have been removed
-            assert.ok(packageJson.scripts.check?.includes("--noEmit"), 'check script should use --noEmit for type checking only');
+            assert.ok(
+                packageJson.scripts.check?.includes('--noEmit'),
+                'check script should use --noEmit for type checking only',
+            );
             assert.ok(!packageJson.scripts?.prebuild, 'prebuild script should not exist');
         });
 
@@ -89,7 +93,7 @@ describe('dev-server integration tests - Pure TypeScript', function () {
             const profilePackageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
             assert.ok(
                 profilePackageJson.dependencies?.['@alcalzone/esbuild-register'],
-                '@alcalzone/esbuild-register dependency should be added for TypeScript adapters'
+                '@alcalzone/esbuild-register dependency should be added for TypeScript adapters',
             );
 
             // Verify that @alcalzone/esbuild-register is installed
@@ -137,7 +141,7 @@ describe('dev-server integration tests - Pure TypeScript', function () {
             // The presence of successful adapter execution indicates esbuild-register is transpiling the .ts files
             assert.ok(
                 output.includes('starting. Version 0.0.1'),
-                'esbuild-register should successfully transpile and execute TypeScript files'
+                'esbuild-register should successfully transpile and execute TypeScript files',
             );
         });
 
@@ -163,7 +167,7 @@ describe('dev-server integration tests - Pure TypeScript', function () {
             // Verify that esbuild-register is working by checking that TypeScript files are being executed
             assert.ok(
                 output.includes('starting. Version 0.0.1'),
-                'esbuild-register should successfully transpile and execute TypeScript files after restart'
+                'esbuild-register should successfully transpile and execute TypeScript files after restart',
             );
         });
     });
