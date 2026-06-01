@@ -54,7 +54,7 @@
         "@types/ssh2": "^1.15.5",
         "@types/ws": "^8.18.1",
         "@types/yargs": "^17.0.35",
-        "mocha": "^11.7.5",
+        "mocha": "^11.7.6",
         "source-map-support": "^0.5.21",
         "typescript": "~5.9.3"
     },
