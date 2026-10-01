@@ -59,7 +59,7 @@
         "typescript": "~5.9.3"
     },
     "dependencies": {
-        "@iobroker/testing": "^5.2.2",
+        "@iobroker/testing": "^6.2.2",
         "acorn": "^8.16.0",
         "axios": "^1.13.2",
         "boxen": "^8.0.1",
