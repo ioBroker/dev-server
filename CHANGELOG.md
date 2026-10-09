@@ -7,6 +7,7 @@
 
 ## **WORK IN PROGRESS**
 
+- (Garfonso) Restore the shebang of the CLI entry point, the command failed when installed from git or via npm link
 - (@Apollon77/@copilot) **BREAKING:** Require Node.js >=20.19.0 <22.0.0 || >=22.13.0 (was >=16.0.0)
 - (oweitman/Apollon77) Update chokidar and express
 - (@Apollon77/@copilot) Switch from ts-node to @alcalzone/esbuild-register for TypeScript support to fix conflicts with Node.js experimental TypeScript features
