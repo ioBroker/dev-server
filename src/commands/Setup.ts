@@ -153,6 +153,13 @@ export class Setup extends CommandBase {
             version: '1.0.0',
             private: true,
             dependencies: this.dependencies,
+            // npm >= 12 blocks dependency install scripts by default:
+            // - js-controller needs its install script ("setup first") to create the database
+            // - esbuild (used by @alcalzone/esbuild-register for TypeScript adapters) downloads its binary
+            allowScripts: {
+                'iobroker.js-controller': true,
+                esbuild: true,
+            },
             'dev-server': this.config,
         };
         await writeJson(path.join(this.profilePath, 'package.json'), pkg);

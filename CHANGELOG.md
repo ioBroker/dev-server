@@ -7,6 +7,7 @@
 
 ## **WORK IN PROGRESS**
 
+- (Garfonso) Allow the install scripts of js-controller and esbuild with npm >= 12, otherwise the database is not initialized during setup and TypeScript adapters cannot be started
 - (@Apollon77/@copilot) **BREAKING:** Require Node.js >=20.19.0 <22.0.0 || >=22.13.0 (was >=16.0.0)
 - (oweitman/Apollon77) Update chokidar and express
 - (@Apollon77/@copilot) Switch from ts-node to @alcalzone/esbuild-register for TypeScript support to fix conflicts with Node.js experimental TypeScript features
