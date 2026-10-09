@@ -14,7 +14,7 @@
         "README.md"
     ],
     "engines": {
-        "node": ">=20.19.0 <22.0.0 || >=22.13.0"
+        "node": ">=22.13.0"
     },
     "scripts": {
         "test": "mocha test/*.test.mjs --exit",
